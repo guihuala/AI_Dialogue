@@ -23,12 +23,6 @@ public class GameDirector : MonoBehaviour
     
     private bool isGameOver = false;
 
-    // --- 模块化 Prompt 设置 ---
-    [Header("Prompt Modules (Drag .txt files here)")]
-    [SerializeField] private TextAsset rulesPrompt;      // 对应 Prompt_CoreRules.txt
-    [SerializeField] private TextAsset worldPrompt;      // 对应 Prompt_World.txt
-    [SerializeField] private TextAsset characterPrompt;  // 对应 Prompt_Characters.txt
-
     private List<ChatMessage> chatHistory = new List<ChatMessage>();
 
     private void Start()
@@ -49,29 +43,20 @@ public class GameDirector : MonoBehaviour
         string selectedIds = PlayerPrefs.GetString("SelectedRoommates", "");
         Debug.Log("Selected Roommates: " + selectedIds);
 
-        // 2. 拼接 Prompt
-        string fullSystemPrompt = BuildSystemPrompt(selectedIds);
-        if (string.IsNullOrEmpty(fullSystemPrompt))
-        {
-            Debug.LogError("Prompt 文件未赋值！请检查 Inspector。");
-            return;
-        }
+        // 2. 拼接 Prompt (Dynamic Context Only)
+        string dynamicContext = BuildDynamicContext(selectedIds);
 
-        chatHistory.Add(new ChatMessage { role = "system", content = fullSystemPrompt });
+        chatHistory.Add(new ChatMessage { role = "system", content = dynamicContext });
 
         // 3. 发送开场
         SendRequestToAI($"游戏开始。现在是第1天上午。你的室友是：{selectedIds}。请描述寝室当前的状况（观察阶段），并给出玩家的行动选项。");
     }
 
-    // 将三个文件的内容拼成一个大的字符串
-    private string BuildSystemPrompt(string selectedIds)
+    // 只生成动态的上下文，静态规则由服务器加载
+    private string BuildDynamicContext(string selectedIds)
     {
-        if (rulesPrompt == null || worldPrompt == null || characterPrompt == null) return null;
-        
         string charContext = $"玩家选择了以下室友 ID: {selectedIds}。未选择的角色将作为外部事件出现。";
-        
-        // 使用换行符拼接，确保 AI 能分清段落
-        return rulesPrompt.text + "\n\n" + worldPrompt.text + "\n\n" + characterPrompt.text + "\n\n" + charContext;
+        return charContext;
     }
 
     private void HandlePlayerChoice(StoryOption option)

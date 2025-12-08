@@ -181,12 +181,31 @@ async def chat_completions(request: OpenAIChatRequest):
     context_str = "\n".join([f"- {m['content']}" for m in relevant_memories])
     
     # 2. Construct System Prompt
-    # For now, we use default or extract from messages if a system message exists
-    system_prompt = "You are a helpful AI assistant in a text adventure game."
+    # Load static prompts from Server/data/prompts
+    try:
+        base_path = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'prompts')
+        with open(os.path.join(base_path, 'Prompt_CoreRules.txt'), 'r', encoding='utf-8') as f:
+            rules = f.read()
+        with open(os.path.join(base_path, 'Prompt_World.txt'), 'r', encoding='utf-8') as f:
+            world = f.read()
+        with open(os.path.join(base_path, 'Prompt_Characters.txt'), 'r', encoding='utf-8') as f:
+            chars = f.read()
+        
+        static_prompt = f"{rules}\n\n{world}\n\n{chars}"
+    except Exception as e:
+        print(f"Error loading prompts: {e}")
+        static_prompt = ""
+
+    # The client now sends only the dynamic context (Game State) as the system message
+    client_system_msg = ""
     for msg in request.messages:
         if msg.role == "system":
-            system_prompt = msg.content
+            client_system_msg = msg.content
             break
+            
+    # Combine static and dynamic prompts
+    system_prompt = f"{static_prompt}\n\n{client_system_msg}"
+
             
     # 3. Generate Stream
     async def event_generator():
@@ -225,11 +244,13 @@ async def get_candidates():
     Return the list of candidate characters.
     """
     try:
-        with open("candidates.json", "r", encoding="utf-8") as f:
+        # candidates.json is now in Server/data/
+        json_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'candidates.json')
+        with open(json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         return data
-    except FileNotFoundError:
-        return {"candidates": []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

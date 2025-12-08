@@ -5,30 +5,30 @@ using UnityEngine.UI;
 
 public class ChatUIManager : MonoBehaviour
 {
-    [Header("Containers")]
-    [SerializeField] private Transform chatContent;
-    [SerializeField] private ScrollRect scrollRect;
+    [Header("Visual Novel UI")]
+    [SerializeField] private CharacterArtManager artManager;
+    [SerializeField] private GameObject vnDialogueBox; // The fixed panel at bottom
+    [SerializeField] private Text vnNameText;
+    [SerializeField] private Text vnContentText;
+
+    [Header("Options UI")]
     [SerializeField] private Transform optionContainer;
-    
+    [SerializeField] private GameObject optionButtonPrefab;
+
+    [Header("Character Prefabs UI")]
+    [SerializeField] private Transform characterRoot; // Parent for character prefabs
+    [SerializeField] private List<CharacterPresenter> characterPrefabs; // Assign prefabs here
+    [SerializeField] private CharacterPresenter playerPrefab; // Special prefab for player
+    [SerializeField] private CharacterPresenter systemPrefab; // Special prefab for system
+
+    private CharacterPresenter currentPresenter;
+    private List<CharacterPresenter> instantiatedCharacters = new List<CharacterPresenter>();
+
     [Header("Status UI")]
     [SerializeField] private Text balanceText; // 余额
     [SerializeField] private Text sanityText;  // 心情
     [SerializeField] private Text gpaText;     // 绩点
-    [SerializeField] private Text dateText;    // 日期时间 (新增)
-    
-    [Header("Prefabs")]
-    [SerializeField] private GameObject playerBubblePrefab;
-    [SerializeField] private GameObject aiBubblePrefab;
-    [SerializeField] private GameObject systemMessagePrefab;
-    [SerializeField] private GameObject optionButtonPrefab;
-
-    [Header("Optimization")]
-    [SerializeField] private int maxMessages = 50;
-
-    private Text currentStreamingText; 
-    private Text currentNameText;
-    private GameObject currentStreamingBubbleObj; 
-    private List<Tuple<GameObject, GameObject>> activeMessageList = new List<Tuple<GameObject, GameObject>>();
+    [SerializeField] private Text dateText;    // 日期时间
 
     public Action<StoryOption> OnOptionClicked;
 
@@ -39,9 +39,34 @@ public class ChatUIManager : MonoBehaviour
             GameObject poolObj = new GameObject("ObjectPool");
             poolObj.AddComponent<ObjectPool>();
         }
+        
+        // Instantiate all prefabs hidden at start
+        foreach (var prefab in characterPrefabs)
+        {
+            var instance = Instantiate(prefab, characterRoot);
+            instance.Hide();
+            instantiatedCharacters.Add(instance);
+        }
+        
+        if (playerPrefab != null)
+        {
+            var instance = Instantiate(playerPrefab, characterRoot);
+            instance.Hide();
+            instantiatedCharacters.Add(instance);
+            // Re-assign to use the instance
+            playerPrefab = instance; 
+        }
+
+        if (systemPrefab != null)
+        {
+            var instance = Instantiate(systemPrefab, characterRoot);
+            instance.Hide();
+            instantiatedCharacters.Add(instance);
+            systemPrefab = instance;
+        }
     }
 
-    // --- 核心修改：支持更新所有状态 ---
+    // --- 状态更新 ---
     public void UpdateStats(float money, float sanity, float gpa, int day, string timePeriod)
     {
         // 1. 金钱
@@ -65,93 +90,106 @@ public class ChatUIManager : MonoBehaviour
             gpaText.color = gpa < 1.8f ? Color.red : Color.black;
         }
 
-        // 4. 日期 (格式：第 1 天  上午)
+        // 4. 日期
         if (dateText != null)
         {
             dateText.text = $"第 {day} 天  {timePeriod}";
-            // 第7天标红，提醒玩家
             dateText.color = day >= 7 ? Color.red : Color.black;
         }
     }
 
-    // --- 下面是标准的生成逻辑，保持原样 ---
-
-    private GameObject SpawnBubble(GameObject prefab)
-    {
-        GameObject bubble = ObjectPool.Instance.Spawn(prefab, chatContent);
-        activeMessageList.Add(new Tuple<GameObject, GameObject>(bubble, prefab));
-        if (activeMessageList.Count > maxMessages)
-        {
-            var oldItem = activeMessageList[0];
-            activeMessageList.RemoveAt(0);
-            ObjectPool.Instance.Despawn(oldItem.Item1, oldItem.Item2);
-        }
-        return bubble;
-    }
-
-    public void AddPlayerMessage(string text)
-    {
-        GameObject bubble = SpawnBubble(playerBubblePrefab);
-        bubble.GetComponentInChildren<Text>().text = text;
-        ForceScrollToBottom();
-    }
-
-    public void AddSystemMessage(string text)
-    {
-        GameObject bubble = SpawnBubble(systemMessagePrefab);
-        bubble.GetComponentInChildren<Text>().text = text;
-        ForceScrollToBottom();
-    }
+    // --- 对话显示 (Character Prefabs) ---
 
     public void CreateAIBubble()
     {
-        currentStreamingBubbleObj = SpawnBubble(aiBubblePrefab);
-        var texts = currentStreamingBubbleObj.GetComponentsInChildren<Text>();
-        if (texts.Length >= 2)
+        // For streaming start, we assume the current presenter is already set by AddStaticAIBubble 
+        // OR we need to know who is speaking. 
+        // But streaming usually comes after a "Thinking..." or is the start of a turn.
+        // If we don't know who, we might use a default or the last one.
+        if (currentPresenter != null)
         {
-            currentNameText = texts[0]; 
-            currentStreamingText = texts[1]; 
+            currentPresenter.Show("...");
         }
-        else
-        {
-            currentStreamingText = texts[0];
-            currentNameText = null;
-        }
-        currentStreamingText.text = "...";
-        if (currentNameText != null) currentNameText.text = ""; 
-        ForceScrollToBottom();
     }
 
     public void UpdateCurrentAIBubble(string text)
     {
-        if (currentStreamingText != null)
+        if (currentPresenter != null)
         {
-            currentStreamingText.text = text;
-            ForceScrollToBottom();
+            currentPresenter.UpdateText(text);
         }
     }
 
     public void DestroyCurrentStreamingBubble()
     {
-        if (currentStreamingBubbleObj != null)
-        {
-            int index = activeMessageList.FindIndex(x => x.Item1 == currentStreamingBubbleObj);
-            if (index != -1) activeMessageList.RemoveAt(index);
-            ObjectPool.Instance.Despawn(currentStreamingBubbleObj, aiBubblePrefab);
-            currentStreamingBubbleObj = null;
-            currentStreamingText = null;
-            currentNameText = null;
-        }
+        // Do nothing
     }
 
     public void AddStaticAIBubble(string name, string content)
     {
-        GameObject bubbleObj = SpawnBubble(aiBubblePrefab);
-        var texts = bubbleObj.GetComponentsInChildren<Text>();
-        if (texts.Length >= 2) { texts[0].text = name; texts[1].text = content; }
-        else { texts[0].text = content; }
-        ForceScrollToBottom();
+        HideAllCharacters();
+
+        // Find character by ID (using name mapping for now)
+        string id = GetIdByName(name);
+        var presenter = instantiatedCharacters.Find(x => x.characterId == id);
+        
+        if (presenter != null)
+        {
+            currentPresenter = presenter;
+            currentPresenter.Show(content, name);
+        }
+        else
+        {
+            // Fallback: Use system or log error
+            Debug.LogWarning($"No prefab found for character: {name} (ID: {id})");
+            if (systemPrefab != null)
+            {
+                currentPresenter = systemPrefab;
+                currentPresenter.Show($"{name}: {content}", "System");
+            }
+        }
     }
+
+    public void AddPlayerMessage(string text)
+    {
+        HideAllCharacters();
+        if (playerPrefab != null)
+        {
+            currentPresenter = playerPrefab;
+            currentPresenter.Show(text, "我");
+        }
+    }
+
+    public void AddSystemMessage(string text)
+    {
+        HideAllCharacters();
+        if (systemPrefab != null)
+        {
+            currentPresenter = systemPrefab;
+            currentPresenter.Show(text, "系统");
+        }
+    }
+
+    private void HideAllCharacters()
+    {
+        foreach (var c in instantiatedCharacters) c.Hide();
+        if (playerPrefab != null) playerPrefab.Hide();
+        if (systemPrefab != null) systemPrefab.Hide();
+    }
+
+    private string GetIdByName(string name)
+    {
+        // Simple mapping helper
+        if (name == "唐梦琪") return "tang_mengqi";
+        if (name == "李一诺") return "li_yinuo";
+        if (name == "赵鑫") return "zhao_xin";
+        if (name == "林飒") return "lin_sa";
+        if (name == "陈雨婷") return "chen_yuting";
+        if (name == "苏浅") return "su_qian";
+        return name; // Fallback
+    }
+
+    // --- 选项显示 ---
 
     public void ShowOptions(List<StoryOption> options)
     {
@@ -176,18 +214,5 @@ public class ChatUIManager : MonoBehaviour
         List<GameObject> children = new List<GameObject>();
         foreach (Transform child in optionContainer) children.Add(child.gameObject);
         foreach (var child in children) ObjectPool.Instance.Despawn(child, optionButtonPrefab);
-    }
-
-    private void ForceScrollToBottom()
-    {
-        Canvas.ForceUpdateCanvases();
-        scrollRect.verticalNormalizedPosition = 0f;
-        CancelInvoke("ScrollToZero");
-        Invoke("ScrollToZero", 0.05f);
-    }
-
-    private void ScrollToZero()
-    {
-        scrollRect.verticalNormalizedPosition = 0f;
     }
 }

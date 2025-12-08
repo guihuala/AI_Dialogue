@@ -724,7 +724,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 766648136}
-  - component: {fileID: 766648134}
+  - component: {fileID: 766648140}
   - component: {fileID: 766648138}
   - component: {fileID: 766648139}
   m_Layer: 0
@@ -734,21 +734,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &766648134
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 766648133}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0b8dac5ce00694cb69edac27a002aa2e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  apiKey: sk-99d39b4a26b642989262bc6d377c7ca2
-  apiUrl: https://api.deepseek.com/chat/completions
-  modelName: deepseek-chat
 --- !u!4 &766648136
 Transform:
   m_ObjectHideFlags: 0
@@ -788,7 +773,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 964ff6628448141268ccacb195aed5ea, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  llmClient: {fileID: 766648134}
+  llmClient: {fileID: 766648140}
   uiManager: {fileID: 1327785027}
   currentMoney: 1500
   currentSanity: 100
@@ -798,6 +783,21 @@ MonoBehaviour:
   rulesPrompt: {fileID: 4900000, guid: 0f3980199a924715bb31ad837eadbbea, type: 3}
   worldPrompt: {fileID: 4900000, guid: cdd587a7b79245fd83003d4f4ee48408, type: 3}
   characterPrompt: {fileID: 4900000, guid: 311e63f1940142919c39e070229b80c9, type: 3}
+--- !u!114 &766648140
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 766648133}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0b8dac5ce00694cb69edac27a002aa2e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  apiKey: dummy
+  apiUrl: http://localhost:8000/v1/chat/completions
+  modelName: gpt-3.5-turbo
 --- !u!1 &800684354
 GameObject:
   m_ObjectHideFlags: 0
