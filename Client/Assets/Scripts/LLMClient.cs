@@ -10,8 +10,8 @@ using System;
 public class LLMClient : MonoBehaviour
 {
     [Header("API Config")]
-    [SerializeField] private string apiKey = "YOUR_API_KEY";
-    [SerializeField] private string apiUrl = "https://api.openai.com/v1/chat/completions";
+    [SerializeField] private string apiKey = "dummy";
+    [SerializeField] private string apiUrl = "http://localhost:8000/v1/chat/completions";
     [SerializeField] private string modelName = "gpt-3.5-turbo";
 
     // 发送请求，onTokenReceived 是每收到一个字的回调，onComplete 是完成后的回调

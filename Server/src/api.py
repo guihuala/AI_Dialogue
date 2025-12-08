@@ -149,6 +149,88 @@ async def delete_memory(memory_id: str):
     mm.delete_memory(memory_id)
     return {"status": "success", "message": "Memory deleted"}
 
+# --- Sidecar Streaming Endpoint ---
+
+from fastapi.responses import StreamingResponse
+import json
+import time
+
+class OpenAIChatMessage(BaseModel):
+    role: str
+    content: str
+
+class OpenAIChatRequest(BaseModel):
+    model: str = "gpt-3.5-turbo"
+    messages: List[OpenAIChatMessage]
+    stream: bool = False
+
+@app.post("/v1/chat/completions")
+async def chat_completions(request: OpenAIChatRequest):
+    """
+    OpenAI-compatible endpoint for streaming chat completions.
+    Used by Unity Client (Sidecar).
+    """
+    mm = get_memory_manager()
+    
+    # Extract user input from the last message
+    user_input = request.messages[-1].content
+    
+    # 1. Retrieve relevant memories (Context)
+    # We can use the last user message as the query
+    relevant_memories = mm.retrieve_relevant_memories(user_input)
+    context_str = "\n".join([f"- {m['content']}" for m in relevant_memories])
+    
+    # 2. Construct System Prompt
+    # For now, we use default or extract from messages if a system message exists
+    system_prompt = "You are a helpful AI assistant in a text adventure game."
+    for msg in request.messages:
+        if msg.role == "system":
+            system_prompt = msg.content
+            break
+            
+    # 3. Generate Stream
+    async def event_generator():
+        # Call the synchronous generator in a way that works with FastAPI
+        # Since LLMService.generate_response_stream is a generator, we iterate it.
+        # Note: In a real async app, we might want to run this in a threadpool if it's blocking.
+        # But for now, direct iteration.
+        
+        stream = mm.llm_service.generate_response_stream(system_prompt, user_input, context_str)
+        
+        for chunk_content in stream:
+            # Format as OpenAI SSE
+            chunk_data = {
+                "id": f"chatcmpl-{int(time.time())}",
+                "object": "chat.completion.chunk",
+                "created": int(time.time()),
+                "model": request.model,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"content": chunk_content},
+                        "finish_reason": None
+                    }
+                ]
+            }
+            yield f"data: {json.dumps(chunk_data)}\n\n"
+            
+        # Send [DONE]
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.get("/candidates")
+async def get_candidates():
+    """
+    Return the list of candidate characters.
+    """
+    try:
+        with open("candidates.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data
+    except FileNotFoundError:
+        return {"candidates": []}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

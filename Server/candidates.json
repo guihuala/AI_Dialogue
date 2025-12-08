@@ -1,0 +1,64 @@
+{
+    "candidates": [
+        {
+            "id": "tang_mengqi",
+            "name": "唐梦琪",
+            "description": "性格：活泼开朗，喜欢社交媒体。特长：手势舞。",
+            "stats": {
+                "money": 100,
+                "sanity": 80,
+                "gpa": 3.0
+            }
+        },
+        {
+            "id": "li_yinuo",
+            "name": "李一诺",
+            "description": "性格：强势，喜欢掌控局面。特长：组织能力。",
+            "stats": {
+                "money": 200,
+                "sanity": 90,
+                "gpa": 3.8
+            }
+        },
+        {
+            "id": "zhao_xin",
+            "name": "赵鑫",
+            "description": "性格：内向，有些杂乱。特长：忍耐。",
+            "stats": {
+                "money": 50,
+                "sanity": 60,
+                "gpa": 2.5
+            }
+        },
+        {
+            "id": "lin_sa",
+            "name": "林飒",
+            "description": "性格：叛逆，独立。特长：艺术创作。",
+            "stats": {
+                "money": 150,
+                "sanity": 70,
+                "gpa": 2.8
+            }
+        },
+        {
+            "id": "chen_yuting",
+            "name": "陈雨婷",
+            "description": "性格：认真，遵守规则。特长：卫生检查。",
+            "stats": {
+                "money": 120,
+                "sanity": 85,
+                "gpa": 3.9
+            }
+        },
+        {
+            "id": "su_qian",
+            "name": "苏浅",
+            "description": "性格：透明，安静。特长：观察。",
+            "stats": {
+                "money": 80,
+                "sanity": 50,
+                "gpa": 3.2
+            }
+        }
+    ]
+}
