@@ -1,7 +1,7 @@
 import os
 import sys
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Header, Depends
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -17,29 +17,44 @@ load_dotenv()
 
 app = FastAPI(title="Character Memory API", description="API for AI Character Memory System")
 
-# Global MemoryManager instance
-memory_manager: Optional[MemoryManager] = None
+# Global Manager Cache
+# Dict[session_id, MemoryManager]
+active_managers: Dict[str, MemoryManager] = {}
 
-def get_memory_manager() -> MemoryManager:
-    global memory_manager
-    if memory_manager is None:
-        # Ensure directories exist
-        os.makedirs("data", exist_ok=True)
-        profile_path = "data/profile.json"
-        vector_db_path = "data/chroma_db"
+def get_memory_manager(x_session_id: str = Header("default", alias="X-Session-ID")) -> MemoryManager:
+    """
+    Dependency that retrieves or creates a MemoryManager for the given session ID.
+    The session ID is passed via the X-Session-ID header.
+    Default is 'default' for backward compatibility.
+    """
+    global active_managers
+    
+    if x_session_id not in active_managers:
+        # Define paths for this session
+        # Base: Server/data/saves/{session_id}/
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # Server/
+        save_dir = os.path.join(base_dir, "data", "saves", x_session_id)
         
+        os.makedirs(save_dir, exist_ok=True)
+        
+        profile_path = os.path.join(save_dir, "profile.json")
+        vector_db_path = os.path.join(save_dir, "chroma_db")
+        
+        # Initialize Services
         llm_service = LLMService()
-        # Check for API Key
         env_api_key = os.getenv("OPENROUTER_API_KEY")
         if env_api_key and env_api_key != "sk-or-v1-your-key-here":
             llm_service.set_api_key(env_api_key)
             
-        memory_manager = MemoryManager(profile_path, vector_db_path, llm_service)
-    return memory_manager
+        print(f"Loading MemoryManager for session: {x_session_id} at {save_dir}")
+        active_managers[x_session_id] = MemoryManager(profile_path, vector_db_path, llm_service)
+        
+    return active_managers[x_session_id]
 
 @app.on_event("startup")
 async def startup_event():
-    get_memory_manager()
+    # Ensure base data dir exists
+    os.makedirs(os.path.join("data", "saves"), exist_ok=True)
 
 # --- Request/Response Models ---
 
@@ -70,8 +85,7 @@ class AddMemoryRequest(BaseModel):
 # --- Endpoints ---
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    mm = get_memory_manager()
+async def chat(request: ChatRequest, mm: MemoryManager = Depends(get_memory_manager)):
     try:
         # 1. Retrieve relevant memories
         relevant_memories = mm.retrieve_relevant_memories(request.user_input)
@@ -91,8 +105,7 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/reflect", response_model=ReflectResponse)
-async def reflect(request: ReflectRequest):
-    mm = get_memory_manager()
+async def reflect(request: ReflectRequest, mm: MemoryManager = Depends(get_memory_manager)):
     try:
         # We need the chat history for reflection. 
         # Since the API is stateless, we might need to rely on what's in the vector store or 
@@ -118,8 +131,7 @@ class ReflectWithHistoryRequest(BaseModel):
     chat_history: List[Dict[str, str]] # [{"role": "user", "content": "..."}, ...]
 
 @app.post("/reflect_with_history", response_model=ReflectResponse)
-async def reflect_with_history(request: ReflectWithHistoryRequest):
-    mm = get_memory_manager()
+async def reflect_with_history(request: ReflectWithHistoryRequest, mm: MemoryManager = Depends(get_memory_manager)):
     try:
         result = mm.reflect_on_interaction(request.chat_history, user_name=request.user_name)
         return ReflectResponse(result=result)
@@ -127,25 +139,21 @@ async def reflect_with_history(request: ReflectWithHistoryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/profile")
-async def get_profile():
-    mm = get_memory_manager()
+async def get_profile(mm: MemoryManager = Depends(get_memory_manager)):
     return mm.profile.dict()
 
 @app.post("/memories/search")
-async def search_memories(query: MemoryQuery):
-    mm = get_memory_manager()
+async def search_memories(query: MemoryQuery, mm: MemoryManager = Depends(get_memory_manager)):
     results = mm.retrieve_relevant_memories(query.query, n_results=query.limit)
     return results
 
 @app.post("/memories")
-async def add_memory(mem: AddMemoryRequest):
-    mm = get_memory_manager()
+async def add_memory(mem: AddMemoryRequest, mm: MemoryManager = Depends(get_memory_manager)):
     mm.add_memory(mem.content, type=mem.type, importance=mem.importance)
     return {"status": "success", "message": "Memory added"}
 
 @app.delete("/memories/{memory_id}")
-async def delete_memory(memory_id: str):
-    mm = get_memory_manager()
+async def delete_memory(memory_id: str, mm: MemoryManager = Depends(get_memory_manager)):
     mm.delete_memory(memory_id)
     return {"status": "success", "message": "Memory deleted"}
 
@@ -165,12 +173,11 @@ class OpenAIChatRequest(BaseModel):
     stream: bool = False
 
 @app.post("/v1/chat/completions")
-async def chat_completions(request: OpenAIChatRequest):
+async def chat_completions(request: OpenAIChatRequest, mm: MemoryManager = Depends(get_memory_manager)):
     """
     OpenAI-compatible endpoint for streaming chat completions.
     Used by Unity Client (Sidecar).
     """
-    mm = get_memory_manager()
     
     # Extract user input from the last message
     user_input = request.messages[-1].content
