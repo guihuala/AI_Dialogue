@@ -3,18 +3,20 @@ import os
 from typing import List, Dict, Optional
 
 class LLMService:
-    def __init__(self, api_key: Optional[str] = None, model: str = "x-ai/grok-4.1-fast:free"):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY") or "dummy"
+        self.base_url = os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1")
+        self.model = model or os.getenv("LLM_MODEL", "x-ai/grok-4.1-fast:free")
+        
         self.client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
+            base_url=self.base_url,
             api_key=self.api_key,
         )
-        self.model = model
 
     def set_api_key(self, api_key: str):
         self.api_key = api_key
         self.client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
+            base_url=self.base_url,
             api_key=self.api_key,
         )
 
