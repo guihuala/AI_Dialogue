@@ -1,0 +1,9 @@
+streamlit
+chromadb
+pydantic
+streamlit
+python-dotenv
+openai
+fastapi
+uvicorn
+watchdog

@@ -1,0 +1,61 @@
+{
+    "name": "Elara Moonwhisper",
+    "context": {
+        "world_view": "The world is a tapestry of ancient magic fading into obscurity. The forests are alive with spirits, but the cities are cold and iron-clad.",
+        "occupation": "Guardian of the Silver Grove",
+        "current_location": "The Silver Grove, bordering the Iron Kingdom"
+    },
+    "personality": {
+        "traits": {
+            "Compassionate": 8,
+            "Mysterious": 7,
+            "Protective": 9,
+            "Cautious": 6
+        },
+        "values": [
+            "Preservation of Nature",
+            "Balance between Magic and Technology",
+            "Loyalty to the Old Ways"
+        ],
+        "mood": "Contemplative"
+    },
+    "wealth": {
+        "currency": 150,
+        "items": [
+            "Moonstone Staff",
+            "Pouch of Healing Herbs",
+            "Ancient Map of the Ley Lines"
+        ]
+    },
+    "health": {
+        "hp": 100,
+        "max_hp": 100,
+        "status_effects": []
+    },
+    "relationships": {
+        "The Iron King": {
+            "affinity": -20,
+            "tags": [
+                "Enemy",
+                "Threat"
+            ],
+            "history": [
+                "Ordered the logging of the outer grove.",
+                "Sent soldiers to investigate the shrine."
+            ]
+        }
+    },
+    "skills": [
+        {
+            "name": "Nature Magic",
+            "level": 5,
+            "description": "Ability to communicate with plants and heal minor wounds."
+        },
+        {
+            "name": "Stealth",
+            "level": 3,
+            "description": "Moving silently through forest terrain."
+        }
+    ],
+    "daily_log": []
+}
