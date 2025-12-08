@@ -205,6 +205,11 @@ async def chat_completions(request: OpenAIChatRequest):
             
     # Combine static and dynamic prompts
     system_prompt = f"{static_prompt}\n\n{client_system_msg}"
+    
+    print("="*50)
+    print("SYSTEM PROMPT SENT TO AI:")
+    print(system_prompt)
+    print("="*50)
 
             
     # 3. Generate Stream
