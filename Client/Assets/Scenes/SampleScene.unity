@@ -780,9 +780,7 @@ MonoBehaviour:
   currentGPA: 4
   currentDay: 1
   maxDays: 7
-  rulesPrompt: {fileID: 4900000, guid: 0f3980199a924715bb31ad837eadbbea, type: 3}
-  worldPrompt: {fileID: 4900000, guid: cdd587a7b79245fd83003d4f4ee48408, type: 3}
-  characterPrompt: {fileID: 4900000, guid: 311e63f1940142919c39e070229b80c9, type: 3}
+  saveSystem: {fileID: 0}
 --- !u!114 &766648140
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -798,6 +796,7 @@ MonoBehaviour:
   apiKey: dummy
   apiUrl: http://localhost:8000/v1/chat/completions
   modelName: gpt-3.5-turbo
+  currentSessionId: default
 --- !u!1 &800684354
 GameObject:
   m_ObjectHideFlags: 0
@@ -1345,18 +1344,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a3fb01f380bee445fb262b250054a9e0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  chatContent: {fileID: 282999405}
-  scrollRect: {fileID: 331903466}
+  artManager: {fileID: 0}
+  vnDialogueBox: {fileID: 0}
+  vnNameText: {fileID: 0}
+  vnContentText: {fileID: 0}
   optionContainer: {fileID: 1852552009}
+  optionButtonPrefab: {fileID: 3137493920145956043, guid: 43a6fbd42302b49908a40499ee2e0eb0, type: 3}
+  characterRoot: {fileID: 0}
+  characterPrefabs: []
+  playerPrefab: {fileID: 0}
+  systemPrefab: {fileID: 0}
   balanceText: {fileID: 350669256}
   sanityText: {fileID: 1075169888}
   gpaText: {fileID: 1908438320}
   dateText: {fileID: 1271375198}
-  playerBubblePrefab: {fileID: 4238740595741217289, guid: f33f2b0dd9b5a40d289ffc03ebdcdddb, type: 3}
-  aiBubblePrefab: {fileID: 3673262508844075579, guid: 932233999bedc46aeac7d75a28310850, type: 3}
-  systemMessagePrefab: {fileID: 7644682493786834775, guid: b6a43d5adddad489cbc6db74dd75655e, type: 3}
-  optionButtonPrefab: {fileID: 3137493920145956043, guid: 43a6fbd42302b49908a40499ee2e0eb0, type: 3}
-  maxMessages: 50
 --- !u!1 &1852552008
 GameObject:
   m_ObjectHideFlags: 0
