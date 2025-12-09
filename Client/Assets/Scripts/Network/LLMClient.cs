@@ -10,30 +10,30 @@ using System;
 public class LLMClient : MonoBehaviour
 {
     [Header("API Config")]
-    [SerializeField] private string apiKey = "dummy";
-    [SerializeField] private string apiUrl = "http://localhost:8000/v1/chat/completions";
-    [SerializeField] private string modelName = "gpt-3.5-turbo";
+    [SerializeField] private string _apiKey = "dummy";
+    [SerializeField] private string _apiUrl = "http://localhost:8000/v1/chat/completions";
+    [SerializeField] private string _modelName = "gpt-3.5-turbo";
 
     [Header("Session Config")]
-    [SerializeField] private string currentSessionId = "default";
+    [SerializeField] private string _currentSessionId = "default";
     
     public void SetSessionId(string sessionId)
     {
-        currentSessionId = sessionId;
+        _currentSessionId = sessionId;
     }
 
     // --- Save / Load API ---
 
     public async Task<bool> SaveGameAsync(string jsonState)
     {
-        var requestData = new { slot_id = currentSessionId, game_data = JsonConvert.DeserializeObject(jsonState) };
+        var requestData = new { slot_id = _currentSessionId, game_data = JsonConvert.DeserializeObject(jsonState) };
         string json = JsonConvert.SerializeObject(requestData);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         using (HttpClient client = new HttpClient())
         {
-            client.DefaultRequestHeaders.Add("X-Session-ID", currentSessionId);
-            string url = apiUrl.Replace("/v1/chat/completions", "/game/save"); // Hacky but works for now
+            client.DefaultRequestHeaders.Add("X-Session-ID", _currentSessionId);
+            string url = _apiUrl.Replace("/v1/chat/completions", "/game/save"); // Hacky but works for now
 
             try 
             {
@@ -52,8 +52,8 @@ public class LLMClient : MonoBehaviour
     {
         using (HttpClient client = new HttpClient())
         {
-            client.DefaultRequestHeaders.Add("X-Session-ID", currentSessionId);
-            string url = apiUrl.Replace("/v1/chat/completions", "/game/load");
+            client.DefaultRequestHeaders.Add("X-Session-ID", _currentSessionId);
+            string url = _apiUrl.Replace("/v1/chat/completions", "/game/load");
 
             try
             {
@@ -83,7 +83,7 @@ public class LLMClient : MonoBehaviour
     {
         var requestData = new
         {
-            model = modelName,
+            model = _modelName,
             messages = history,
             stream = true
         };
@@ -93,11 +93,11 @@ public class LLMClient : MonoBehaviour
 
         using (HttpClient client = new HttpClient())
         {
-            client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
-            client.DefaultRequestHeaders.Add("X-Session-ID", currentSessionId); // Add Session ID Header
+            client.DefaultRequestHeaders.Add("Authorization", $"Bearer {_apiKey}");
+            client.DefaultRequestHeaders.Add("X-Session-ID", _currentSessionId); // Add Session ID Header
             
             // 发送请求
-            using (var request = new HttpRequestMessage(HttpMethod.Post, apiUrl))
+            using (var request = new HttpRequestMessage(HttpMethod.Post, _apiUrl))
             {
                 request.Content = content;
                 using (var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))

@@ -21,16 +21,65 @@ public class ChatUIManager : MonoBehaviour
     [SerializeField] private CharacterPresenter playerPrefab; // Special prefab for player
     [SerializeField] private CharacterPresenter systemPrefab; // Special prefab for system
 
-    private CharacterPresenter currentPresenter;
-    private List<CharacterPresenter> instantiatedCharacters = new List<CharacterPresenter>();
-
     [Header("Status UI")]
     [SerializeField] private Text balanceText; // 余额
     [SerializeField] private Text sanityText;  // 心情
     [SerializeField] private Text gpaText;     // 绩点
     [SerializeField] private Text dateText;    // 日期时间
 
-    public Action<StoryOption> OnOptionClicked;
+    private CharacterPresenter currentPresenter;
+    private List<CharacterPresenter> instantiatedCharacters = new List<CharacterPresenter>();
+
+    private void Awake()
+    {
+        MsgCenter.RegisterMsg(MsgConst.MSG_GAME_UPDATE_STATS, OnUpdateStats);
+        MsgCenter.RegisterMsgAct(MsgConst.MSG_GAME_BUBBLE_CREATE, CreateAIBubble);
+        MsgCenter.RegisterMsg(MsgConst.MSG_GAME_BUBBLE_UPDATE, OnUpdateBubble);
+        MsgCenter.RegisterMsgAct(MsgConst.MSG_GAME_BUBBLE_DESTROY, DestroyCurrentStreamingBubble);
+        MsgCenter.RegisterMsg(MsgConst.MSG_GAME_ADD_MESSAGE, OnAddMessage);
+        MsgCenter.RegisterMsg(MsgConst.MSG_GAME_SHOW_OPTIONS, OnShowOptions);
+        MsgCenter.RegisterMsgAct(MsgConst.MSG_GAME_CLEAR_OPTIONS, ClearOptions);
+    }
+
+    private void OnDestroy()
+    {
+        MsgCenter.UnregisterMsg(MsgConst.MSG_GAME_UPDATE_STATS, OnUpdateStats);
+        MsgCenter.UnregisterMsgAct(MsgConst.MSG_GAME_BUBBLE_CREATE, CreateAIBubble);
+        MsgCenter.UnregisterMsg(MsgConst.MSG_GAME_BUBBLE_UPDATE, OnUpdateBubble);
+        MsgCenter.UnregisterMsgAct(MsgConst.MSG_GAME_BUBBLE_DESTROY, DestroyCurrentStreamingBubble);
+        MsgCenter.UnregisterMsg(MsgConst.MSG_GAME_ADD_MESSAGE, OnAddMessage);
+        MsgCenter.UnregisterMsg(MsgConst.MSG_GAME_SHOW_OPTIONS, OnShowOptions);
+        MsgCenter.UnregisterMsgAct(MsgConst.MSG_GAME_CLEAR_OPTIONS, ClearOptions);
+    }
+
+    // --- Event Handlers ---
+
+    private void OnUpdateStats(params object[] args)
+    {
+        if (args.Length >= 5)
+        {
+            UpdateStats((float)args[0], (float)args[1], (float)args[2], (int)args[3], (string)args[4]);
+        }
+    }
+
+    private void OnUpdateBubble(params object[] args)
+    {
+        if (args.Length > 0 && args[0] is string text) UpdateCurrentAIBubble(text);
+    }
+
+    private void OnAddMessage(params object[] args)
+    {
+        if (args.Length >= 2 && args[0] is string name && args[1] is string content)
+        {
+            if (name == "系统" || name == "旁白" || name == "突发事件") AddSystemMessage(content);
+            else AddStaticAIBubble(name, content);
+        }
+    }
+
+    private void OnShowOptions(params object[] args)
+    {
+        if (args.Length > 0 && args[0] is List<StoryOption> options) ShowOptions(options);
+    }
 
     private void Start()
     {
@@ -102,10 +151,6 @@ public class ChatUIManager : MonoBehaviour
 
     public void CreateAIBubble()
     {
-        // For streaming start, we assume the current presenter is already set by AddStaticAIBubble 
-        // OR we need to know who is speaking. 
-        // But streaming usually comes after a "Thinking..." or is the start of a turn.
-        // If we don't know who, we might use a default or the last one.
         if (currentPresenter != null)
         {
             currentPresenter.Show("...");
@@ -140,7 +185,6 @@ public class ChatUIManager : MonoBehaviour
         }
         else
         {
-            // Fallback: Use system or log error
             Debug.LogWarning($"No prefab found for character: {name} (ID: {id})");
             if (systemPrefab != null)
             {
@@ -179,14 +223,13 @@ public class ChatUIManager : MonoBehaviour
 
     private string GetIdByName(string name)
     {
-        // Simple mapping helper
         if (name == "唐梦琪") return "tang_mengqi";
         if (name == "李一诺") return "li_yinuo";
         if (name == "赵鑫") return "zhao_xin";
         if (name == "林飒") return "lin_sa";
         if (name == "陈雨婷") return "chen_yuting";
         if (name == "苏浅") return "su_qian";
-        return name; // Fallback
+        return name; 
     }
 
     // --- 选项显示 ---
@@ -203,7 +246,8 @@ public class ChatUIManager : MonoBehaviour
             Button btn = btnObj.GetComponent<Button>();
             btn.onClick.RemoveAllListeners(); 
             btn.onClick.AddListener(() => {
-                OnOptionClicked?.Invoke(opt);
+                // Decoupled Input
+                MsgCenter.SendMsg(MsgConst.MSG_GAME_OPTION_CLICKED, opt);
                 ClearOptions(); 
             });
         }

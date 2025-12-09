@@ -3,114 +3,108 @@ using UnityEngine;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using UnityEngine.SceneManagement;
+using SaveSystem; // Using new namespace
 
 public class GameDirector : MonoBehaviour
 {
     [Header("Components")]
     [SerializeField] private LLMClient llmClient;
-    [SerializeField] private ChatUIManager uiManager;
+    // [SerializeField] private ChatUIManager uiManager; // Decoupled
 
     [Header("Game State")]
-    [SerializeField] private float currentMoney = 1500f;
-    [SerializeField] private float currentSanity = 100f; 
-    [SerializeField] private float currentGPA = 4.0f;    
+    [SerializeField] private float _currentMoney = 1500f;
+    [SerializeField] private float _currentSanity = 100f; 
+    [SerializeField] private float _currentGPA = 4.0f;    
 
     [Header("Time System")]
-    [SerializeField] private int currentDay = 1;
-    [SerializeField] private int maxDays = 7;
-    private string[] timeSlots = new string[] { "上午", "下午", "晚上" };
-    private int timeIndex = 0; 
+    [SerializeField] private int _currentDay = 1;
+    [SerializeField] private int _maxDays = 7;
+    private string[] _timeSlots = new string[] { "上午", "下午", "晚上" };
+    private int _timeIndex = 0; 
     
-    private bool isGameOver = false;
+    private bool _isGameOver = false;
 
-    private List<ChatMessage> chatHistory = new List<ChatMessage>();
+    private List<ChatMessage> _chatHistory = new List<ChatMessage>();
 
     [Header("Persistence")]
-    [SerializeField] private SaveSystem saveSystem;
+    [SerializeField] private SaveController saveController; 
 
-    // --- Save Data Model ---
-    [System.Serializable]
-    public class SaveData
+    private void Awake()
     {
-        public float money;
-        public float sanity;
-        public float gpa;
-        public int day;
-        public int timeIndex;
-        public List<ChatMessage> history;
+        MsgCenter.RegisterMsg(MsgConst.MSG_GAME_OPTION_CLICKED, OnOptionClickedEvent);
+    }
+
+    private void OnDestroy()
+    {
+        MsgCenter.UnregisterMsg(MsgConst.MSG_GAME_OPTION_CLICKED, OnOptionClickedEvent);
+    }
+
+    private void OnOptionClickedEvent(params object[] args)
+    {
+        if (args.Length > 0 && args[0] is StoryOption option)
+        {
+            HandlePlayerChoice(option);
+        }
     }
 
     private async void Start()
     {
-        // 0. Initialize Session
-        if (saveSystem == null) saveSystem = gameObject.AddComponent<SaveSystem>(); // Auto-add if missing
+        if (saveController == null) saveController = gameObject.AddComponent<SaveController>(); 
         
-        // This sets the Header in LLMClient
-        string sessionId = PlayerPrefs.GetString("CurrentSessionID", "default");
-        llmClient.SetSessionId(sessionId);
-        Debug.Log($"GameDirector: Started Session {sessionId}");
-
-        // 1. Try Load Game
-        string jsonState = await llmClient.LoadGameAsync();
+        var data = await saveController.LoadGameAsync();
         
-        if (!string.IsNullOrEmpty(jsonState))
+        if (data != null)
         {
-            Debug.Log("Found Save Data. Loading...");
-            RestoreGameState(jsonState);
+            Debug.Log("[GameDirector] Found Save Data. Loading...");
+            RestoreGameState(data);
         }
         else
         {
-            Debug.Log("No Save Data. Starting New Game...");
+            Debug.Log("[GameDirector] No Save Data. Starting New Game...");
             StartNewGame();
         }
-
-        uiManager.OnOptionClicked += HandlePlayerChoice;
+        
+        // uiManager.OnOptionClicked removed
     }
 
     private void StartNewGame()
     {
-        // 1. 初始化数值
-        currentMoney = 1500f;
-        currentSanity = 100f;
-        currentGPA = 4.0f;
-        currentDay = 1;
-        maxDays = 12; 
-        timeIndex = 0;
-        isGameOver = false;
+        _currentMoney = 1500f;
+        _currentSanity = 100f;
+        _currentGPA = 4.0f;
+        _currentDay = 1;
+        _maxDays = 12; 
+        _timeIndex = 0;
+        _isGameOver = false;
 
-        uiManager.UpdateStats(currentMoney, currentSanity, currentGPA, currentDay, timeSlots[timeIndex]);
+        // Update Stats
+        MsgCenter.SendMsg(MsgConst.MSG_GAME_UPDATE_STATS, _currentMoney, _currentSanity, _currentGPA, _currentDay, _timeSlots[_timeIndex]);
 
-        // Load Selected Characters
         string selectedIds = PlayerPrefs.GetString("SelectedRoommates", "");
         
-        // 2. 拼接 Prompt
         string dynamicContext = BuildDynamicContext(selectedIds);
-        chatHistory.Add(new ChatMessage { role = "system", content = dynamicContext });
+        _chatHistory.Add(new ChatMessage { role = "system", content = dynamicContext });
 
-        // 3. 发送开场
         SendRequestToAI($"游戏开始。现在是第1天上午。你的室友是：{selectedIds}。请描述寝室当前的状况（观察阶段），并给出玩家的行动选项。");
     }
 
-    private void RestoreGameState(string json)
+    private void RestoreGameState(SaveModel.SaveData data)
     {
         try 
         {
-            SaveData data = JsonConvert.DeserializeObject<SaveData>(json);
+            _currentMoney = data.Money;
+            _currentSanity = data.Sanity;
+            _currentGPA = data.GPA;
+            _currentDay = data.Day;
+            _timeIndex = data.TimeIndex;
+            _chatHistory = data.History ?? new List<ChatMessage>();
             
-            currentMoney = data.money;
-            currentSanity = data.sanity;
-            currentGPA = data.gpa;
-            currentDay = data.day;
-            timeIndex = data.timeIndex;
-            chatHistory = data.history ?? new List<ChatMessage>();
+            // Update Stats
+            MsgCenter.SendMsg(MsgConst.MSG_GAME_UPDATE_STATS, _currentMoney, _currentSanity, _currentGPA, _currentDay, _timeSlots[_timeIndex]);
             
-            uiManager.UpdateStats(currentMoney, currentSanity, currentGPA, currentDay, timeSlots[timeIndex]);
-            
-            // Re-render history? 
-            // Only the last AI message is usually relevant for display, or we can just render the last one.
-            if (chatHistory.Count > 0)
+            if (_chatHistory.Count > 0)
             {
-                var lastMsg = chatHistory[chatHistory.Count - 1];
+                var lastMsg = _chatHistory[_chatHistory.Count - 1];
                 if (lastMsg.role == "assistant")
                 {
                     RenderDialogue(lastMsg.content);
@@ -124,25 +118,13 @@ public class GameDirector : MonoBehaviour
         }
     }
 
+    // ... SaveGame and Context building same ...
+
     public async void SaveGame()
     {
-        SaveData data = new SaveData
-        {
-            money = currentMoney,
-            sanity = currentSanity,
-            gpa = currentGPA,
-            day = currentDay,
-            timeIndex = timeIndex,
-            history = chatHistory
-        };
-        
-        string json = JsonConvert.SerializeObject(data);
-        bool success = await llmClient.SaveGameAsync(json);
-        if (success) uiManager.AddSystemMessage("【系统】游戏已保存");
-        else uiManager.AddSystemMessage("【系统】保存失败，请检查网络");
+        await saveController.SaveGameAsync(_currentMoney, _currentSanity, _currentGPA, _currentDay, _timeIndex, _chatHistory);
     }
 
-    // 只生成动态的上下文，静态规则由服务器加载
     private string BuildDynamicContext(string selectedIds)
     {
         string charContext = $"玩家选择了以下室友 ID: {selectedIds}。未选择的角色将作为外部事件出现。";
@@ -151,33 +133,31 @@ public class GameDirector : MonoBehaviour
 
     private void HandlePlayerChoice(StoryOption option)
     {
-        if (isGameOver && option.id != "RESTART") return;
+        if (_isGameOver && option.id != "RESTART") return;
         
         if (option.id == "RESTART")
         {
-            // Reset Save
             PlayerPrefs.DeleteKey("CurrentSessionID"); 
-            // Or generate new one
             PlayerPrefs.SetString("CurrentSessionID", System.Guid.NewGuid().ToString());
             SceneManager.LoadScene(SceneManager.GetActiveScene().name);
             return;
         }
 
-        uiManager.AddPlayerMessage(option.content);
+        // Add Player Message
+        MsgCenter.SendMsg(MsgConst.MSG_GAME_ADD_MESSAGE, "我", option.content);
+
         AdvanceTime();
         
-        // Auto Save on every turn
         SaveGame();
 
-        if (isGameOver) return; 
+        if (_isGameOver) return; 
         
-        // 构造提示词
-        string timeStr = $"第{currentDay}天 {timeSlots[timeIndex]}";
-        string statsStr = $"余额:{currentMoney}, 心情:{currentSanity}, GPA:{currentGPA}";
+        string timeStr = $"第{_currentDay}天 {_timeSlots[_timeIndex]}";
+        string statsStr = $"余额:{_currentMoney}, 心情:{_currentSanity}, GPA:{_currentGPA}";
         
         string hiddenPrompt = $"\n(系统: 玩家选择[{option.text}]。时间[{timeStr}]。状态[{statsStr}]。请生成剧情，并严格输出包含3个属性变化的JSON。)";
 
-        if (currentDay == maxDays && timeIndex == 2)
+        if (_currentDay == _maxDays && _timeIndex == 2)
         {
             hiddenPrompt += " (警告：这是最后的夜晚，请在剧情中营造结局前的紧张感！)";
         }
@@ -187,96 +167,100 @@ public class GameDirector : MonoBehaviour
 
     private void AdvanceTime()
     {
-        timeIndex++;
-        if (timeIndex >= timeSlots.Length)
+        _timeIndex++;
+        if (_timeIndex >= _timeSlots.Length)
         {
-            timeIndex = 0;
-            currentDay++;
+            _timeIndex = 0;
+            _currentDay++;
         }
 
-        if (currentDay > maxDays)
+        if (_currentDay > _maxDays)
         {
             TriggerFinalEnding();
             return;
         }
 
-        uiManager.UpdateStats(currentMoney, currentSanity, currentGPA, currentDay, timeSlots[timeIndex]);
+        MsgCenter.SendMsg(MsgConst.MSG_GAME_UPDATE_STATS, _currentMoney, _currentSanity, _currentGPA, _currentDay, _timeSlots[_timeIndex]);
     }
 
     private async void SendRequestToAI(string userMessage)
     {
         AddToHistory("user", userMessage);
-        uiManager.CreateAIBubble();
+        
+        // Create Bubble
+        MsgCenter.SendMsgAct(MsgConst.MSG_GAME_BUBBLE_CREATE);
 
         await llmClient.ChatStreamAsync(
-            chatHistory,
-            (streamText) => { uiManager.UpdateCurrentAIBubble(streamText); },
+            _chatHistory,
+            (streamText) => { 
+                // Update Bubble
+                MsgCenter.SendMsg(MsgConst.MSG_GAME_BUBBLE_UPDATE, streamText);
+            },
             (finalText) => {
                 if (string.IsNullOrEmpty(finalText)) return;
 
-                // 1. 处理数值 (可能触发 Game Over)
                 string textNoCmd = ProcessGameCommands(finalText);
-                
-                // 2. 处理选项 (剔除标签)
                 string textClean = ProcessOptions(textNoCmd, out List<StoryOption> options);
 
-                // 3. 渲染干净的文本 (即使死了也要让玩家看到死因)
-                uiManager.DestroyCurrentStreamingBubble();
+                // Destroy Bubble
+                MsgCenter.SendMsgAct(MsgConst.MSG_GAME_BUBBLE_DESTROY);
+
                 RenderDialogue(textClean); 
                 AddToHistory("assistant", finalText);
 
-                // 4. 如果死了，停止后续逻辑
-                if (isGameOver) return; 
+                if (_isGameOver) return; 
 
-                // 5. 如果活着，显示选项
-                uiManager.ShowOptions(options);
+                // Show Options
+                MsgCenter.SendMsg(MsgConst.MSG_GAME_SHOW_OPTIONS, options);
             }
         );
     }
 
-    // --- 结局逻辑 ---
-
     private void TriggerFinalEnding()
     {
-        isGameOver = true;
+        _isGameOver = true;
         string endingType = "普通幸存者";
-        if (currentMoney <= 0) endingType = "破产乞讨";
-        else if (currentGPA >= 3.5f && currentMoney > 1000) endingType = "完美赢家";
-        else if (currentGPA < 1.5f) endingType = "挂科退学";
+        if (_currentMoney <= 0) endingType = "破产乞讨";
+        else if (_currentGPA >= 3.5f && _currentMoney > 1000) endingType = "完美赢家";
+        else if (_currentGPA < 1.5f) endingType = "挂科退学";
 
-        uiManager.AddSystemMessage($"【7天期满】达成结局：{endingType}");
-        StartCoroutine(GenerateEnding($"时间到。状态：金钱{currentMoney}, GPA{currentGPA}。结局：{endingType}。请写结局总结。"));
+        MsgCenter.SendMsg(MsgConst.MSG_GAME_ADD_MESSAGE, "系统", $"【7天期满】达成结局：{endingType}");
+        StartCoroutine(GenerateEnding($"时间到。状态：金钱{_currentMoney}, GPA{_currentGPA}。结局：{endingType}。请写结局总结。"));
     }
 
     private void TriggerImmediateEnding(string reason)
     {
-        isGameOver = true;
-        uiManager.ClearOptions();
-        uiManager.AddSystemMessage($"【突发恶耗】{reason}");
+        _isGameOver = true;
+        MsgCenter.SendMsgAct(MsgConst.MSG_GAME_CLEAR_OPTIONS);
+        
+        MsgCenter.SendMsg(MsgConst.MSG_GAME_ADD_MESSAGE, "系统", $"【突发恶耗】{reason}");
+        
         StartCoroutine(GenerateEnding($"玩家因为【{reason}】导致游戏提前结束。请根据最后发生的事件，写一段悲惨或讽刺的结局描述。"));
     }
 
     private System.Collections.IEnumerator GenerateEnding(string instruction)
     {
         yield return null; 
-        uiManager.CreateAIBubble();
-        var endHistory = new List<ChatMessage>(chatHistory);
+        
+        MsgCenter.SendMsgAct(MsgConst.MSG_GAME_BUBBLE_CREATE);
+
+        var endHistory = new List<ChatMessage>(_chatHistory);
         endHistory.Add(new ChatMessage { role = "system", content = instruction });
 
         var task = llmClient.ChatStreamAsync(endHistory,
-            (s) => uiManager.UpdateCurrentAIBubble(s),
+            (s) => MsgCenter.SendMsg(MsgConst.MSG_GAME_BUBBLE_UPDATE, s),
             (f) => {
-                uiManager.DestroyCurrentStreamingBubble();
-                uiManager.AddStaticAIBubble("系统", f);
+                MsgCenter.SendMsgAct(MsgConst.MSG_GAME_BUBBLE_DESTROY);
+                
+                MsgCenter.SendMsg(MsgConst.MSG_GAME_ADD_MESSAGE, "系统", f);
                 
                 List<StoryOption> ops = new List<StoryOption>();
                 ops.Add(new StoryOption { id = "RESTART", text = "重新开始", content = "" });
-                uiManager.ShowOptions(ops);
+                
+                MsgCenter.SendMsg(MsgConst.MSG_GAME_SHOW_OPTIONS, ops);
             }
         );
     }
-
-    // --- 数据解析 ---
 
     private string ProcessGameCommands(string rawText)
     {
@@ -289,21 +273,21 @@ public class GameDirector : MonoBehaviour
                 var cmd = JsonConvert.DeserializeObject<GameEventCommand>(match.Groups[1].Value);
                 if (cmd != null)
                 {
-                    currentMoney += cmd.money_change;
+                    _currentMoney += cmd.money_change;
                     
-                    currentSanity += cmd.sanity_change;
-                    currentSanity = Mathf.Clamp(currentSanity, 0, 100);
+                    _currentSanity += cmd.sanity_change;
+                    _currentSanity = Mathf.Clamp(_currentSanity, 0, 100);
 
-                    currentGPA += cmd.gpa_change;
-                    currentGPA = Mathf.Clamp(currentGPA, 0f, 4.0f);
+                    _currentGPA += cmd.gpa_change;
+                    _currentGPA = Mathf.Clamp(_currentGPA, 0f, 4.0f);
 
-                    uiManager.UpdateStats(currentMoney, currentSanity, currentGPA, currentDay, timeSlots[timeIndex]);
+                    MsgCenter.SendMsg(MsgConst.MSG_GAME_UPDATE_STATS, _currentMoney, _currentSanity, _currentGPA, _currentDay, _timeSlots[_timeIndex]);
 
-                    if (!isGameOver) 
+                    if (!_isGameOver) 
                     {
-                        if (currentMoney <= 0) { TriggerImmediateEnding("破产！余额归零"); }
-                        else if (currentSanity <= 0) { TriggerImmediateEnding("精神崩溃！SAN值归零"); }
-                        else if (currentGPA <= 0.8f) { TriggerImmediateEnding("学业预警！绩点过低"); }
+                        if (_currentMoney <= 0) { TriggerImmediateEnding("破产！余额归零"); }
+                        else if (_currentSanity <= 0) { TriggerImmediateEnding("精神崩溃！SAN值归零"); }
+                        else if (_currentGPA <= 0.8f) { TriggerImmediateEnding("学业预警！绩点过低"); }
                     }
                 }
             }
@@ -343,16 +327,14 @@ public class GameDirector : MonoBehaviour
             string[] parts = trimLine.Split(new char[] { '：', ':' }, 2);
             if (parts.Length == 2) { charName = parts[0].Trim(); body = parts[1].Trim(); }
 
-            if (charName == "突发事件" || charName == "旁白" || charName == "系统")
-                uiManager.AddSystemMessage(body);
-            else
-                uiManager.AddStaticAIBubble(charName, body);
+            // Unified Message
+            MsgCenter.SendMsg(MsgConst.MSG_GAME_ADD_MESSAGE, charName, body);
         }
     }
 
     private void AddToHistory(string role, string content)
     {
-        chatHistory.Add(new ChatMessage { role = role, content = content });
-        if (chatHistory.Count > 20) chatHistory.RemoveAt(1);
+        _chatHistory.Add(new ChatMessage { role = role, content = content });
+        if (_chatHistory.Count > 20) _chatHistory.RemoveAt(1);
     }
 }
