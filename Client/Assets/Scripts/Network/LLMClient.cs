@@ -14,6 +14,70 @@ public class LLMClient : MonoBehaviour
     [SerializeField] private string apiUrl = "http://localhost:8000/v1/chat/completions";
     [SerializeField] private string modelName = "gpt-3.5-turbo";
 
+    [Header("Session Config")]
+    [SerializeField] private string currentSessionId = "default";
+    
+    public void SetSessionId(string sessionId)
+    {
+        currentSessionId = sessionId;
+    }
+
+    // --- Save / Load API ---
+
+    public async Task<bool> SaveGameAsync(string jsonState)
+    {
+        var requestData = new { slot_id = currentSessionId, game_data = JsonConvert.DeserializeObject(jsonState) };
+        string json = JsonConvert.SerializeObject(requestData);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        using (HttpClient client = new HttpClient())
+        {
+            client.DefaultRequestHeaders.Add("X-Session-ID", currentSessionId);
+            string url = apiUrl.Replace("/v1/chat/completions", "/game/save"); // Hacky but works for now
+
+            try 
+            {
+                var response = await client.PostAsync(url, content);
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Save Failed: {e.Message}");
+                return false;
+            }
+        }
+    }
+
+    public async Task<string> LoadGameAsync()
+    {
+        using (HttpClient client = new HttpClient())
+        {
+            client.DefaultRequestHeaders.Add("X-Session-ID", currentSessionId);
+            string url = apiUrl.Replace("/v1/chat/completions", "/game/load");
+
+            try
+            {
+                var response = await client.GetAsync(url);
+                if (response.IsSuccessStatusCode)
+                {
+                    string json = await response.Content.ReadAsStringAsync();
+                    // Extract game_data
+                    var data = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+                    if (data != null && data.ContainsKey("game_data") && data["game_data"] != null)
+                    {
+                        return JsonConvert.SerializeObject(data["game_data"]);
+                    }
+                }
+                return null;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Load Failed: {e.Message}");
+                return null;
+            }
+        }
+    }
+
     // 发送请求，onTokenReceived 是每收到一个字的回调，onComplete 是完成后的回调
     public async Task ChatStreamAsync(List<ChatMessage> history, Action<string> onTokenReceived, Action<string> onComplete)
     {
@@ -30,6 +94,7 @@ public class LLMClient : MonoBehaviour
         using (HttpClient client = new HttpClient())
         {
             client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+            client.DefaultRequestHeaders.Add("X-Session-ID", currentSessionId); // Add Session ID Header
             
             // 发送请求
             using (var request = new HttpRequestMessage(HttpMethod.Post, apiUrl))

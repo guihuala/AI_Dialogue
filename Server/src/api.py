@@ -157,6 +157,51 @@ async def delete_memory(memory_id: str, mm: MemoryManager = Depends(get_memory_m
     mm.delete_memory(memory_id)
     return {"status": "success", "message": "Memory deleted"}
 
+# --- Game State Persistence (Save/Load) ---
+
+class GameSaveData(BaseModel):
+    slot_id: str
+    game_data: Dict[str, Any] # Arbitrary JSON from Unity (Stats, History, etc.)
+
+@app.post("/game/save")
+async def save_game_state(save: GameSaveData, x_session_id: str = Header("default", alias="X-Session-ID")):
+    """
+    Saves client-side game state (JSON) to a file in the session folder.
+    """
+    try:
+        # We use the session ID from header to determine folder
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        save_dir = os.path.join(base_dir, "data", "saves", x_session_id)
+        os.makedirs(save_dir, exist_ok=True)
+        
+        file_path = os.path.join(save_dir, "gamestate.json")
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(save.game_data, f, ensure_ascii=False, indent=2)
+            
+        return {"status": "success", "message": "Game state saved"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/game/load")
+async def load_game_state(x_session_id: str = Header("default", alias="X-Session-ID")):
+    """
+    Loads client-side game state from the session folder.
+    """
+    try:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        save_dir = os.path.join(base_dir, "data", "saves", x_session_id)
+        file_path = os.path.join(save_dir, "gamestate.json")
+        
+        if not os.path.exists(file_path):
+            return {"status": "empty", "game_data": None}
+            
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            
+        return {"status": "success", "game_data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # --- Sidecar Streaming Endpoint ---
 
 from fastapi.responses import StreamingResponse

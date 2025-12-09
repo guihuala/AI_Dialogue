@@ -25,31 +25,121 @@ public class GameDirector : MonoBehaviour
 
     private List<ChatMessage> chatHistory = new List<ChatMessage>();
 
-    private void Start()
+    [Header("Persistence")]
+    [SerializeField] private SaveSystem saveSystem;
+
+    // --- Save Data Model ---
+    [System.Serializable]
+    public class SaveData
+    {
+        public float money;
+        public float sanity;
+        public float gpa;
+        public int day;
+        public int timeIndex;
+        public List<ChatMessage> history;
+    }
+
+    private async void Start()
+    {
+        // 0. Initialize Session
+        if (saveSystem == null) saveSystem = gameObject.AddComponent<SaveSystem>(); // Auto-add if missing
+        
+        // This sets the Header in LLMClient
+        string sessionId = PlayerPrefs.GetString("CurrentSessionID", "default");
+        llmClient.SetSessionId(sessionId);
+        Debug.Log($"GameDirector: Started Session {sessionId}");
+
+        // 1. Try Load Game
+        string jsonState = await llmClient.LoadGameAsync();
+        
+        if (!string.IsNullOrEmpty(jsonState))
+        {
+            Debug.Log("Found Save Data. Loading...");
+            RestoreGameState(jsonState);
+        }
+        else
+        {
+            Debug.Log("No Save Data. Starting New Game...");
+            StartNewGame();
+        }
+
+        uiManager.OnOptionClicked += HandlePlayerChoice;
+    }
+
+    private void StartNewGame()
     {
         // 1. 初始化数值
         currentMoney = 1500f;
         currentSanity = 100f;
         currentGPA = 4.0f;
         currentDay = 1;
-        maxDays = 12; // Updated to 12 days
+        maxDays = 12; 
         timeIndex = 0;
         isGameOver = false;
 
         uiManager.UpdateStats(currentMoney, currentSanity, currentGPA, currentDay, timeSlots[timeIndex]);
-        uiManager.OnOptionClicked += HandlePlayerChoice;
 
         // Load Selected Characters
         string selectedIds = PlayerPrefs.GetString("SelectedRoommates", "");
-        Debug.Log("Selected Roommates: " + selectedIds);
-
-        // 2. 拼接 Prompt (Dynamic Context Only)
+        
+        // 2. 拼接 Prompt
         string dynamicContext = BuildDynamicContext(selectedIds);
-
         chatHistory.Add(new ChatMessage { role = "system", content = dynamicContext });
 
         // 3. 发送开场
         SendRequestToAI($"游戏开始。现在是第1天上午。你的室友是：{selectedIds}。请描述寝室当前的状况（观察阶段），并给出玩家的行动选项。");
+    }
+
+    private void RestoreGameState(string json)
+    {
+        try 
+        {
+            SaveData data = JsonConvert.DeserializeObject<SaveData>(json);
+            
+            currentMoney = data.money;
+            currentSanity = data.sanity;
+            currentGPA = data.gpa;
+            currentDay = data.day;
+            timeIndex = data.timeIndex;
+            chatHistory = data.history ?? new List<ChatMessage>();
+            
+            uiManager.UpdateStats(currentMoney, currentSanity, currentGPA, currentDay, timeSlots[timeIndex]);
+            
+            // Re-render history? 
+            // Only the last AI message is usually relevant for display, or we can just render the last one.
+            if (chatHistory.Count > 0)
+            {
+                var lastMsg = chatHistory[chatHistory.Count - 1];
+                if (lastMsg.role == "assistant")
+                {
+                    RenderDialogue(lastMsg.content);
+                }
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Failed to restore save: {e}");
+            StartNewGame();
+        }
+    }
+
+    public async void SaveGame()
+    {
+        SaveData data = new SaveData
+        {
+            money = currentMoney,
+            sanity = currentSanity,
+            gpa = currentGPA,
+            day = currentDay,
+            timeIndex = timeIndex,
+            history = chatHistory
+        };
+        
+        string json = JsonConvert.SerializeObject(data);
+        bool success = await llmClient.SaveGameAsync(json);
+        if (success) uiManager.AddSystemMessage("【系统】游戏已保存");
+        else uiManager.AddSystemMessage("【系统】保存失败，请检查网络");
     }
 
     // 只生成动态的上下文，静态规则由服务器加载
@@ -65,15 +155,22 @@ public class GameDirector : MonoBehaviour
         
         if (option.id == "RESTART")
         {
+            // Reset Save
+            PlayerPrefs.DeleteKey("CurrentSessionID"); 
+            // Or generate new one
+            PlayerPrefs.SetString("CurrentSessionID", System.Guid.NewGuid().ToString());
             SceneManager.LoadScene(SceneManager.GetActiveScene().name);
             return;
         }
 
         uiManager.AddPlayerMessage(option.content);
         AdvanceTime();
+        
+        // Auto Save on every turn
+        SaveGame();
 
         if (isGameOver) return; 
-
+        
         // 构造提示词
         string timeStr = $"第{currentDay}天 {timeSlots[timeIndex]}";
         string statsStr = $"余额:{currentMoney}, 心情:{currentSanity}, GPA:{currentGPA}";
