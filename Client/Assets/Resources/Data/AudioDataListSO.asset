@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 96ce09e78f3734b95961c307af91b477, type: 3}
+  m_Name: AudioDataListSO
+  m_EditorClassIdentifier: 
+  audioDataList:
+  - audioName: glass_005
+    audioPath: Audio/Sfx/glass_005
+  - audioName: glass_006
+    audioPath: Audio/Sfx/glass_006
+  - audioName: maximize_001
+    audioPath: Audio/Sfx/maximize_001
+  - audioName: maximize_002
+    audioPath: Audio/Sfx/maximize_002
+  - audioName: minimize_008
+    audioPath: Audio/Sfx/minimize_008
+  - audioName: minimize_009
+    audioPath: Audio/Sfx/minimize_009
+  - audioName: scroll_005
+    audioPath: Audio/Sfx/scroll_005
+  - audioName: select_005
+    audioPath: Audio/Sfx/select_005

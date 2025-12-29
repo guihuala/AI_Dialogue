@@ -14,7 +14,7 @@ using Object = UnityEngine.Object;
 // 3. 展开依赖资源列表，显示依赖资源的名称和路径。
 // 4. 点击依赖资源名称，可以定位到依赖资源的位置。
 /// </summary>
-namespace GuiTools
+namespace FindUselessObj
 {
     public class FindUselessObj : EditorWindow
     {
