@@ -1,9 +1,6 @@
 streamlit
 chromadb
 pydantic
-streamlit
-python-dotenv
 openai
-fastapi
-uvicorn
+python-dotenv
 watchdog
