@@ -27,8 +27,6 @@ class MemoryManager:
                 health=Health()
             )
 
-
-
     def save_profile(self):
         self.json_store.save_profile(self.profile)
 
@@ -290,6 +288,21 @@ Output the 'val' value in the same language as the user's conversation history. 
     
     def save_profile(self):
         self.json_store.save_profile(self.profile)
+
+    def observe_interaction(self, source_name: str, content: str):
+        """
+        旁听模式：只存记忆，不生成回复。
+        用于让角色记住别人说的话。
+        """
+        # 构建一条“观察”类型的记忆
+        observation = MemoryItem(
+            id=str(uuid.uuid4()),
+            type="observation",
+            content=f"I heard {source_name} say: '{content}'", # 记录为“我听到...”
+            importance=1,
+            related_entities=[source_name]
+        )
+        self.vector_store.add_memories([observation])
         
         
 if __name__ == "__main__":

@@ -6,37 +6,46 @@ using UnityEngine.UI;
 
 public class GameAgent : MonoBehaviour
 {
-    [Header("Server Config")]
-    [SerializeField] private string serverUrl = "http://127.0.0.1:8000/chat"; 
+    [Header("Settings")]
+    [SerializeField] private string serverUrl = "http://127.0.0.1:8000/group_chat"; // 注意 URL 变了
     [SerializeField] private string userName = "Adventurer";
 
-    [Header("UI References")]
+    [Header("Target Selection")]
+    // 简单的下拉框模拟选择对象 (zhuge / vic)
+    [SerializeField] private TMP_Dropdown targetDropdown; 
+
+    [Header("UI")]
     [SerializeField] private TMP_InputField inputField;
     [SerializeField] private Button sendButton;
     [SerializeField] private TMP_Text outputText;
-    
-    // 显示角色状态 UI (可选)
-    [SerializeField] private TMP_Text statusText; 
 
     private void Start()
     {
         sendButton.onClick.AddListener(OnSendClick);
+        
+        targetDropdown.ClearOptions(); // 先清空默认的 Option A/B/C
+        var options = new System.Collections.Generic.List<string> { "zhuge", "vic" };
+        targetDropdown.AddOptions(options);
     }
 
     private void OnSendClick()
     {
         if (string.IsNullOrEmpty(inputField.text)) return;
-        StartCoroutine(PostToBackend(inputField.text));
-        inputField.text = ""; 
-        outputText.text = "Thinking...";
+        
+        // 获取当前选中的角色 ID
+        string selectedId = targetDropdown.options[targetDropdown.value].text;
+        
+        StartCoroutine(PostGroupChat(inputField.text, selectedId));
+        inputField.text = "";
+        outputText.text = $"Speaking to {selectedId}...";
     }
 
-    IEnumerator PostToBackend(string text)
+    IEnumerator PostGroupChat(string text, string targetId)
     {
-        // 1. 构建请求数据 (对应 Python 的 ChatRequest)
-        ChatRequestData data = new ChatRequestData
+        GroupChatRequest data = new GroupChatRequest
         {
             user_input = text,
+            target_char_id = targetId,
             user_name = userName
         };
 
@@ -53,37 +62,30 @@ public class GameAgent : MonoBehaviour
 
             if (request.result != UnityWebRequest.Result.Success)
             {
-                outputText.text = "Error: " + request.error;
+                outputText.text = "Error: " + request.error + "\n" + request.downloadHandler.text;
             }
             else
             {
-                // 2. 解析 Python 返回的数据
-                string responseJson = request.downloadHandler.text;
-                ServerResponse res = JsonUtility.FromJson<ServerResponse>(responseJson);
-
-                outputText.text = res.response;
-                
-                // 更新状态面板 (如果有)
-                if(statusText != null)
-                {
-                    statusText.text = $"Mood: {res.current_mood} | HP: {res.hp}";
-                }
+                var res = JsonUtility.FromJson<GroupChatResponse>(request.downloadHandler.text);
+                // 显示格式： [诸葛亮]: ......
+                outputText.text = $"<color=yellow>[{res.speaker}]</color>: {res.response}";
             }
         }
     }
 
     [System.Serializable]
-    public class ChatRequestData
+    public class GroupChatRequest
     {
         public string user_input;
+        public string target_char_id;
         public string user_name;
     }
 
     [System.Serializable]
-    public class ServerResponse
+    public class GroupChatResponse
     {
         public string response;
-        public string current_mood;
-        public int hp;
+        public string speaker;
+        public string context_sync;
     }
 }
