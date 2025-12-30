@@ -25,15 +25,20 @@ public class HudController : MonoBehaviour
     {
         pauseButton.onClick.AddListener(OnPauseButtonClicked);
         sendButton.onClick.AddListener(HandleSendClick);
-        InitializeDropdown();
     }
 
-    private void InitializeDropdown()
+    public void InitializeRoommates(List<string> activeRoommates)
     {
+        if (activeRoommates == null || activeRoommates.Count == 0) return;
+
         characterDropdown.ClearOptions();
-        // 这里填入在 presets.py 里定义的 6 个 key
-        var options = new List<string> { "alice", "bella", "clara", "dora", "eva", "fiona" };
-        characterDropdown.AddOptions(options);
+        characterDropdown.AddOptions(activeRoommates);
+        
+        // 重置选中项为第一个
+        characterDropdown.value = 0;
+        characterDropdown.RefreshShownValue();
+        
+        Debug.Log($"HUD Dropdown updated with: {string.Join(", ", activeRoommates)}");
     }
 
     private void HandleSendClick()

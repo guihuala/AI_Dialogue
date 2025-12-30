@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -18,40 +19,61 @@ public class GameManager : Singleton<GameManager>
 
     [Header("Player Settings")]
     [SerializeField] private string playerName = "ArtStudent_01";
+    
+    [Header("Roommate State")]
+    // 存储当前选中的 3 个室友 ID
+    public List<string> activeRoommates = new List<string>();
 
     // --- 初始化 ---
     void Start()
     {
-        // 游戏启动时，默认进入 Playing 状态
-        StartGame();
+        // 不再自动 StartGame，而是等待 UI 选择
+        // StartGame(); 
         
-        if (hud != null)
-        {
-            hud.OnSendRequest += HandleChatRequest;
-        }
-        else
-        {
-            Debug.LogError("GameManager: GameplayUI reference is missing!");
-        }
+        // 初始化监听 HUD 发送消息
+        if (hud != null) hud.OnSendRequest += HandleChatRequest;
     }
-    
-    // --- 核心聊天逻辑 ---
-    
+
+    // --- 新增：由选人界面调用 ---
+    public void StartNewGame(List<string> selectedChars)
+    {
+        activeRoommates = new List<string>(selectedChars);
+        Debug.Log($"游戏开始！室友: {string.Join(", ", activeRoommates)}");
+        
+        // 这里可以通知 Backend 初始化这 3 个人的数据 (可选，目前是Lazy Load)
+        
+        SetGameState(GameState.Playing);
+        
+        // 初始化 HUD 的下拉框，只显示这 3 个人
+        if(hud != null) hud.InitializeRoommates(activeRoommates);
+    }
+
+    // --- 修改：处理玩家发送消息 ---
     private void HandleChatRequest(string content, string targetId)
     {
-        // 如果游戏暂停或结束，禁止发送消息
         if (currentState != GameState.Playing) return;
 
-        // 调用网络服务
+        // 这里继续用之前的逻辑
         StartCoroutine(networkService.SendMessageCoroutine(
-            content, 
-            targetId, 
-            playerName,
-            OnChatSuccess, 
+            content, targetId, playerName, OnChatSuccess, OnChatFailure
+        ));
+    }
+    
+    // --- 新增：核心功能 "观察 (Participatory Observation)" ---
+    // 这个方法绑定在 UI 的 "观察/下一回合" 按钮上
+    public void ObserveNextTurn()
+    {
+        if (currentState != GameState.Playing) return;
+
+        // 随机挑选两个在场的室友进行互动，或者由后端决定
+        // 我们只需要告诉后端：现在是“观察模式”，请推进剧情
+        StartCoroutine(networkService.SendObserveRequest(
+            activeRoommates, // 把当前在场的名单发给后端
+            OnChatSuccess,   // 复用成功的处理逻辑（显示对话）
             OnChatFailure
         ));
     }
-
+    
     private void OnChatSuccess(GroupChatResponse res)
     {
         // 1. 在 UI 上显示 AI 回复

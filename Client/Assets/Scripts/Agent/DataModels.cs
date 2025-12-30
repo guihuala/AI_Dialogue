@@ -27,3 +27,9 @@ public class GroupChatResponse
     public string mood;
     public PlayerStatsData player_stats; // 嵌套的 JSON 对象
 }
+
+[Serializable]
+public class NpcChatRequest
+{
+    public System.Collections.Generic.List<string> active_char_ids;
+}
