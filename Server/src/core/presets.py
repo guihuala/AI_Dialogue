@@ -7,6 +7,15 @@ ART_SCHOOL_CTX = SocialContext(
     current_location="女生宿舍 404 室"
 )
 
+# --- 玩家固定人设 (新增) ---
+PLAYER_PROFILE = """
+[The Player]
+Role: 普通的大二艺术系学生 (Ordinary Sophomore Art Student)
+Personality: 观察力敏锐，试图在宿舍的混乱关系中明哲保身，但往往身不由己。
+Goal: 顺利毕业，保持理智 (SAN)，并在室友的纷争中存活下来。
+Current Status: 只是一个想好好画画的普通人，但也掌握着室友们的秘密。
+"""
+
 # 1. Alice - 卷王
 ALICE = CharacterProfile(
     name="Alice",

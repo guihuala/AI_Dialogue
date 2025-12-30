@@ -46,7 +46,7 @@ public class HudController : MonoBehaviour
         if (string.IsNullOrEmpty(inputField.text)) return;
 
         string content = inputField.text;
-        string targetId = characterDropdown.options[characterDropdown.value].text;
+        string targetId = characterDropdown.options[characterDropdown.value].text.ToLower();
         
         // 通知控制器去处理逻辑
         OnSendRequest?.Invoke(content, targetId);

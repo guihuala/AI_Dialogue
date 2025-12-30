@@ -18,7 +18,6 @@ class MemoryManager:
         if data:
             return CharacterProfile(**data)
         else:
-            # 默认空角色 (防止出错，实际会用 presets 覆盖)
             return CharacterProfile(
                 name="New Character",
                 context=SocialContext(world_view="", occupation="", current_location=""),
@@ -42,21 +41,21 @@ class MemoryManager:
         )
         self.vector_store.add_memories([observation])
 
-    def chat(self, user_input: str, player_stats_str: str = "") -> tuple[str, List[Dict]]:
+    # --- 修改处：接收 player_persona_str ---
+    def chat(self, user_input: str, player_stats_str: str = "", player_persona_str: str = "") -> tuple[str, List[Dict]]:
         # 1. 检索记忆
         relevant_memories = self.vector_store.search(user_input, n_results=5)
         context_str = "\n".join([f"- {m['content']}" for m in relevant_memories])
 
-        # 2. 构建提示词 (加入玩家状态和数值影响规则)
-        system_prompt = self._construct_system_prompt(player_stats=player_stats_str)
+        # 2. 构建提示词
+        system_prompt = self._construct_system_prompt(player_stats=player_stats_str, player_persona=player_persona_str)
 
         # 3. 生成
         response = self.llm_service.generate_response(system_prompt, user_input, context_str)
         return response, relevant_memories
 
-    def _construct_system_prompt(self, player_stats: str = "") -> str:
+    def _construct_system_prompt(self, player_stats: str = "", player_persona: str = "") -> str:
         p = self.profile
-        # 构建关系描述
         rel_str = "\n".join([f"- {name}: {r.tags} (Affinity: {r.affinity})" for name, r in p.relationships.items()])
         
         return f"""
@@ -67,12 +66,14 @@ Relationships:
 {rel_str}
 
 Current Scene: You are in the dorm with the Player and others.
+**Player Profile**:
+{player_persona}
 **Player Stats**: {player_stats}
 
 **GAME RULES**:
 1. **Dynamic Interaction**: React to the player and other roommates based on your personality.
 2. **Impact Stats**: Your behavior impacts the Player's stats (Money, SAN, GPA).
-   - If you cause drama, annoy, or scare the player -> **[SAN-5]** (or -10, etc)
+   - If you cause drama, annoy, or scare the player -> **[SAN-5]**
    - If you comfort or help the player -> **[SAN+5]**
    - If you distract the player from studying -> **[GPA-0.1]**
    - If you help with homework -> **[GPA+0.1]**
@@ -83,8 +84,5 @@ Current Scene: You are in the dorm with the Player and others.
 Respond naturally as a character, not a robot.
 """
 
-    # --- 简化版的反思 (去掉了 Skill/Wealth 更新) ---
     def reflect_on_interaction(self, chat_history: List[Dict], user_name: str = "User") -> str:
-        # 为了代码简洁，这里暂时只保留心情更新逻辑，复杂的反思可以后续再加
-        # (此处省略长 Prompt，防止上下文过长，核心逻辑与之前类似，只是去掉了 Skill 部分)
         return "Reflection skipped for brevity in MVP."
