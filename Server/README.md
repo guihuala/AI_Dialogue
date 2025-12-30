@@ -4,11 +4,11 @@
 
 [English](README_EN.md) | [中文](README.md)
 
-## 📖 项目简介
+## 项目简介
 
 本项目旨在为游戏中的 AI 角色提供一套完整的记忆系统服务。它特别解决了记忆数据向量化时的切片问题，避免了上下文碎片化，同时完整保留了向量化的语义理解能力。
 
-## 📂 项目结构
+## 项目结构
 
 ```
 d:\MyProj\character-memory\
@@ -30,7 +30,7 @@ d:\MyProj\character-memory\
 └── requirements.txt       # Python 依赖
 ```
 
-## 💾 数据存储
+## 数据存储
 
 -   **档案数据 (Profile Data)**: 存储在 `data/profile.json`。包含角色的结构化状态：
     -   基本信息 (姓名, 职业)
@@ -44,13 +44,13 @@ d:\MyProj\character-memory\
     -   观察与想法
     -   每条记忆都经过 Embedding 处理以支持语义搜索 (RAG)。
 
-## 🚀 如何运行
+## 如何运行
 
 ```bash
 streamlit run src/app.py
 ```
 
-## ✨ 核心功能
+## 核心功能
 
 1.  **RAG 记忆检索**: 根据当前对话检索相关的过往记忆。
 2.  **智能反思 (Agentic Reflection)**:
@@ -62,84 +62,6 @@ streamlit run src/app.py
         -   **短对话 (<300 字符)**: 直接存储，保留细节并节省成本。
         -   **长对话 (>300 字符)**: 由 LLM 自动总结。**总结**用于索引，**原始内容**用于上下文检索。
     -   **每日日志集成**: 每日日志也会被向量化 (类型为 `daily_log`)，确保能检索到过往的活动记录。
-## 📝 许可证
+## 许可证
 
 本项目采用MIT许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
-
-
-## 📞 联系方式
-
-<div align="center">
-
-![时空码头名片](docs/时空码头.png)
-
-</div>
-
-如有问题或建议，请通过以下方式联系：
-
-- 提交Issue: [GitHub Issues](https://github.com/KsanaDock/CharacterMemory/issues)
-- 官方网站: [时空码头KsanaDock](https://www.ksanadock.com)
-
-## 🌐 关注我们
-
-<div align="center">
-
-### 在社交媒体上关注我们的最新动态
-
-<table>
-<tr>
-<td align="center" width="200">
-<a href="https://www.xiaohongshu.com/user/profile/653c5f81000000000301f274">
-<img src="https://img.shields.io/badge/小红书-FF2442?style=for-the-badge&logo=xiaohongshu&logoColor=white" alt="小红书"/>
-<br/>
-<strong>小红书</strong>
-<br/>
-<sub>创意分享与交流</sub>
-</a>
-</td>
-<td align="center" width="200">
-<a href="https://space.bilibili.com/336052319">
-<img src="https://img.shields.io/badge/Bilibili-00A1D6?style=for-the-badge&logo=bilibili&logoColor=white" alt="Bilibili"/>
-<br/>
-<strong>哔哩哔哩</strong>
-<br/>
-<sub>中文视频内容</sub>
-</a>
-</td>
-<td align="center" width="200">
-<a href="https://github.com/KsanaDock">
-<img src="https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub"/>
-<br/>
-<strong>GitHub</strong>
-<br/>
-<sub>项目源码与更新</sub>
-</a>
-</td>
-</tr>
-<tr>
-<td align="center" width="200">
-<a href="https://x.com/KsanaDock">
-<img src="https://img.shields.io/badge/X-000000?style=for-the-badge&logo=x&logoColor=white" alt="X"/>
-<br/>
-<strong>X (Twitter)</strong>
-<br/>
-<sub>最新资讯与讨论</sub>
-</a>
-</td>
-<td align="center" width="200">
-<a href="https://www.youtube.com/@KsanaDock">
-<img src="https://img.shields.io/badge/YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="YouTube"/>
-<br/>
-<strong>YouTube</strong>
-<br/>
-<sub>演示视频与教程</sub>
-</a>
-</td>
-</tr>
-</table>
-
-</div>
-
----
-
-**注意**: 使用本项目需要有效的AI服务API密钥。请确保遵守各AI服务提供商的使用条款和条件。

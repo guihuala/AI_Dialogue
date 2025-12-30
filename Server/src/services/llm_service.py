@@ -3,25 +3,46 @@ import os
 from typing import List, Dict, Optional
 
 class LLMService:
-    def __init__(self, api_key: Optional[str] = None, model: str = "x-ai/grok-4.1-fast"):
-        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY") or "dummy"
-        self.client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=self.api_key,
-        )
-        self.model = model
+    def __init__(self, api_key: Optional[str] = None, model: str = "deepseek-chat"):
+        # 1. 读取 API Key
+        # 修正：优先读取 .env 里的 DEEPSEEK_API_KEY
+        self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
+        
+        if not self.api_key:
+            print("⚠️ 警告: 未找到 DEEPSEEK_API_KEY，API 调用将失败。请检查 .env 文件。")
+            self.api_key = "dummy"
 
-    def set_api_key(self, api_key: str):
-        self.api_key = api_key
+        # 2. 初始化 OpenAI 客户端 (DeepSeek 兼容)
         self.client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
+            base_url="https://api.deepseek.com", 
             api_key=self.api_key,
         )
+        
+        # 3. 修复：确保 self.model 被正确赋值
+        self.model = model 
 
     def set_model(self, model: str):
         self.model = model
 
     def generate_response(self, system_prompt: str, user_input: str, context: str = "") -> str:
+        if self.api_key == "dummy":
+            return "Error: API Key is missing. Please check .env file."
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Context:\n{context}\n\nUser: {user_input}"}
+        ]
+
+        try:
+            # 这里的 self.model 必须在 __init__ 里定义过
+            completion = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            print(f"LLM Error Details: {e}") # 在后端打印详细错误
+            return f"Error calling LLM: {str(e)}"
         if not self.api_key or self.api_key == "dummy":
             return "Error: API Key not set."
 
