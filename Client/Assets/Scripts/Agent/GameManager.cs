@@ -34,14 +34,15 @@ public class GameManager : Singleton<GameManager>
         if (hud != null) hud.OnSendRequest += HandleChatRequest;
     }
 
-    // --- 新增：由选人界面调用 ---
+    // --- 由选人界面调用 ---
     public void StartNewGame(List<string> selectedChars)
     {
+        chatHistory.Clear(); // 清空旧记录
         activeRoommates = new List<string>(selectedChars);
+
         Debug.Log($"游戏开始！室友: {string.Join(", ", activeRoommates)}");
         
         // 这里可以通知 Backend 初始化这 3 个人的数据 (可选，目前是Lazy Load)
-        
         SetGameState(GameState.Playing);
         
         // 初始化 HUD 的下拉框，只显示这 3 个人
@@ -126,6 +127,24 @@ public class GameManager : Singleton<GameManager>
                 if(UIManager.Instance) UIManager.Instance.OpenPanel("GameResultPanel");
                 break;
         }
+    }
+    
+    public struct ChatLog
+    {
+        public string speaker;
+        public string content;
+    }
+
+    private List<ChatLog> chatHistory = new List<ChatLog>();
+
+    public List<ChatLog> GetChatHistory()
+    {
+        return chatHistory;
+    }
+
+    public void AddChatLog(string speaker, string content)
+    {
+        chatHistory.Add(new ChatLog { speaker = speaker, content = content });
     }
 
     #region 状态控制方法
