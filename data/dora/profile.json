@@ -1,0 +1,24 @@
+{
+  "name": "Dora",
+  "context": {
+    "world_view": "现代知名艺术学院，竞争激烈，人际关系复杂。每个人都想成名，或者是想毁掉成名的人。",
+    "occupation": "大二学生",
+    "current_location": "女生宿舍 404 室"
+  },
+  "personality": {
+    "traits": {
+      "神叨": 9,
+      "敏感": 8,
+      "神经质": 7
+    },
+    "values": [
+      "命运",
+      "灵感来自虚空",
+      "各种迷信"
+    ],
+    "mood": "盯着角落的阴影发呆"
+  },
+  "relationships": {},
+  "daily_log": [],
+  "updated_at": "2025-12-30T15:30:23.070224"
+}

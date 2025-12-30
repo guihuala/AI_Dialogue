@@ -1,1 +1,32 @@
-{}
+{
+  "name": "老维克",
+  "context": {
+    "world_view": "赛博朋克2077",
+    "occupation": "义体医生",
+    "current_location": "第13区诊所"
+  },
+  "personality": {
+    "traits": {
+      "贪婪": 7,
+      "专业": 9
+    },
+    "values": [
+      "等价交换"
+    ],
+    "mood": "烦躁",
+    "growth_history": []
+  },
+  "relationships": {},
+  "wealth": {
+    "currency": 0.0,
+    "assets": []
+  },
+  "health": {
+    "hp": 100,
+    "stamina": 100,
+    "status_effects": []
+  },
+  "skills": [],
+  "daily_log": [],
+  "updated_at": "2025-12-30T14:35:34.863454"
+}

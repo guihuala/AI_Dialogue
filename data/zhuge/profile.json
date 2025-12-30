@@ -1,1 +1,31 @@
-{}
+{
+  "name": "诸葛亮",
+  "context": {
+    "world_view": "三国",
+    "occupation": "丞相",
+    "current_location": "五丈原"
+  },
+  "personality": {
+    "traits": {
+      "智慧": 10
+    },
+    "values": [
+      "鞠躬尽瘁"
+    ],
+    "mood": "忧虑",
+    "growth_history": []
+  },
+  "relationships": {},
+  "wealth": {
+    "currency": 0.0,
+    "assets": []
+  },
+  "health": {
+    "hp": 100,
+    "stamina": 100,
+    "status_effects": []
+  },
+  "skills": [],
+  "daily_log": [],
+  "updated_at": "2025-12-30T14:35:34.846769"
+}

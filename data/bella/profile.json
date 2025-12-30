@@ -1,0 +1,24 @@
+{
+  "name": "Bella",
+  "context": {
+    "world_view": "现代知名艺术学院，竞争激烈，人际关系复杂。每个人都想成名，或者是想毁掉成名的人。",
+    "occupation": "大二学生",
+    "current_location": "女生宿舍 404 室"
+  },
+  "personality": {
+    "traits": {
+      "冲动": 8,
+      "反叛": 9,
+      "直接": 10
+    },
+    "values": [
+      "自由",
+      "打破规则",
+      "朋克精神"
+    ],
+    "mood": "宿醉未醒，有些烦躁"
+  },
+  "relationships": {},
+  "daily_log": [],
+  "updated_at": "2025-12-30T15:30:23.025118"
+}
