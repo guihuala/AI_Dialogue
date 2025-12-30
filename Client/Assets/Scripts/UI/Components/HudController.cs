@@ -9,23 +9,25 @@ public class HudController : MonoBehaviour
     [Header("Data")]
     [SerializeField] private CharacterArtLibrary artLibrary;
 
-    [Header("Stage Settings")]
-    [SerializeField] private RectTransform stageContainer;
-    [SerializeField] private GameObject characterPrefab;
-
-    private readonly Vector2 POS_LEFT = new Vector2(-500, 0);
+    [Header("Stage Settings (Dynamic Tachie)")]
+    [SerializeField] private RectTransform stageContainer; // 角色立绘的父节点
+    [SerializeField] private GameObject characterPrefab;   // CharacterTachie Prefab
+    
+    // 简单的站位定义
+    private readonly Vector2 POS_LEFT = new Vector2(-400, 0);
     private readonly Vector2 POS_CENTER = new Vector2(0, 0);
-    private readonly Vector2 POS_RIGHT = new Vector2(500, 0);
+    private readonly Vector2 POS_RIGHT = new Vector2(400, 0);
 
     [Header("Dialogue UI")]
     [SerializeField] private TMP_Text speakerNameText;
     [SerializeField] private TextAnimator textAnimator; 
     [SerializeField] private GameObject dialoguePanel; 
 
+    [Header("Options UI (New)")]
+    [SerializeField] private GameObject optionsContainer; // 放3个按钮的父节点
+    [SerializeField] private Button[] optionButtons;      // 3个按钮
+
     [Header("Interactions")]
-    [SerializeField] private TMP_InputField inputField;
-    [SerializeField] private Button sendButton;
-    [SerializeField] private TMP_Dropdown targetDropdown; 
     [SerializeField] private Button historyButton; 
     [SerializeField] private Button pauseButton;
 
@@ -34,146 +36,147 @@ public class HudController : MonoBehaviour
     [SerializeField] private TMP_Text sanText;
     [SerializeField] private TMP_Text gpaText;
 
-    // 核心数据结构：ID -> 实例控制器
+    // 运行时数据：ID -> 实例控制器
     private Dictionary<string, CharacterPortrait> activeCharacters = new Dictionary<string, CharacterPortrait>();
 
-    public System.Action<string, string> OnSendRequest;
+    // 事件：当玩家点击某个选项时触发
+    public System.Action<string> OnOptionSelected; 
 
     private void Start()
     {
-        sendButton.onClick.AddListener(HandleSendClick);
-        historyButton.onClick.AddListener(() => UIManager.Instance.OpenPanel("HistoryPanel"));
-        pauseButton.onClick.AddListener(() => GameManager.Instance.PauseGame());
+        // 绑定基础按钮
+        if(historyButton) historyButton.onClick.AddListener(() => UIManager.Instance.OpenPanel("HistoryPanel"));
+        if(pauseButton) pauseButton.onClick.AddListener(() => GameManager.Instance.PauseGame());
+        
+        // 初始隐藏选项
+        if(optionsContainer) optionsContainer.SetActive(false);
     }
 
-    // --- 动态生成角色 ---
+    // --- 1. 动态生成角色 ---
     public void InitializeRoommates(List<string> activeRoommates)
     {
-        // 1. 清理当前舞台上的所有角色
+        // 清理旧角色
         foreach (var charCtrl in activeCharacters.Values)
         {
             if(charCtrl != null) Destroy(charCtrl.gameObject);
         }
         activeCharacters.Clear();
 
-        // 2. 更新下拉框
-        targetDropdown.ClearOptions();
-        targetDropdown.AddOptions(activeRoommates);
-
-        // 3. 动态生成新角色
-        if (activeRoommates.Count > 0)
+        // 生成新角色
+        if (activeRoommates != null && activeRoommates.Count > 0)
         {
-            // 根据人数决定站位策略
-            // 这里演示简单的逻辑：按顺序放入 Left, Center, Right
-            // 你可以写更复杂的逻辑，比如 2个人时站在 (-300, 300)
-            
             List<Vector2> positions = GetStandPositions(activeRoommates.Count);
-
             for (int i = 0; i < activeRoommates.Count; i++)
             {
-                string id = activeRoommates[i];
-                SpawnCharacter(id, positions[i]);
+                SpawnCharacter(activeRoommates[i], positions[i]);
             }
         }
     }
 
-    // 根据人数计算站位坐标
     private List<Vector2> GetStandPositions(int count)
     {
         List<Vector2> pos = new List<Vector2>();
-        if (count == 1)
-        {
-            pos.Add(POS_CENTER);
-        }
-        else if (count == 2)
-        {
-            pos.Add(new Vector2(-300, 0));
-            pos.Add(new Vector2(300, 0));
-        }
-        else // 3人及以上
-        {
-            pos.Add(POS_LEFT);
-            pos.Add(POS_CENTER);
-            pos.Add(POS_RIGHT);
-        }
+        if (count == 1) pos.Add(POS_CENTER);
+        else if (count == 2) { pos.Add(new Vector2(-300, 0)); pos.Add(new Vector2(300, 0)); }
+        else { pos.Add(POS_LEFT); pos.Add(POS_CENTER); pos.Add(POS_RIGHT); }
         return pos;
     }
-    
+
     private void SpawnCharacter(string id, Vector2 targetPos)
     {
-        // 1. 获取数据 (现在返回的是 CharacterData ScriptableObject)
-        CharacterData data = artLibrary.GetCharacter(id);
-        
-        if (data == null) 
-        {
-            Debug.LogWarning($"找不到 ID 为 {id} 的角色数据！");
-            return;
-        }
+        var data = artLibrary.GetCharacter(id);
+        if (data == null) return;
 
-        // 实例化 Prefab
         GameObject go = Instantiate(characterPrefab, stageContainer);
-        CharacterPortrait portrait = go.GetComponent<CharacterPortrait>();
+        CharacterPortrait tachie = go.GetComponent<CharacterPortrait>();
 
-        // 2. 初始化 (注意字段名的变化)
-        // 以前是 art.portrait，现在是 data.portrait
-        portrait.Initialize(id, data.portrait); 
-        
-        portrait.SetPosition(targetPos, instant: true); 
-        portrait.Enter();
+        tachie.Initialize(id, data.portrait); 
+        tachie.SetPosition(targetPos, instant: true); 
+        tachie.Enter();
 
-        activeCharacters[id.ToLower()] = portrait;
+        activeCharacters[id.ToLower()] = tachie;
     }
 
-    // --- 消息处理与演出 ---
-    public void AppendMessage(string speaker, string content, Color color)
+    // --- 2. 显示选项 (核心新功能) ---
+    public void ShowOptions(List<string> options)
     {
-        speakerNameText.text = speaker;
-        speakerNameText.color = color;
+        optionsContainer.SetActive(true);
 
-        if (textAnimator != null) textAnimator.ShowText(content);
-        
-        GameManager.Instance.AddChatLog(speaker, content);
-
-        UpdatePortraitFocus(speaker);
-    }
-
-    private void UpdatePortraitFocus(string speakerName)
-    {
-        string speakerKey = speakerName.ToLower();
-
-        foreach (var kvp in activeCharacters)
+        for (int i = 0; i < optionButtons.Length; i++)
         {
-            string charId = kvp.Key;
-            CharacterPortrait portrait = kvp.Value;
-
-            if (charId == speakerKey)
+            if (i < options.Count)
             {
-                portrait.SetFocus(true); // 高亮说话者
+                optionButtons[i].gameObject.SetActive(true);
+                var btnText = optionButtons[i].GetComponentInChildren<TMP_Text>();
+                if(btnText) btnText.text = options[i];
+                
+                string selectedContent = options[i];
+                
+                // 移除旧监听，添加新监听
+                optionButtons[i].onClick.RemoveAllListeners();
+                optionButtons[i].onClick.AddListener(() => {
+                    optionsContainer.SetActive(false); // 点击后隐藏选项
+                    OnOptionSelected?.Invoke(selectedContent);
+                });
             }
             else
             {
-                portrait.SetFocus(false); // 变暗其他人
+                optionButtons[i].gameObject.SetActive(false);
             }
         }
     }
 
-    public void HandleSendClick()
+    // --- 3. 播放对话序列 (核心新功能) ---
+    public IEnumerator PlayDialogueSequence(List<DialogueTurn> sequence, System.Action onComplete)
     {
-        if (string.IsNullOrEmpty(inputField.text)) return;
-        string content = inputField.text;
-        string targetId = targetDropdown.options[targetDropdown.value].text.ToLower();
-        
-        // 玩家说话时，所有角色变暗，或者高亮目标
-        foreach (var kvp in activeCharacters)
+        foreach (var turn in sequence)
         {
-            kvp.Value.SetFocus(kvp.Key == targetId);
-        }
+            // A. 显示名字和颜色
+            // 简单的颜色逻辑：玩家蓝色，NPC黄色
+            Color nameColor = turn.speaker == "Player" ? Color.cyan : Color.yellow;
+            speakerNameText.text = turn.speaker;
+            speakerNameText.color = nameColor;
 
-        OnSendRequest?.Invoke(content, targetId);
-        AppendMessage("Player", content, Color.cyan);
-        inputField.text = "";
+            // B. 高亮说话者立绘
+            UpdatePortraitFocus(turn.speaker);
+
+            // C. 播放文字 (等待打字机完成)
+            bool finished = false;
+            if (textAnimator != null)
+            {
+                textAnimator.ShowText(turn.content, () => finished = true);
+            }
+            else
+            {
+                // 如果没有 TextAnimator，直接显示并等待一下
+                Debug.LogWarning("TextAnimator missing");
+                finished = true; 
+            }
+
+            // D. 存入历史
+            GameManager.Instance.AddChatLog(turn.speaker, turn.content);
+
+            // E. 等待本句结束 (打字完成 + 额外停顿)
+            while (!finished) yield return null;
+            yield return new WaitForSeconds(1.0f); // 读完后停顿1秒，节奏感
+        }
+        
+        // 序列播放完毕
+        onComplete?.Invoke();
     }
+
+    // --- 辅助显示方法 ---
     
+    public void AppendMessage(string speaker, string content, Color color)
+    {
+        // 单条显示（用于显示玩家自己的选择，或者系统消息）
+        speakerNameText.text = speaker;
+        speakerNameText.color = color;
+        if (textAnimator) textAnimator.ShowText(content);
+        GameManager.Instance.AddChatLog(speaker, content);
+        UpdatePortraitFocus(speaker);
+    }
+
     public void ShowError(string error)
     {
         Debug.LogError($"[Game Error] {error}");
@@ -188,5 +191,15 @@ public class HudController : MonoBehaviour
         sanText.color = stats.san < 40 ? Color.red : Color.white; 
         gpaText.text = $"GPA: {stats.gpa:F2}";
         gpaText.color = stats.gpa > 3.8f ? Color.green : Color.white;
+    }
+
+    private void UpdatePortraitFocus(string speakerName)
+    {
+        string speakerKey = speakerName.ToLower();
+        foreach (var kvp in activeCharacters)
+        {
+            if (kvp.Key == speakerKey) kvp.Value.SetFocus(true);
+            else kvp.Value.SetFocus(false);
+        }
     }
 }

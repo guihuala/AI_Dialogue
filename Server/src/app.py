@@ -2,7 +2,7 @@ import os
 import sys
 import re
 import random
-import shutil # 新增：用于删除文件夹
+import shutil
 from typing import List
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -13,7 +13,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.core.memory_manager import MemoryManager
 from src.services.llm_service import LLMService
-# 导入 PLAYER_PROFILE
 from src.core.presets import CHARACTER_REGISTRY, PLAYER_PROFILE 
 from src.models.schema import PlayerStats 
 
@@ -21,189 +20,153 @@ load_dotenv()
 
 app = FastAPI()
 
-# --- 全局状态 ---
 managers = {}
 player_state = PlayerStats() 
 
-# --- 核心辅助函数 ---
+# --- 辅助函数 ---
 
 def load_character(char_id: str):
-    if char_id in managers:
-        return managers[char_id]
+    # 确保传入的是小写，防止 key error
+    char_id = char_id.lower() 
     
-    if char_id not in CHARACTER_REGISTRY:
-        return None
-        
+    if char_id in managers: return managers[char_id]
+    if char_id not in CHARACTER_REGISTRY: return None
+    
     base_dir = f"data/{char_id}"
     os.makedirs(base_dir, exist_ok=True)
+    mm = MemoryManager(f"{base_dir}/profile.json", f"{base_dir}/chroma_db", LLMService())
     
-    mm = MemoryManager(
-        profile_path=f"{base_dir}/profile.json", 
-        vector_db_path=f"{base_dir}/chroma_db", 
-        llm_service=LLMService()
-    )
-    
-    # 强制更新人设 (保留记忆)
-    if char_id in CHARACTER_REGISTRY:
+    if char_id in CHARACTER_REGISTRY: 
         preset = CHARACTER_REGISTRY[char_id]
         mm.profile.name = preset.name
         mm.profile.context = preset.context
         mm.profile.personality = preset.personality
         mm.save_profile()
-        
     managers[char_id] = mm
     return mm
 
 def apply_stat_changes(response_text: str):
     global player_state
-    
     san_matches = re.findall(r'\[SAN([+-]\d+)\]', response_text)
-    for val in san_matches:
-        player_state.san = max(0, min(100, player_state.san + int(val)))
-
+    for val in san_matches: player_state.san = max(0, min(100, player_state.san + int(val)))
     money_matches = re.findall(r'\[MONEY([+-]\d+)\]', response_text)
-    for val in money_matches:
-        player_state.money += float(val)
-
+    for val in money_matches: player_state.money += float(val)
     gpa_matches = re.findall(r'\[GPA([+-]?\d*\.?\d+)\]', response_text)
-    for val in gpa_matches:
-        player_state.gpa = max(0.0, min(4.0, player_state.gpa + float(val)))
+    for val in gpa_matches: player_state.gpa = max(0.0, min(4.0, player_state.gpa + float(val)))
 
-# --- API 接口 ---
+# --- 请求模型 ---
 
-class GroupChatRequest(BaseModel):
-    user_input: str
-    target_char_id: str 
+class PerformActionRequest(BaseModel):
+    action_content: str
+    active_char_ids: List[str]
     user_name: str = "Player"
 
-class NpcChatRequest(BaseModel):
+class SuggestOptionsRequest(BaseModel):
     active_char_ids: List[str]
+    user_name: str = "Player"
 
-@app.get("/")
-def health_check():
-    return {"status": "online", "characters": list(managers.keys())}
+# --- 接口 ---
 
-@app.get("/player_status")
-def get_player_status():
-    return player_state
-
-# --- 新增：重置游戏数据接口 ---
-@app.post("/reset_game")
-def reset_game():
+@app.post("/suggest_options")
+def suggest_options_endpoint(req: SuggestOptionsRequest):
     """
-    删除所有本地存档数据，重置玩家状态。
-    Unity 端在点击“新游戏”时调用此接口。
+    根据当前情境，为玩家生成 3 个行动选项
     """
-    global managers, player_state
+    llm = LLMService()
     
-    print("⚠️ 收到重置请求，正在清理数据...")
+    # 获取在场角色的名字
+    char_names = []
+    for cid in req.active_char_ids:
+        # 🟢 修改处：强制转小写
+        mm = load_character(cid.lower()) 
+        if mm: char_names.append(mm.profile.name)
     
-    # 1. 清空内存对象
-    managers.clear()
-    player_state = PlayerStats() # 重置为初始值 (1000, 80, 3.5)
-    
-    # 2. 删除硬盘数据
-    data_dir = "data"
-    if os.path.exists(data_dir):
-        try:
-            # 递归删除 data 文件夹
-            shutil.rmtree(data_dir)
-            # 重新创建空文件夹
-            os.makedirs(data_dir, exist_ok=True)
-            print("✅ 数据清理完毕")
-            return {"status": "success", "message": "Game data has been reset."}
-        except Exception as e:
-            print(f"❌ 数据清理失败: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to delete data: {e}")
-    
-    return {"status": "success", "message": "No data found, reset complete."}
+    # 如果没找到任何角色（比如传来的ID全是错的），加一个保底，防止 LLM 瞎编
+    names_str = ', '.join(char_names) if char_names else "nobody (empty room)"
 
-@app.post("/group_chat")
-def group_chat_endpoint(req: GroupChatRequest):
-    if req.target_char_id not in managers:
-        if not load_character(req.target_char_id):
-            raise HTTPException(status_code=404, detail="Character not found")
+    system_prompt = f"""
+    You are the Game Master of a visual novel.
+    The Player ({req.user_name}) is in a dorm room with {names_str}.
+    Player Profile: {PLAYER_PROFILE}
+    Current Stats: Money {player_state.money}, SAN {player_state.san}, GPA {player_state.gpa}.
     
-    target_mm = managers[req.target_char_id]
+    Generate 3 distinct, short action options for the player to advance the plot.
+    1. A polite/normal option.
+    2. A risky/emotional option (might affect SAN or relationships).
+    3. A practical/selfish option (might affect Money or GPA).
     
-    stats_str = f"Money: ${player_state.money}, SAN: {player_state.san}/100, GPA: {player_state.gpa:.2f}"
+    Output ONLY the 3 options separated by newlines. No numbering.
+    """
     
-    # 传入 PLAYER_PROFILE
-    response_text, _ = target_mm.chat(
-        req.user_input, 
-        player_stats_str=stats_str,
-        player_persona_str=PLAYER_PROFILE 
-    )
+    raw_res = llm.generate_response(system_prompt, "Generate options now.")
+    options = [line.strip().lstrip("123.- ") for line in raw_res.split('\n') if line.strip()]
     
-    apply_stat_changes(response_text)
+    if len(options) < 3:
+        options = ["Say hello.", "Ask for money.", "Study silently."]
+        
+    return {"options": options[:3]}
+
+@app.post("/perform_action")
+def perform_action_endpoint(req: PerformActionRequest):
+    """
+    玩家执行选择 -> 触发多角色连锁反应
+    """
+    active_mms = []
+    for cid in req.active_char_ids:
+        # 🟢 修改处：强制转小写，这能解决 No characters found 问题
+        mm = load_character(cid.lower())
+        if mm: active_mms.append(mm)
+        
+    # 如果这里报错，说明 Unity 传过来的 ID 和 presets.py 里定义的完全对不上
+    if not active_mms:
+        print(f"❌ Error: Received IDs {req.active_char_ids}, but none matched registry keys.")
+        raise HTTPException(status_code=404, detail="No characters found")
+
+    dialogue_sequence = []
     
-    target_mm.save_interaction(req.user_input, response_text, req.user_name)
+    # 步骤 1: 记录玩家的行动
+    for mm in active_mms:
+        mm.observe_interaction(req.user_name, req.action_content)
+        
+    # 步骤 2: 决定发言顺序 (随机 1-3 人)
+    speakers = random.sample(active_mms, k=min(len(active_mms), 3))
     
-    for char_id, mm in managers.items():
-        if char_id != req.target_char_id:
-            mm.observe_interaction(req.user_name, req.user_input) 
-            mm.observe_interaction(target_mm.profile.name, response_text) 
+    current_context = f"{req.user_name} said: '{req.action_content}'"
+    stats_str = f"Money: ${player_state.money}, SAN: {player_state.san}, GPA: {player_state.gpa}"
+
+    for i, mm in enumerate(speakers):
+        prompt = f"""
+        [Scene Update]
+        {current_context}
+        
+        You are {mm.profile.name}.
+        Respond to the situation based on your personality.
+        If someone else already spoke, you can reply to them OR the player.
+        Keep it short (1-2 sentences).
+        """
+        
+        # 调用 Chat
+        response, _ = mm.chat(prompt, player_stats_str=stats_str, player_persona_str=PLAYER_PROFILE)
+        apply_stat_changes(response)
+        
+        dialogue_sequence.append({
+            "speaker": mm.profile.name,
+            "content": response,
+            "mood": mm.profile.personality.mood
+        })
+        
+        # 更新上下文和记忆
+        current_context += f"\n{mm.profile.name} said: '{response}'"
+        mm.save_interaction(f"(Context: {current_context})", response, user_name="System")
+        
+        for other in active_mms:
+            if other != mm:
+                other.observe_interaction(mm.profile.name, response)
 
     return {
-        "response": response_text,
-        "speaker": target_mm.profile.name,
-        "mood": target_mm.profile.personality.mood,
-        "player_stats": player_state.dict()
-    }
-
-@app.post("/npc_chat")
-def npc_chat_endpoint(req: NpcChatRequest):
-    available_ids = [cid for cid in req.active_char_ids if cid in CHARACTER_REGISTRY]
-    if len(available_ids) < 2:
-        return {
-            "response": "(Silence...)",
-            "speaker": "System",
-            "mood": "Neutral",
-            "player_stats": player_state.dict()
-        }
-
-    for cid in available_ids:
-        load_character(cid)
-
-    speaker_id, listener_id = random.sample(available_ids, 2)
-    speaker_mm = managers[speaker_id]
-    listener_mm = managers[listener_id]
-
-    print(f"👁️ [观察模式] {speaker_id} -> {listener_id}")
-
-    stats_str = f"Money: ${player_state.money}, SAN: {player_state.san}/100, GPA: {player_state.gpa:.2f}"
-    
-    prompt_override = (
-        f"(Turning to {listener_mm.profile.name}) "
-        f"Start a conversation about dorm life or art. "
-        f"Ignore the player ({PLAYER_PROFILE.splitlines()[1]}), they are just watching."
-    )
-
-    # 传入 PLAYER_PROFILE
-    response_text, _ = speaker_mm.chat(
-        prompt_override, 
-        player_stats_str=stats_str,
-        player_persona_str=PLAYER_PROFILE
-    )
-
-    apply_stat_changes(response_text)
-
-    speaker_mm.save_interaction(f"(To {listener_mm.profile.name})", response_text, user_name="System")
-    for cid in available_ids:
-        if cid != speaker_id:
-            managers[cid].observe_interaction(speaker_mm.profile.name, response_text)
-
-    return {
-        "response": f"(To {listener_mm.profile.name}): {response_text}",
-        "speaker": speaker_mm.profile.name,
-        "mood": speaker_mm.profile.personality.mood,
+        "dialogue_sequence": dialogue_sequence,
         "player_stats": player_state.dict()
     }
 
 if __name__ == "__main__":
-    print("正在预加载所有角色数据...")
-    for char_id in CHARACTER_REGISTRY.keys():
-        print(f"🔄 Loading/Updating profile for {char_id}...")
-        load_character(char_id)
-    print("✅ 系统就绪")
     uvicorn.run(app, host="0.0.0.0", port=8000)

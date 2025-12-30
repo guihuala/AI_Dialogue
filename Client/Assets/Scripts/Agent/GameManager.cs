@@ -1,6 +1,6 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 public class GameManager : Singleton<GameManager>
 {
@@ -21,167 +21,149 @@ public class GameManager : Singleton<GameManager>
     [SerializeField] private string playerName = "ArtStudent_01";
     
     [Header("Roommate State")]
-    // 存储当前选中的 3 个室友 ID
     public List<string> activeRoommates = new List<string>();
 
-    // --- 初始化 ---
-    void Start()
-    {
-        // 不再自动 StartGame，而是等待 UI 选择
-        // StartGame(); 
-        
-        // 初始化监听 HUD 发送消息
-        if (hud != null) hud.OnSendRequest += HandleChatRequest;
-    }
-
-    // --- 由选人界面调用 ---
-    public void StartNewGame(List<string> selectedChars)
-    {
-        chatHistory.Clear(); // 清空旧记录
-        activeRoommates = new List<string>(selectedChars);
-
-        Debug.Log($"游戏开始！室友: {string.Join(", ", activeRoommates)}");
-        
-        // 这里可以通知 Backend 初始化这 3 个人的数据 (可选，目前是Lazy Load)
-        SetGameState(GameState.Playing);
-        
-        // 初始化 HUD 的下拉框，只显示这 3 个人
-        if(hud != null) hud.InitializeRoommates(activeRoommates);
-    }
-
-    // --- 修改：处理玩家发送消息 ---
-    private void HandleChatRequest(string content, string targetId)
-    {
-        if (currentState != GameState.Playing) return;
-
-        // 这里继续用之前的逻辑
-        StartCoroutine(networkService.SendMessageCoroutine(
-            content, targetId, playerName, OnChatSuccess, OnChatFailure
-        ));
-    }
-    
-    // --- 新增：核心功能 "观察 (Participatory Observation)" ---
-    // 这个方法绑定在 UI 的 "观察/下一回合" 按钮上
-    public void ObserveNextTurn()
-    {
-        if (currentState != GameState.Playing) return;
-
-        // 随机挑选两个在场的室友进行互动，或者由后端决定
-        // 我们只需要告诉后端：现在是“观察模式”，请推进剧情
-        StartCoroutine(networkService.SendObserveRequest(
-            activeRoommates, // 把当前在场的名单发给后端
-            OnChatSuccess,   // 复用成功的处理逻辑（显示对话）
-            OnChatFailure
-        ));
-    }
-    
-    private void OnChatSuccess(GroupChatResponse res)
-    {
-        // 1. 在 UI 上显示 AI 回复
-        // 你可以在这里加逻辑：比如根据 mood 改变颜色
-        Color nameColor = Color.yellow; 
-        hud.AppendMessage(res.speaker, res.response, nameColor);
-
-        // 2. 更新 UI 上的玩家属性 (SAN/GPA/Money)
-        hud.UpdatePlayerStats(res.player_stats);
-        
-        // 3. (可选) 游戏结束判定
-        // 比如：如果 SAN 值归零，触发 GameOver
-        if (res.player_stats.san <= 0)
-        {
-            Debug.Log("SAN值耗尽，游戏结束！");
-            EndGame();
-        }
-    }
-
-    private void OnChatFailure(string error)
-    {
-        hud.ShowError(error);
-    }
-
-    // --- 原有的状态控制逻辑 (保持不变或微调) ---
-
-    public void SetGameState(GameState newState)
-    {
-        currentState = newState;
-
-        switch (newState)
-        {
-            case GameState.Playing:
-                Time.timeScale = 1;
-                // 假设你有全局 UI 管理器来关菜单
-                if(UIManager.Instance) 
-                {
-                    UIManager.Instance.ClosePanel("SettingPanel");
-                    UIManager.Instance.ClosePanel("GameResultPanel");
-                }
-                break;
-
-            case GameState.Paused:
-                Time.timeScale = 0;
-                if(UIManager.Instance) UIManager.Instance.OpenPanel("SettingPanel");
-                break;
-
-            case GameState.GameOver:
-                Time.timeScale = 0;
-                if(UIManager.Instance) UIManager.Instance.OpenPanel("GameResultPanel");
-                break;
-        }
-    }
-    
+    // --- 数据结构：聊天记录 ---
     public struct ChatLog
     {
         public string speaker;
         public string content;
     }
-
     private List<ChatLog> chatHistory = new List<ChatLog>();
 
-    public List<ChatLog> GetChatHistory()
+    // --- 初始化 ---
+    void Start()
     {
-        return chatHistory;
+        // 绑定 HUD 的选项点击事件
+        if (hud != null) 
+        {
+            hud.OnOptionSelected += HandlePlayerChoice;
+        }
+        else
+        {
+            Debug.LogError("GameManager: HUD reference is missing!");
+        }
     }
+
+    // --- 游戏流程控制 ---
+
+    // 1. 开始新游戏 (由选人界面调用)
+    public void StartNewGame(List<string> selectedChars)
+    {
+        chatHistory.Clear();
+        activeRoommates = new List<string>(selectedChars);
+
+        Debug.Log($"游戏开始！室友: {string.Join(", ", activeRoommates)}");
+        SetGameState(GameState.Playing);
+        
+        // 初始化 HUD 立绘
+        if(hud != null) hud.InitializeRoommates(activeRoommates);
+
+        // 立即开始第一个回合（生成选项）
+        StartNewTurn();
+    }
+
+    // 2. 开启新回合：请求 AI 生成选项
+    public void StartNewTurn()
+    {
+        if (currentState != GameState.Playing) return;
+
+        Debug.Log("Waiting for AI options...");
+        
+        // 调用 NetworkService 的 GetOptions 接口
+        // 注意：你需要确保 NetworkService.cs 中已经添加了 GetOptionsCoroutine 方法
+        StartCoroutine(networkService.GetOptionsCoroutine(
+            activeRoommates,
+            (res) => {
+                // 成功：让 HUD 显示 3 个按钮
+                hud.ShowOptions(res.options);
+            },
+            (err) => hud.ShowError("获取选项失败: " + err)
+        ));
+    }
+
+    // 3. 处理玩家选择
+    private void HandlePlayerChoice(string choice)
+    {
+        if (currentState != GameState.Playing) return;
+
+        // A. 先在屏幕上显示玩家说的话 (即刻反馈)
+        hud.AppendMessage("Player", choice, Color.cyan); 
+
+        // B. 发送给后端，请求演出结果
+        StartCoroutine(networkService.PerformActionCoroutine(
+            choice,
+            activeRoommates,
+            (res) => {
+                // C. 收到回复后：
+                
+                // 1. 更新数值
+                hud.UpdatePlayerStats(res.player_stats);
+                
+                // 2. 检查是否游戏结束 (SAN归零等)
+                if (res.player_stats.san <= 0)
+                {
+                    EndGame();
+                    return;
+                }
+
+                // 3. 播放连续对话动画
+                // 这是一个 List<DialogueTurn>，HUD 会一个接一个播放
+                StartCoroutine(hud.PlayDialogueSequence(res.dialogue_sequence, () => {
+                    // 4. 播放完毕后，自动进入下一回合 (再次生成选项)
+                    StartNewTurn();
+                }));
+            },
+            (err) => hud.ShowError("执行动作失败: " + err)
+        ));
+    }
+
+    // --- 辅助方法 ---
+
+    public List<ChatLog> GetChatHistory() => chatHistory;
 
     public void AddChatLog(string speaker, string content)
     {
         chatHistory.Add(new ChatLog { speaker = speaker, content = content });
     }
 
-    #region 状态控制方法
+    // --- 状态机 ---
 
-    public void StartGame()
+    public void SetGameState(GameState newState)
     {
-        SetGameState(GameState.Playing);
-    }
-
-    public void PauseGame()
-    {
-        if (currentState == GameState.Playing)
+        currentState = newState;
+        switch (newState)
         {
-            SetGameState(GameState.Paused);
+            case GameState.Playing:
+                Time.timeScale = 1;
+                // 如果有 UIManager，这里关闭菜单
+                if(UIManager.Instance) 
+                {
+                    UIManager.Instance.ClosePanel("SettingPanel");
+                    UIManager.Instance.ClosePanel("GameResultPanel");
+                }
+                break;
+            case GameState.Paused:
+                Time.timeScale = 0;
+                if(UIManager.Instance) UIManager.Instance.OpenPanel("SettingPanel");
+                break;
+            case GameState.GameOver:
+                Time.timeScale = 0;
+                Debug.Log("GAME OVER");
+                // if(UIManager.Instance) UIManager.Instance.OpenPanel("GameResultPanel");
+                break;
         }
     }
 
-    public void ResumeGame()
-    {
-        if (currentState == GameState.Paused)
-        {
-            SetGameState(GameState.Playing);
-        }
-    }
-
-    public void EndGame()
-    {
-        SetGameState(GameState.GameOver);
-        // 这里可以通知 GameplayUI 显示结算信息
-        // hud.ShowGameOver(...)
-    }
-
+    public void PauseGame() => SetGameState(GameState.Paused);
+    public void ResumeGame() => SetGameState(GameState.Playing);
+    public void EndGame() => SetGameState(GameState.GameOver);
+    
     public void ReturnToMainMenu()
     {
-        SetGameState(GameState.Playing);
-        // SceneLoader.Instance.LoadScene(GameScene.MainMenu); // 假设你有 SceneLoader
+        // 清理数据，返回主菜单场景
+        chatHistory.Clear();
+        activeRoommates.Clear();
+        UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenuScene");
     }
-
-    #endregion
 }

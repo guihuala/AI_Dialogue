@@ -6,86 +6,44 @@ using UnityEngine.Networking;
 
 public class NetworkService : MonoBehaviour
 {
-    [Header("Config")]
-    [SerializeField] private string serverUrl = "http://127.0.0.1:8000/group_chat";
-    [SerializeField] private string observeUrl = "http://127.0.0.1:8000/npc_chat"; // 新接口
+    [SerializeField] private string optionsUrl = "http://127.0.0.1:8000/suggest_options";
+    [SerializeField] private string actionUrl = "http://127.0.0.1:8000/perform_action";
 
-    public IEnumerator SendObserveRequest(List<string> activeChars, Action<GroupChatResponse> onSuccess, Action<string> onFailure)
+    // 获取选项
+    public IEnumerator GetOptionsCoroutine(List<string> activeChars, Action<SuggestOptionsResponse> onSuccess, Action<string> onFailure)
     {
-        // 构建请求数据
-        NpcChatRequest reqData = new NpcChatRequest
-        {
-            active_char_ids = activeChars
-        };
-        string json = JsonUtility.ToJson(reqData);
-
-        using (UnityWebRequest request = new UnityWebRequest(observeUrl, "POST"))
+        SuggestOptionsRequest req = new SuggestOptionsRequest { active_char_ids = activeChars };
+        string json = JsonUtility.ToJson(req);
+        
+        using (UnityWebRequest request = new UnityWebRequest(optionsUrl, "POST"))
         {
             byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
-
             yield return request.SendWebRequest();
 
-            if (request.result != UnityWebRequest.Result.Success)
-            {
-                onFailure?.Invoke($"Network Error: {request.error}\n{request.downloadHandler.text}");
-            }
-            else
-            {
-                try
-                {
-                    var responseData = JsonUtility.FromJson<GroupChatResponse>(request.downloadHandler.text);
-                    onSuccess?.Invoke(responseData);
-                }
-                catch (Exception e)
-                {
-                    onFailure?.Invoke($"JSON Parse Error: {e.Message}");
-                }
-            }
+            if (request.result != UnityWebRequest.Result.Success) onFailure?.Invoke(request.error);
+            else onSuccess?.Invoke(JsonUtility.FromJson<SuggestOptionsResponse>(request.downloadHandler.text));
         }
     }
 
-    // 发送消息，使用 Action 回调来处理结果，而不是直接改 UI
-    public IEnumerator SendMessageCoroutine(string content, string targetId, string userName, Action<GroupChatResponse> onSuccess, Action<string> onFailure)
+    // 执行动作 (返回一连串对话)
+    public IEnumerator PerformActionCoroutine(string actionContent, List<string> activeChars, Action<PerformActionResponse> onSuccess, Action<string> onFailure)
     {
-        // 1. 构建 JSON
-        GroupChatRequest reqData = new GroupChatRequest
-        {
-            user_input = content,
-            target_char_id = targetId,
-            user_name = userName
-        };
-        string json = JsonUtility.ToJson(reqData);
+        PerformActionRequest req = new PerformActionRequest { action_content = actionContent, active_char_ids = activeChars };
+        string json = JsonUtility.ToJson(req);
 
-        // 2. 发送请求
-        using (UnityWebRequest request = new UnityWebRequest(serverUrl, "POST"))
+        using (UnityWebRequest request = new UnityWebRequest(actionUrl, "POST"))
         {
             byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
-
             yield return request.SendWebRequest();
 
-            if (request.result != UnityWebRequest.Result.Success)
-            {
-                onFailure?.Invoke($"Network Error: {request.error}\n{request.downloadHandler.text}");
-            }
-            else
-            {
-                // 3. 解析 JSON 并回调
-                try
-                {
-                    var responseData = JsonUtility.FromJson<GroupChatResponse>(request.downloadHandler.text);
-                    onSuccess?.Invoke(responseData);
-                }
-                catch (Exception e)
-                {
-                    onFailure?.Invoke($"JSON Parse Error: {e.Message}");
-                }
-            }
+            if (request.result != UnityWebRequest.Result.Success) onFailure?.Invoke(request.error + "\n" + request.downloadHandler.text);
+            else onSuccess?.Invoke(JsonUtility.FromJson<PerformActionResponse>(request.downloadHandler.text));
         }
     }
 }
