@@ -41,59 +41,65 @@ class MemoryManager:
         )
         self.vector_store.add_memories([observation])
 
-    # --- 修改处：接收 time 和 event ---
-    def chat(self, user_input: str, player_stats_str: str = "", player_persona_str: str = "", current_time_str: str = "", current_event_str: str = "") -> tuple[str, List[Dict]]:
-        # 1. 检索记忆
+    def chat(self, user_input: str, player_stats_str: str = "", player_persona_str: str = "", current_time_str: str = "", current_event_obj = None) -> tuple[str, List[Dict]]:
+        
         relevant_memories = self.vector_store.search(user_input, n_results=5)
         context_str = "\n".join([f"- {m['content']}" for m in relevant_memories])
 
-        # 2. 构建提示词
+        # 构建 system prompt
         system_prompt = self._construct_system_prompt(
             player_stats=player_stats_str, 
             player_persona=player_persona_str,
             current_time=current_time_str,
-            current_event=current_event_str
+            current_event_obj=current_event_obj # 传入对象
         )
 
-        # 3. 生成
         response = self.llm_service.generate_response(system_prompt, user_input, context_str)
         return response, relevant_memories
-
-#
-
-    def _construct_system_prompt(self, player_stats: str = "", player_persona: str = "", current_time: str = "", current_event: str = "") -> str:
+        
+    def _construct_system_prompt(self, player_stats: str = "", player_persona: str = "", current_time: str = "", current_event_obj = None) -> str:
         p = self.profile
         rel_str = "\n".join([f"- {name}: {r.tags} (Affinity: {r.affinity})" for name, r in p.relationships.items()])
         
-        # --- 构建案例字符串 ---
         examples_str = "\n".join([f"Example: {ex}" for ex in p.personality.dialogue_examples])
         
+        # 🟢 解析剧本对象
+        event_instruction = ""
+        if current_event_obj:
+            event_instruction = f"""
+[CURRENT SCENARIO: {current_event_obj.name}]
+Description: {current_event_obj.description}
+POTENTIAL CONFLICTS: {current_event_obj.potential_conflicts}
+INSTRUCTION: You are inside this event. React to the description and conflicts naturally.
+"""
+        else:
+            event_instruction = "[Scenario: Daily Life]"
+
         return f"""
 You are {p.name}.
 Context: {p.context.world_view}.
-Personality: {p.personality.traits}. 
-Mood: {p.personality.mood}.
+Personality: {p.personality.traits}. Mood: {p.personality.mood}.
 
-[Speaking Style Guidelines]
-**Style Description**: {p.personality.speaking_style}
-**Reference Examples** (Mimic this tone and sentence structure):
+[Speaking Style]
+{p.personality.speaking_style}
+Examples:
 {examples_str}
 
-[Current Status]
-Time: {current_time} | Event: {current_event}
-Relationships:
-{rel_str}
+[Status]
+Time: {current_time}
+{event_instruction}
 
-[Player Info]
-Profile: {player_persona}
+[Player]
+{player_persona}
 Stats: {player_stats}
 
-[GAME RULES]
-1. Act purely as {p.name}. Do NOT be an assistant.
-2. If Event is 'Exam Week', act accordingly (stressed/busy).
-3. Append tags like `[SAN-5]` or `[MONEY-10]` if applicable.
+[Rules]
+1. Act purely as {p.name}.
+2. React to the Current Scenario details provided above.
+3. Use tags like [SAN-5] if applicable.
+4. **ALWAYS speak in Chinese.**
 
-Respond naturally based on the Style Guidelines above.
+Respond naturally.
 """
 
     def reflect_on_interaction(self, chat_history: List[Dict], user_name: str = "User") -> str:

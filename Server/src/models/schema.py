@@ -34,8 +34,8 @@ class Personality(BaseModel):
     values: List[str] = Field(..., description="Core values")
     mood: Optional[str] = Field(default="Neutral")
 
-    speaking_style: str = Field(default="Normal", description="语言风格描述，如'傲娇、爱用网络用语'")
-    dialogue_examples: List[str] = Field(default=[], description="少样本提示：该角色的经典台词列表")
+    speaking_style: str = Field(default="Normal", description="语言风格描述")
+    dialogue_examples: List[str] = Field(default=[], description="少样本提示")
 
 class Relationship(BaseModel):
     target_name: str
@@ -65,11 +65,32 @@ class MemoryItem(BaseModel):
     importance: int = Field(default=1)
     related_entities: List[str] = Field(default=[])
 
-# --- 3. 全局游戏状态 (新增) ---
+# --- 3. 剧本事件定义 (新增) ---
+
+class ScriptedEvent(BaseModel):
+    id: str
+    name: str = Field(..., description="事件名称")
+    duration_days: int = Field(default=1, description="此事件消耗的时间")
+    
+    description: str = Field(..., description="事件情境描述")
+    potential_conflicts: List[str] = Field(..., description="可能发生的冲突")
+    
+    mandatory_participants: List[str] = Field(default=[], description="必须在场的角色ID")
+    next_event_id: Optional[str] = Field(default=None, description="下一个固定事件ID")
+
+# --- 4. 全局游戏状态 ---
 
 class GameState(BaseModel):
     time: GameTime = Field(default_factory=GameTime)
     stats: PlayerStats = Field(default_factory=PlayerStats)
-    current_event: str = "入学报到" # 当前发生的事件
+    
+    # 必须与 event_script.py 中的 ID 对应 (evt_intro_01)
+    current_event_id: str = "evt_intro_01" 
+    current_phase_progress: int = 0 # 当前事件对话轮数
+    display_event_name: str = "新生见面会" # 用于前端显示
+    
+    # 兼容字段
+    current_event: str = "新生见面会" 
+    
     is_game_over: bool = False
     game_over_reason: str = ""

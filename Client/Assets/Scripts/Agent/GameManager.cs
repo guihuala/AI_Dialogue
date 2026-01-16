@@ -79,6 +79,11 @@ public class GameManager : Singleton<GameManager>
                 {
                     topBar.Refresh(res.player_stats, res.game_time, res.current_event);
                 }
+                
+                if (eventNotification != null && !string.IsNullOrEmpty(res.current_event))
+                {
+                    eventNotification.ShowEvent(res.current_event);
+                }
 
                 // B. 检查游戏失败
                 // (此处可以扩充：如果 GameTime 到了第4年，触发毕业结局等)

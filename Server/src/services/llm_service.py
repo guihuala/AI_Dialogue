@@ -28,38 +28,42 @@ class LLMService:
         if self.api_key == "dummy":
             return "Error: API Key is missing. Please check .env file."
 
+        # 构造完整的消息列表
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Context:\n{context}\n\nUser: {user_input}"}
         ]
 
-        try:
-            # 这里的 self.model 必须在 __init__ 里定义过
-            completion = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-            )
-            return completion.choices[0].message.content
-        except Exception as e:
-            print(f"LLM Error Details: {e}") # 在后端打印详细错误
-            return f"Error calling LLM: {str(e)}"
-        if not self.api_key or self.api_key == "dummy":
-            return "Error: API Key not set."
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Context:\n{context}\n\nUser: {user_input}"}
-        ]
+        # --- 🕵️‍♂️ DEBUG: 打印发送给 AI 的内容 ---
+        print("\n" + "="*40)
+        print("🚀 [SENDING TO LLM] (发送给 AI)")
+        print("-" * 20)
+        print(f"【System Prompt】:\n{system_prompt}")
+        print("-" * 20)
+        print(f"【User Input + Context】:\n{context}\nUser: {user_input}")
+        print("="*40 + "\n")
+        # ---------------------------------------
 
         try:
             completion = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
             )
-            return completion.choices[0].message.content
-        except Exception as e:
-            return f"Error calling LLM: {str(e)}"
+            content = completion.choices[0].message.content
 
+            # --- 🕵️‍♂️ DEBUG: 打印 AI 返回的内容 ---
+            print("\n" + "="*40)
+            print("🤖 [LLM RESPONSE] (AI 回复)")
+            print("-" * 20)
+            print(content)
+            print("="*40 + "\n")
+            # ------------------------------------
+
+            return content
+        except Exception as e:
+            print(f"❌ LLM Error Details: {e}") 
+            return f"Error calling LLM: {str(e)}"
+            
     def generate_response_stream(self, system_prompt: str, user_input: str, context: str = ""):
         if not self.api_key or self.api_key == "dummy":
             yield "Error: API Key not set."
