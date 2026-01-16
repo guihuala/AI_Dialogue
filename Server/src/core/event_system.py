@@ -1,5 +1,5 @@
 from src.core.event_script import EVENT_DATABASE, get_event
-from src.models.schema import GameState
+from src.models.schema import GameState, PlayerStats
 
 class EventSystem:
     @staticmethod
@@ -8,7 +8,24 @@ class EventSystem:
         return get_event(state.current_event_id)
 
     @staticmethod
-    def advance_event(state: GameState):
+    def check_game_over(stats: PlayerStats) -> tuple[bool, str]:
+        """检查是否失败"""
+        # 金钱判定
+        if stats.money < -500: 
+            return True, "因无力偿还网贷，被迫退学打工还债。"
+        
+        # SAN值判定
+        if stats.san <= 10:
+            return True, "因精神崩溃被送往医院，学业中断。"
+            
+        # GPA判定 (这里可以加更复杂的逻辑，比如大四才判定)
+        if stats.gpa < 1.0: 
+            return True, "因绩点过低被学校劝退。"
+            
+        return False, ""
+
+    @staticmethod
+    def advance_event(state: GameState) -> tuple[bool, str]:
         """
         结束当前事件，进入下一个事件
         """
@@ -22,7 +39,8 @@ class EventSystem:
             # 更新显示用的信息
             next_evt = get_event(current_evt.next_event_id)
             state.display_event_name = next_evt.name
-            # 这里可以加一个简单的日期累加逻辑，暂时简化处理
+            
+            # 简单的日期累加逻辑（这里仅做展示更新，具体时间逻辑可视需求深化）
             state.display_date = f"事件进行中: {next_evt.name}" 
             
             return True, f"进入新阶段: {next_evt.name}"
