@@ -14,19 +14,22 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.core.memory_manager import MemoryManager
 from src.services.llm_service import LLMService
 from src.core.presets import CHARACTER_REGISTRY, PLAYER_PROFILE 
-from src.models.schema import PlayerStats 
+# 引入新定义的 GameState 和 EventSystem
+from src.models.schema import PlayerStats, GameState 
+from src.core.event_system import EventSystem
 
 load_dotenv()
 
 app = FastAPI()
 
+# --- 全局状态管理 ---
 managers = {}
-player_state = PlayerStats() 
+# 使用 GameState 来统一管理 时间、玩家属性、当前事件
+game_state = GameState() 
 
 # --- 辅助函数 ---
 
 def load_character(char_id: str):
-    # 确保传入的是小写，防止 key error
     char_id = char_id.lower() 
     
     if char_id in managers: return managers[char_id]
@@ -46,13 +49,20 @@ def load_character(char_id: str):
     return mm
 
 def apply_stat_changes(response_text: str):
-    global player_state
+    """解析回复中的标签并更新 game_state.stats"""
+    global game_state
+    
     san_matches = re.findall(r'\[SAN([+-]\d+)\]', response_text)
-    for val in san_matches: player_state.san = max(0, min(100, player_state.san + int(val)))
+    for val in san_matches: 
+        game_state.stats.san = max(0, min(100, game_state.stats.san + int(val)))
+
     money_matches = re.findall(r'\[MONEY([+-]\d+)\]', response_text)
-    for val in money_matches: player_state.money += float(val)
+    for val in money_matches: 
+        game_state.stats.money += float(val)
+
     gpa_matches = re.findall(r'\[GPA([+-]?\d*\.?\d+)\]', response_text)
-    for val in gpa_matches: player_state.gpa = max(0.0, min(4.0, player_state.gpa + float(val)))
+    for val in gpa_matches: 
+        game_state.stats.gpa = max(0.0, min(4.0, game_state.stats.gpa + float(val)))
 
 # --- 请求模型 ---
 
@@ -67,33 +77,56 @@ class SuggestOptionsRequest(BaseModel):
 
 # --- 接口 ---
 
+@app.get("/player_status")
+def get_player_status():
+    return game_state
+
+@app.post("/reset_game")
+def reset_game():
+    global managers, game_state
+    managers.clear()
+    game_state = GameState() # 重置回大一 9月
+    
+    data_dir = "data"
+    if os.path.exists(data_dir):
+        try:
+            shutil.rmtree(data_dir)
+            os.makedirs(data_dir, exist_ok=True)
+        except Exception:
+            pass
+    return {"status": "success", "message": "Game reset."}
+
 @app.post("/suggest_options")
 def suggest_options_endpoint(req: SuggestOptionsRequest):
-    """
-    根据当前情境，为玩家生成 3 个行动选项
-    """
+    if game_state.is_game_over:
+        return {"options": ["Game Over. Restart?"]}
+
     llm = LLMService()
     
-    # 获取在场角色的名字
     char_names = []
     for cid in req.active_char_ids:
-        # 🟢 修改处：强制转小写
         mm = load_character(cid.lower()) 
         if mm: char_names.append(mm.profile.name)
     
-    # 如果没找到任何角色（比如传来的ID全是错的），加一个保底，防止 LLM 瞎编
-    names_str = ', '.join(char_names) if char_names else "nobody (empty room)"
+    names_str = ', '.join(char_names) if char_names else "nobody"
 
+    # 构建 Prompt: 加入时间、事件、属性
+    time_str = f"Year {game_state.time.year}, Month {game_state.time.month}, Week {game_state.time.week}"
+    
     system_prompt = f"""
     You are the Game Master of a visual novel.
-    The Player ({req.user_name}) is in a dorm room with {names_str}.
-    Player Profile: {PLAYER_PROFILE}
-    Current Stats: Money {player_state.money}, SAN {player_state.san}, GPA {player_state.gpa}.
     
-    Generate 3 distinct, short action options for the player to advance the plot.
-    1. A polite/normal option.
-    2. A risky/emotional option (might affect SAN or relationships).
-    3. A practical/selfish option (might affect Money or GPA).
+    [Context]
+    Time: {time_str}
+    Current Event: {game_state.current_event}
+    Location: Dorm Room with {names_str}
+    
+    [Player Status]
+    Money: {game_state.stats.money}, SAN: {game_state.stats.san}, GPA: {game_state.stats.gpa}
+    Profile: {PLAYER_PROFILE}
+    
+    Generate 3 distinct, short action options for the player.
+    Options should relate to the Current Event ({game_state.current_event}) if possible.
     
     Output ONLY the 3 options separated by newlines. No numbering.
     """
@@ -102,37 +135,41 @@ def suggest_options_endpoint(req: SuggestOptionsRequest):
     options = [line.strip().lstrip("123.- ") for line in raw_res.split('\n') if line.strip()]
     
     if len(options) < 3:
-        options = ["Say hello.", "Ask for money.", "Study silently."]
+        options = ["Chat with roommates.", "Study for GPA.", "Rest for SAN."]
         
     return {"options": options[:3]}
 
 @app.post("/perform_action")
 def perform_action_endpoint(req: PerformActionRequest):
-    """
-    玩家执行选择 -> 触发多角色连锁反应
-    """
+    # 0. 游戏结束检查
+    if game_state.is_game_over:
+        return {
+            "dialogue_sequence": [{"speaker": "System", "content": f"Game Over: {game_state.game_over_reason}"}],
+            "player_stats": game_state.stats.dict()
+        }
+
+    # 1. 加载角色
     active_mms = []
     for cid in req.active_char_ids:
-        # 🟢 修改处：强制转小写，这能解决 No characters found 问题
         mm = load_character(cid.lower())
         if mm: active_mms.append(mm)
         
-    # 如果这里报错，说明 Unity 传过来的 ID 和 presets.py 里定义的完全对不上
     if not active_mms:
-        print(f"❌ Error: Received IDs {req.active_char_ids}, but none matched registry keys.")
         raise HTTPException(status_code=404, detail="No characters found")
 
+    # 2. 执行演出逻辑 (生成对话)
     dialogue_sequence = []
     
-    # 步骤 1: 记录玩家的行动
+    # 记录玩家行动
     for mm in active_mms:
         mm.observe_interaction(req.user_name, req.action_content)
         
-    # 步骤 2: 决定发言顺序 (随机 1-3 人)
     speakers = random.sample(active_mms, k=min(len(active_mms), 3))
-    
     current_context = f"{req.user_name} said: '{req.action_content}'"
-    stats_str = f"Money: ${player_state.money}, SAN: {player_state.san}, GPA: {player_state.gpa}"
+    
+    # 准备状态字符串传给 MemoryManager
+    stats_str = f"Money: {game_state.stats.money}, SAN: {game_state.stats.san}, GPA: {game_state.stats.gpa}"
+    time_str = f"Year {game_state.time.year} Month {game_state.time.month}"
 
     for i, mm in enumerate(speakers):
         prompt = f"""
@@ -140,13 +177,17 @@ def perform_action_endpoint(req: PerformActionRequest):
         {current_context}
         
         You are {mm.profile.name}.
-        Respond to the situation based on your personality.
-        If someone else already spoke, you can reply to them OR the player.
-        Keep it short (1-2 sentences).
+        Respond naturally. Keep it short.
         """
         
-        # 调用 Chat
-        response, _ = mm.chat(prompt, player_stats_str=stats_str, player_persona_str=PLAYER_PROFILE)
+        # 传入时间和事件
+        response, _ = mm.chat(
+            prompt, 
+            player_stats_str=stats_str, 
+            player_persona_str=PLAYER_PROFILE,
+            current_time_str=time_str,
+            current_event_str=game_state.current_event
+        )
         apply_stat_changes(response)
         
         dialogue_sequence.append({
@@ -155,7 +196,6 @@ def perform_action_endpoint(req: PerformActionRequest):
             "mood": mm.profile.personality.mood
         })
         
-        # 更新上下文和记忆
         current_context += f"\n{mm.profile.name} said: '{response}'"
         mm.save_interaction(f"(Context: {current_context})", response, user_name="System")
         
@@ -163,9 +203,33 @@ def perform_action_endpoint(req: PerformActionRequest):
             if other != mm:
                 other.observe_interaction(mm.profile.name, response)
 
+    # 3. --- 核心循环：推进游戏 ---
+    
+    # A. 推进时间
+    game_state.time.advance()
+    
+    # B. 检查新事件
+    new_event = EventSystem.check_event(game_state.time.month, game_state.time.week)
+    game_state.current_event = new_event
+    
+    # C. 失败判定 (Game Over Check)
+    is_over, reason = EventSystem.check_game_over(game_state.stats)
+    if is_over:
+        game_state.is_game_over = True
+        game_state.game_over_reason = reason
+        # 在对话序列最后追加一条系统通知
+        dialogue_sequence.append({
+            "speaker": "System", 
+            "content": f"<color=red>GAME OVER: {reason}</color>",
+            "mood": "System"
+        })
+
+    # D. 返回完整数据
     return {
         "dialogue_sequence": dialogue_sequence,
-        "player_stats": player_state.dict()
+        "player_stats": game_state.stats.dict(),
+        "game_time": game_state.time.dict(),      # 前端可用于更新 UI
+        "current_event": game_state.current_event # 前端显示 "当前: 期末考"
     }
 
 if __name__ == "__main__":

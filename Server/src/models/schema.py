@@ -2,51 +2,71 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
 from datetime import datetime
 
-# --- 新增：玩家属性 (全局唯一的玩家状态) ---
+# --- 1. 基础组件 ---
+
+class GameTime(BaseModel):
+    year: int = Field(default=1, description="年级 (1-4)")
+    month: int = Field(default=9, description="月份 (1-12)")
+    week: int = Field(default=1, description="周数 (1-4)")
+    
+    def advance(self):
+        """推进时间：每周推进一次"""
+        self.week += 1
+        if self.week > 4:
+            self.week = 1
+            self.month += 1
+            if self.month > 12:
+                self.month = 1
+                self.year += 1
+
 class PlayerStats(BaseModel):
     money: float = Field(default=1000.0, description="生活费")
     san: int = Field(default=80, description="理智值 (0-100)")
     gpa: float = Field(default=3.5, description="绩点 (0.0-4.0)")
 
-# 1. Social Context (保留，用于描述角色背景)
 class SocialContext(BaseModel):
-    world_view: str = Field(..., description="The general setting or world view")
-    occupation: str = Field(..., description="Current job or role")
-    current_location: str = Field(..., description="Current physical location")
+    world_view: str = Field(..., description="The general setting")
+    occupation: str = Field(..., description="Current job/role")
+    current_location: str = Field(..., description="Location")
 
-# 2. Personality (保留，核心)
 class Personality(BaseModel):
-    traits: Dict[str, int] = Field(..., description="Big Five or other traits")
-    values: List[str] = Field(..., description="Core values and beliefs")
-    mood: Optional[str] = Field(default="Neutral", description="Current emotional state")
+    traits: Dict[str, int] = Field(..., description="Big Five or traits")
+    values: List[str] = Field(..., description="Core values")
+    mood: Optional[str] = Field(default="Neutral")
 
-# 3. Relationships (保留，用于记录对其他人的看法)
 class Relationship(BaseModel):
     target_name: str
-    affinity: int = Field(default=0, description="Affinity score (-100 to 100)")
-    tags: List[str] = Field(default=[], description="Tags like 'Friend', 'Enemy'")
+    affinity: int = Field(default=0, description="Affinity score")
+    tags: List[str] = Field(default=[], description="Friend, Enemy, etc.")
 
-# 4. Daily Log (保留，用于反思总结)
 class DailyLogEntry(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
-    activity: str = Field(..., description="Summary of what happened")
+    activity: str = Field(..., description="Summary")
 
-# --- 角色档案 (精简版) ---
+# --- 2. 角色与记忆 ---
+
 class CharacterProfile(BaseModel):
     name: str
     context: SocialContext
     personality: Personality
     relationships: Dict[str, Relationship] = Field(default_factory=dict)
-    # 删除了 wealth, health, skills
     daily_log: List[DailyLogEntry] = Field(default=[])
     updated_at: datetime = Field(default_factory=datetime.now)
 
-# --- Memory Stream Item ---
 class MemoryItem(BaseModel):
     id: str
     timestamp: datetime = Field(default_factory=datetime.now)
-    type: str = Field(..., description="observation, thought, or action")
+    type: str = Field(..., description="observation, thought, action")
     content: str
     summary: Optional[str] = Field(default=None)
     importance: int = Field(default=1)
     related_entities: List[str] = Field(default=[])
+
+# --- 3. 全局游戏状态 (新增) ---
+
+class GameState(BaseModel):
+    time: GameTime = Field(default_factory=GameTime)
+    stats: PlayerStats = Field(default_factory=PlayerStats)
+    current_event: str = "入学报到" # 当前发生的事件
+    is_game_over: bool = False
+    game_over_reason: str = ""

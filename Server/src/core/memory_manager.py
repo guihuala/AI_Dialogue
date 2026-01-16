@@ -41,20 +41,25 @@ class MemoryManager:
         )
         self.vector_store.add_memories([observation])
 
-    # --- 修改处：接收 player_persona_str ---
-    def chat(self, user_input: str, player_stats_str: str = "", player_persona_str: str = "") -> tuple[str, List[Dict]]:
+    # --- 修改处：接收 time 和 event ---
+    def chat(self, user_input: str, player_stats_str: str = "", player_persona_str: str = "", current_time_str: str = "", current_event_str: str = "") -> tuple[str, List[Dict]]:
         # 1. 检索记忆
         relevant_memories = self.vector_store.search(user_input, n_results=5)
         context_str = "\n".join([f"- {m['content']}" for m in relevant_memories])
 
         # 2. 构建提示词
-        system_prompt = self._construct_system_prompt(player_stats=player_stats_str, player_persona=player_persona_str)
+        system_prompt = self._construct_system_prompt(
+            player_stats=player_stats_str, 
+            player_persona=player_persona_str,
+            current_time=current_time_str,
+            current_event=current_event_str
+        )
 
         # 3. 生成
         response = self.llm_service.generate_response(system_prompt, user_input, context_str)
         return response, relevant_memories
 
-    def _construct_system_prompt(self, player_stats: str = "", player_persona: str = "") -> str:
+    def _construct_system_prompt(self, player_stats: str = "", player_persona: str = "", current_time: str = "", current_event: str = "") -> str:
         p = self.profile
         rel_str = "\n".join([f"- {name}: {r.tags} (Affinity: {r.affinity})" for name, r in p.relationships.items()])
         
@@ -65,23 +70,18 @@ Personality: {p.personality.traits}. Values: {p.personality.values}. Mood: {p.pe
 Relationships:
 {rel_str}
 
-Current Scene: You are in the dorm with the Player and others.
-**Player Profile**:
-{player_persona}
-**Player Stats**: {player_stats}
+[Current Game Status]
+Time: {current_time}
+Event: {current_event} (Note: Your behavior should adapt to this event!)
+Player Profile: {player_persona}
+Player Stats: {player_stats}
 
-**GAME RULES**:
-1. **Dynamic Interaction**: React to the player and other roommates based on your personality.
-2. **Impact Stats**: Your behavior impacts the Player's stats (Money, SAN, GPA).
-   - If you cause drama, annoy, or scare the player -> **[SAN-5]**
-   - If you comfort or help the player -> **[SAN+5]**
-   - If you distract the player from studying -> **[GPA-0.1]**
-   - If you help with homework -> **[GPA+0.1]**
-   - If you borrow money -> **[MONEY-50]**
-3. **Tagging**: APPEND the tag at the end of your response if a stat changes. 
-   Syntax: `[SAN-5]`, `[MONEY+20]`, `[GPA-0.2]`.
+[GAME RULES]
+1. **Event Reaction**: If the event is 'Exam Week', act stressed or studious. If 'Sports Meeting', act energetic or lazy.
+2. **Impact Stats**: If your action affects the player, append tag: `[SAN-5]`, `[MONEY+20]`, `[GPA-0.2]`.
+3. **Affinity**: If you like what the player did, think about `[AFFINITY+5]` (internal logic for now).
 
-Respond naturally as a character, not a robot.
+Respond naturally as a character.
 """
 
     def reflect_on_interaction(self, chat_history: List[Dict], user_name: str = "User") -> str:
