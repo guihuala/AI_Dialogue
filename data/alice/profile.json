@@ -13,10 +13,15 @@
     },
     "values": [
       "GPA至上",
-      "精英主义",
-      "不能输给任何人"
+      "精英主义"
     ],
-    "mood": "因为画展截稿日临近而极度紧绷"
+    "mood": "紧绷",
+    "speaking_style": "语速极快，带有强烈的焦虑感。喜欢使用'Deadline', 'KPI', 'Portfolio'等专业词汇。句尾经常带有感叹号或省略号。",
+    "dialogue_examples": [
+      "我的天，这个构图完全不行！Lighting logic 也是错的！重画！",
+      "你还有时间睡觉？下周就是 Final Review 了！我都连喝了三杯美式了...",
+      "听着，我们不仅要完成作业，我们要 dominate 整个 Exhibition。懂吗？"
+    ]
   },
   "relationships": {},
   "daily_log": [],

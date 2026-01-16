@@ -34,6 +34,9 @@ class Personality(BaseModel):
     values: List[str] = Field(..., description="Core values")
     mood: Optional[str] = Field(default="Neutral")
 
+    speaking_style: str = Field(default="Normal", description="语言风格描述，如'傲娇、爱用网络用语'")
+    dialogue_examples: List[str] = Field(default=[], description="少样本提示：该角色的经典台词列表")
+
 class Relationship(BaseModel):
     target_name: str
     affinity: int = Field(default=0, description="Affinity score")

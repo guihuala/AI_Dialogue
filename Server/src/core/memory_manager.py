@@ -59,29 +59,41 @@ class MemoryManager:
         response = self.llm_service.generate_response(system_prompt, user_input, context_str)
         return response, relevant_memories
 
+#
+
     def _construct_system_prompt(self, player_stats: str = "", player_persona: str = "", current_time: str = "", current_event: str = "") -> str:
         p = self.profile
         rel_str = "\n".join([f"- {name}: {r.tags} (Affinity: {r.affinity})" for name, r in p.relationships.items()])
         
+        # --- 构建案例字符串 ---
+        examples_str = "\n".join([f"Example: {ex}" for ex in p.personality.dialogue_examples])
+        
         return f"""
 You are {p.name}.
-Context: {p.context.world_view}. You are a {p.context.occupation} at {p.context.current_location}.
-Personality: {p.personality.traits}. Values: {p.personality.values}. Mood: {p.personality.mood}.
+Context: {p.context.world_view}.
+Personality: {p.personality.traits}. 
+Mood: {p.personality.mood}.
+
+[Speaking Style Guidelines]
+**Style Description**: {p.personality.speaking_style}
+**Reference Examples** (Mimic this tone and sentence structure):
+{examples_str}
+
+[Current Status]
+Time: {current_time} | Event: {current_event}
 Relationships:
 {rel_str}
 
-[Current Game Status]
-Time: {current_time}
-Event: {current_event} (Note: Your behavior should adapt to this event!)
-Player Profile: {player_persona}
-Player Stats: {player_stats}
+[Player Info]
+Profile: {player_persona}
+Stats: {player_stats}
 
 [GAME RULES]
-1. **Event Reaction**: If the event is 'Exam Week', act stressed or studious. If 'Sports Meeting', act energetic or lazy.
-2. **Impact Stats**: If your action affects the player, append tag: `[SAN-5]`, `[MONEY+20]`, `[GPA-0.2]`.
-3. **Affinity**: If you like what the player did, think about `[AFFINITY+5]` (internal logic for now).
+1. Act purely as {p.name}. Do NOT be an assistant.
+2. If Event is 'Exam Week', act accordingly (stressed/busy).
+3. Append tags like `[SAN-5]` or `[MONEY-10]` if applicable.
 
-Respond naturally as a character.
+Respond naturally based on the Style Guidelines above.
 """
 
     def reflect_on_interaction(self, chat_history: List[Dict], user_name: str = "User") -> str:

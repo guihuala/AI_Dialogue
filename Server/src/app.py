@@ -96,6 +96,12 @@ def reset_game():
             pass
     return {"status": "success", "message": "Game reset."}
 
+GAME_MASTER_STYLE = """
+The Narrator should use a detached, slightly mysterious, and observing tone. 
+It focuses on the atmosphere of the art school and the subtle tension between characters.
+Use 2nd person perspective ("You see...", "You feel...").
+"""
+
 @app.post("/suggest_options")
 def suggest_options_endpoint(req: SuggestOptionsRequest):
     if game_state.is_game_over:
@@ -115,6 +121,9 @@ def suggest_options_endpoint(req: SuggestOptionsRequest):
     
     system_prompt = f"""
     You are the Game Master of a visual novel.
+
+    [Narrative Style]
+    {GAME_MASTER_STYLE}
     
     [Context]
     Time: {time_str}
