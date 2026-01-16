@@ -115,8 +115,14 @@ public class StageController : MonoBehaviour
     {
         foreach (var turn in sequence)
         {
-            speakerNameText.text = turn.speaker;
-            speakerNameText.color = turn.speaker == "Player" ? Color.cyan : Color.yellow;
+            if (turn.speaker == "System" || turn.speaker == "Narrator" || turn.speaker == "GM")
+            {
+                speakerNameText.text = "";
+            }
+            else
+            {
+                speakerNameText.text = turn.speaker;
+            }
 
             UpdatePortraitFocus(turn.speaker);
 

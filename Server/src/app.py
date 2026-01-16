@@ -97,9 +97,11 @@ def reset_game():
     return {"status": "success", "message": "Game reset."}
 
 GAME_MASTER_STYLE = """
-The Narrator should use a detached, slightly mysterious, and observing tone. 
-It focuses on the atmosphere of the art school and the subtle tension between characters.
-Use 2nd person perspective ("You see...", "You feel...").
+你是一个视觉小说游戏的GM（主持人）。
+叙事风格：冷静、客观，略带神秘感的旁观者视角。
+重点描述艺术学院的氛围、角色之间微妙的张力以及环境细节。
+使用第二人称（“你看到...”、“你感觉到...”）。
+**重要：所有输出必须使用中文。**
 """
 
 @app.post("/suggest_options")
@@ -136,6 +138,7 @@ def suggest_options_endpoint(req: SuggestOptionsRequest):
     
     Generate 3 distinct, short action options for the player.
     Options should relate to the Current Event ({game_state.current_event}) if possible.
+    **Output Language: Chinese (Simplified)**
     
     Output ONLY the 3 options separated by newlines. No numbering.
     """

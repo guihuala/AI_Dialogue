@@ -10,8 +10,9 @@ public class GameManager : Singleton<GameManager>
 
     [Header("Controllers")]
     [SerializeField] private NetworkService networkService;
-    [SerializeField] private TopBarController topBar; // 新增：引用顶部状态栏
-    [SerializeField] private StageController stage;   // 新增：引用演出舞台
+    [SerializeField] private TopBarController topBar;
+    [SerializeField] private StageController stage;
+    [SerializeField] private EventNotification eventNotification;
 
     [Header("Data")]
     [SerializeField] private string playerName = "ArtStudent_01";

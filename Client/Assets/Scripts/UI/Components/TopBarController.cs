@@ -29,25 +29,25 @@ public class TopBarController : MonoBehaviour
         if (stats != null)
         {
             moneyText.text = $"$ {stats.money:F0}";
+            moneyText.color = Color.black; 
             
             sanText.text = $"SAN: {stats.san}";
-            sanText.color = stats.san < 40 ? Color.red : Color.white;
+            sanText.color = stats.san < 40 ? Color.red : Color.black;
 
             gpaText.text = $"GPA: {stats.gpa:F2}";
-            gpaText.color = stats.gpa < 2.0f ? Color.red : (stats.gpa > 3.5f ? Color.green : Color.white);
+            gpaText.color = stats.gpa < 2.0f ? Color.red : (stats.gpa > 3.5f ? new Color(0, 0.5f, 0) : Color.black);
         }
 
         if (time != null)
         {
-            // 格式化时间显示
-            timeText.text = $"Year {time.year} | Month {time.month} | Week {time.week}";
+            timeText.text = $"第{time.year}年 | {time.month}月 | 第{time.week}周";
+            timeText.color = Color.black;
         }
 
         if (!string.IsNullOrEmpty(eventName))
         {
             eventText.text = eventName;
-            // 如果是特殊事件（非日常），可以用醒目颜色
-            eventText.color = eventName.Contains("日常") ? Color.white : Color.yellow;
+            eventText.color = eventName.Contains("日常") ? Color.black : new Color(1f, 0.5f, 0f);
         }
     }
 }
