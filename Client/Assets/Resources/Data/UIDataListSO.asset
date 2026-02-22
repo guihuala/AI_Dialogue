@@ -13,5 +13,7 @@ MonoBehaviour:
   m_Name: UIDataListSO
   m_EditorClassIdentifier: 
   uiDataList:
+  - uiName: CharacterSelectionPanel
+    uiPath: Panel/CharacterSelectionPanel
   - uiName: SettingPanel
     uiPath: Panel/SettingPanel

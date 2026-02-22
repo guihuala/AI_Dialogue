@@ -13,10 +13,10 @@ public class TitleUIController : MonoBehaviour
         settingsButton.onClick.AddListener(OnSettingsButtonClicked);
         exitButton.onClick.AddListener(OnExitButtonClicked);
     }
-
+    
     public void OnStartButtonClicked()
     {
-        SceneLoader.Instance.LoadScene(GameScene.Gameplay);
+        UIManager.Instance.OpenPanel("CharacterSelectionPanel");
     }
 
     public void OnSettingsButtonClicked()

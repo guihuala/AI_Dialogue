@@ -14,6 +14,22 @@ public class EventNotification : MonoBehaviour
         canvasGroup.alpha = 0;
         canvasGroup.blocksRaycasts = false;
     }
+    
+    private void Start()
+    {
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.OnEventNotified += ShowEvent;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.OnEventNotified -= ShowEvent;
+        }
+    }
 
     public void ShowEvent(string eventName)
     {

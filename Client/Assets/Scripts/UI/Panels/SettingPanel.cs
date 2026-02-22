@@ -195,7 +195,7 @@ public class SettingsPanel : BasePanel
     private void OnMainmenuButtonClick()
     {
         SaveSettings();
-        GameManager.Instance.ReturnToMainMenu(); 
+        SceneLoader.Instance.LoadScene(GameScene.MainMenu);
         UIManager.Instance.ClosePanel(panelName);
     }
 

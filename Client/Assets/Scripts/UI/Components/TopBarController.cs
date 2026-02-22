@@ -16,11 +16,25 @@ public class TopBarController : MonoBehaviour
     [Header("Settings")]
     [SerializeField] private Button settingsButton;
     [SerializeField] private Button helpButton;
-
+    
     private void Start()
     {
-        // 可以在这里绑定设置按钮的事件
         if(settingsButton) settingsButton.onClick.AddListener(() => { /* Open Settings */ });
+    
+        // 订阅事件
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.OnStatsRefreshed += Refresh;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        // 取消订阅防止报错
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.OnStatsRefreshed -= Refresh;
+        }
     }
 
     // 更新所有状态

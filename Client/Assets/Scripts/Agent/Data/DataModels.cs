@@ -9,11 +9,10 @@ public class PlayerStatsData
     public float gpa;
 }
 
-// --- 时间数据 ---
 [Serializable]
 public class GameTimeData
 {
-    public int year;
+    public string year; // 【修改点】改为 string，适配后端返回的 "一"
     public int month;
     public int week;
 }
@@ -23,15 +22,28 @@ public class DialogueTurn
 {
     public string speaker;
     public string content;
-    public string mood;
+    public string mood; // Mock接口暂时没返回，但保留没关系，会是null
+}
+
+// --- 请求/响应数据结构 ---
+
+[Serializable]
+public class GetOptionsRequest // 【修改点】重命名，对齐后端
+{
+    public List<string> active_roommates; // 字段名对齐 active_roommates
+}
+
+[Serializable]
+public class GetOptionsResponse // 对应原 SuggestOptionsResponse
+{
+    public List<string> options;
 }
 
 [Serializable]
 public class PerformActionRequest
 {
-    public string action_content;
-    public List<string> active_char_ids;
-    public string user_name;
+    public string choice;                 // 字段名对齐 choice
+    public List<string> active_roommates; // 字段名对齐 active_roommates
 }
 
 [Serializable]
@@ -41,17 +53,4 @@ public class PerformActionResponse
     public PlayerStatsData player_stats;
     public GameTimeData game_time;
     public string current_event;
-}
-
-[Serializable]
-public class SuggestOptionsRequest
-{
-    public string user_name;
-    public List<string> active_char_ids;
-}
-
-[Serializable]
-public class SuggestOptionsResponse
-{
-    public List<string> options;
 }

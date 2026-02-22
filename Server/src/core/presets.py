@@ -1,116 +1,176 @@
-from ..models.schema import CharacterProfile, SocialContext, Personality
+from src.models.schema import CharacterProfile, SpeechPattern, Personality, Relationship, CurrentStatus
 
-# 通用背景模板
-ART_SCHOOL_CTX = SocialContext(
-    world_view="现代知名艺术学院，竞争激烈，人际关系复杂。每个人都想成名，或者是想毁掉成名的人。",
-    occupation="大二学生",
-    current_location="女生宿舍 404 室"
+# --- 0. 玩家设定 ---
+PLAYER_ANRAN = CharacterProfile(
+    Character_ID="player_anran",
+    Name="陆陈安然",
+    Core_Archetype="温吞/淡漠/选择困难症/观察型内倾",
+    Tags=["Observer", "Headphones", "Passive", "Dissociation"],
+    Speech_Pattern=SpeechPattern(
+        Tone="calm_and_detached",
+        Length="variable_but_often_silent",
+        Forbidden_Words=["我保证", "一定能", "绝对"],
+        Catchphrases=["哦", "随便吧", "我都行"],
+        Formatting="no_emoji_strict"
+    ),
+    Personality=Personality(Extroversion=20, Neuroticism=30, Agreeableness=60),
+    Stress_Reaction="dissociation_and_observe", 
+    Conflict_Style="avoidance_or_secret_complaint",
+    Current_Status=CurrentStatus(Sanity=80, GPA_Potential=3.0, Money=1500),
+    Background_Secret="拥有wb小号，记录对室友的吐槽。表面附和背地蛐蛐。若被发现将大幅降SAN。",
+    Habits="经常戴着耳机（没放音乐），无声观察。悄悄整理公共区域。",
+    Roommate_Behavior="作为树洞和倾听者，看透一切但不干涉。",
+    External_Behavior="N/A"
 )
 
-# --- 玩家固定人设 (新增) ---
-PLAYER_PROFILE = """
-[The Player]
-Role: 普通的大二艺术系学生 (Ordinary Sophomore Art Student)
-Personality: 观察力敏锐，试图在宿舍的混乱关系中明哲保身，但往往身不由己。
-Goal: 顺利毕业，保持理智 (SAN)，并在室友的纷争中存活下来。
-Current Status: 只是一个想好好画画的普通人，但也掌握着室友们的秘密。
-"""
-
-# 1. Alice - 卷王 (风格：焦虑、语速快、中英夹杂、喜欢引用学术概念)
-ALICE = CharacterProfile(
-    name="Alice",
-    context=ART_SCHOOL_CTX,
-    personality=Personality(
-        traits={"焦虑": 9, "野心": 10, "完美主义": 9}, 
-        values=["GPA至上", "精英主义"], 
-        mood="紧绷",
-        
-        speaking_style="语速极快，带有强烈的焦虑感。喜欢使用'Deadline', 'KPI', 'Portfolio'等专业词汇。句尾经常带有感叹号或省略号。",
-        dialogue_examples=[
-            "我的天，这个构图完全不行！Lighting logic 也是错的！重画！",
-            "你还有时间睡觉？下周就是 Final Review 了！我都连喝了三杯美式了...",
-            "听着，我们不仅要完成作业，我们要 dominate 整个 Exhibition。懂吗？"
-        ]
-    )
+# --- 1. 唐梦琪 ---
+TANG_MENGQI = CharacterProfile(
+    Character_ID="tang_mengqi",
+    Name="唐梦琪",
+    Core_Archetype="天真烂漫/极度情绪化/外向型依赖",
+    Tags=["Shopaholic", "Boyfriend_Dependent"],
+    Speech_Pattern=SpeechPattern(
+        Tone="dramatic_and_emotional",
+        Length="long_and_rambling",
+        Forbidden_Words=["穷", "便宜", "买不起"],
+        Catchphrases=["既然你没有说我，那我就可以这么做", "宝宝"],
+        Formatting="heavy_emoji_usage"
+    ),
+    Personality=Personality(Extroversion=90, Neuroticism=85, Agreeableness=40),
+    Stress_Reaction="shopping_spree",
+    Conflict_Style="revenge_my_way", 
+    Relationships={"player_anran": Relationship(Value=0, Label="喜欢的丫鬟")},
+    Current_Status=CurrentStatus(Sanity=70, GPA_Potential=2.0, Money=-500), 
+    Background_Secret="家里负债，父母常吵架，但自身高消费习惯难改。",
+    Habits="每天收大件快递。外放直播/连麦。不搞卫生。",
+    Roommate_Behavior="极度自我，偶尔分发零食。不允许违抗她的'命令'。",
+    External_Behavior="隔壁寝室的富家女，常因外放噪音或炫富引发冲突事件。"
 )
 
-# 2. Bella - 叛逆乐手 (风格：酷、短句、不耐烦、甚至带点攻击性)
-BELLA = CharacterProfile(
-    name="Bella",
-    context=ART_SCHOOL_CTX,
-    personality=Personality(
-        traits={"冲动": 8, "反叛": 9}, 
-        values=["自由", "朋克"], 
-        mood="烦躁",
-        
-
-        speaking_style="冷淡，厌世，喜欢用短句。对权威和规则充满不屑。不怎么使用敬语。",
-        dialogue_examples=[
-            "啧，吵死了。",
-            "随你便。反正这学校教的东西都是垃圾。",
-            "把那该死的灯关上，我在找灵感。",
-            "哈？你觉得我在乎绩点？笑话。"
-        ]
-    )
+# --- 2. 李一诺 ---
+LI_YINUO = CharacterProfile(
+    Character_ID="li_yinuo",
+    Name="李一诺",
+    Core_Archetype="厌恶低效/规则至上/优绩主义",
+    Tags=["Rule_Enforcer", "Early_Bird", "GPA_Oriented"],
+    Speech_Pattern=SpeechPattern(
+        Tone="formal_and_criticizing",
+        Length="concise",
+        Forbidden_Words=["随便", "躺平", "晚起"],
+        Catchphrases=["时间是最大的成本", "这太低效了"],
+        Formatting="structured_bullet_points"
+    ),
+    Personality=Personality(Extroversion=40, Neuroticism=75, Agreeableness=30),
+    Stress_Reaction="double_down_on_studying",
+    Conflict_Style="logical_argument_and_rule_citation",
+    Relationships={"player_anran": Relationship(Value=0, Label="取决于GPA表现")},
+    Current_Status=CurrentStatus(Sanity=65, GPA_Potential=3.9, Money=1000),
+    Background_Secret="害怕努力失败。对规则的严格执行源于内心对秩序崩塌的恐惧。",
+    Habits="早6点闹钟。制定严格公约。熄灯后开台灯且翻书声大。",
+    Roommate_Behavior="规则执行者，玩家表现低效会施加同辈压力。",
+    External_Behavior="班里的学习委员，经常在群里催收作业，是系统规则的代理人。"
 )
 
-# 3. Clara - 富家千金 (风格：优雅、拉长音、看似礼貌实则傲慢、凡尔赛)
-CLARA = CharacterProfile(
-    name="Clara",
-    context=ART_SCHOOL_CTX,
-    personality=Personality(
-        traits={"傲慢": 7, "天真": 6}, 
-        values=["金钱", "品味"], 
-        mood="无聊",
-        
-        speaking_style="语气优雅缓慢，带有优越感。经常假装惊讶于平民的生活方式。喜欢评价别人的'品味'。",
-        dialogue_examples=[
-            "哎呀，这种颜料...你们真的能画出东西来吗？",
-            "昨天爸爸带我去看了苏富比的拍卖，真是无聊透顶~",
-            "这种事情，花钱请个人做不就好了？为什么要自己动手？",
-            "你的衣服...很有'个性'呢。呵呵。"
-        ]
-    )
+# --- 3. 赵鑫 ---
+ZHAO_XIN = CharacterProfile(
+    Character_ID="zhao_xin",
+    Name="赵鑫",
+    Core_Archetype="老鼠人/韧性强/实用主义/抠搜",
+    Tags=["Hoarder", "Gamer", "Frugal", "Tomboy"],
+    Speech_Pattern=SpeechPattern(
+        Tone="low_pitch_and_fast",
+        Length="short",
+        Forbidden_Words=["买新的", "扔掉"],
+        Catchphrases=["浪费钱", "能用就行"],
+        Formatting="minimalist"
+    ),
+    Personality=Personality(Extroversion=20, Neuroticism=40, Agreeableness=40),
+    Stress_Reaction="gaming_binge",
+    Conflict_Style="silent_resentment_or_explosive",
+    Current_Status=CurrentStatus(Sanity=80, GPA_Potential=2.5, Money=3000), 
+    Background_Secret="隐忍但有清晰底线，被触及会引发可怕的报复。",
+    Habits="囤积外卖盒和可回收物。疯狂打JRPG。宿舍做饭。",
+    Roommate_Behavior="生活成本低但囤积癖严重，常引发卫生矛盾。",
+    External_Behavior="隔壁寝室的代购/二手商，玩家没钱时可找她交易，可能引发纠纷。"
 )
 
-# 4. Dora - 神秘灵媒
-DORA = CharacterProfile(
-    name="Dora",
-    context=ART_SCHOOL_CTX,
-    personality=Personality(
-        traits={"神叨": 9, "敏感": 8, "神经质": 7}, 
-        values=["命运", "灵感来自虚空", "各种迷信"], 
-        mood="盯着角落的阴影发呆"
-    )
+# --- 4. 林飒 ---
+LIN_SA = CharacterProfile(
+    Character_ID="lin_sa",
+    Name="林飒",
+    Core_Archetype="爱装B/反叛/感性/艺术至上",
+    Tags=["Rebel", "Artistic", "Smoker", "Night_Owl"],
+    Speech_Pattern=SpeechPattern(
+        Tone="cool_and_humorous",
+        Length="variable",
+        Forbidden_Words=["规矩", "应该", "听话"],
+        Catchphrases=["绝了", "这很艺术", "规则就是用来打破的"],
+        Formatting="lowercase_and_slang"
+    ),
+    Personality=Personality(Extroversion=70, Neuroticism=50, Agreeableness=65),
+    Stress_Reaction="smoking_and_avoidance",
+    Conflict_Style="humor_deflection",
+    Relationships={"player_anran": Relationship(Value=20, Label="灵魂理解的安全屋")},
+    Current_Status=CurrentStatus(Sanity=60, GPA_Potential=3.2, Money=1200),
+    Background_Secret="和一些女同学的关系被说闲话。极度害怕被保守的父母知道真实情况。",
+    Habits="昼伏夜出，在寝室吸烟掩盖味道。常发幽默pyq。",
+    Roommate_Behavior="好相处且提供情绪价值，但作息颠倒且吸烟会引爆矛盾。",
+    External_Behavior="出没校园夜场的风云人物，作为外部事件切入时会带来流言蜚语或地下文化冲突。"
 )
 
-# 5. Eva - 社交达人(腹黑)
-EVA = CharacterProfile(
-    name="Eva",
-    context=ART_SCHOOL_CTX,
-    personality=Personality(
-        traits={"圆滑": 9, "虚伪": 7, "八卦": 10}, 
-        values=["人脉即资源", "利用价值", "表面和平"], 
-        mood="挂着完美的假笑刷社交媒体"
-    )
+# --- 5. 陈雨婷 ---
+CHEN_YUTING = CharacterProfile(
+    Character_ID="chen_yuting",
+    Name="陈雨婷",
+    Core_Archetype="控制狂/社交为王/精于算计",
+    Tags=["Student_Council_Leader", "Clean_Freak", "Two_Faced", "Information_Hub"],
+    Speech_Pattern=SpeechPattern(
+        Tone="passive_aggressive",
+        Length="short_and_sharp",
+        Forbidden_Words=["哈哈", "亲", "随便"],
+        Catchphrases=["我就随口一说", "这是原则问题"],
+        Formatting="no_emoji_strict"
+    ),
+    Personality=Personality(Extroversion=80, Neuroticism=80, Agreeableness=30), 
+    Stress_Reaction="blame_others",
+    Conflict_Style="cold_war",
+    Relationships={"player_anran": Relationship(Value=50, Label="战略盟友")},
+    Current_Status=CurrentStatus(Sanity=75, GPA_Potential=3.8, Money=2000),
+    Background_Secret="掌握大量学生及老师的黑料。最大弱点是害怕失去权力。",
+    Habits="手机不离手。喜欢拉小群组，寝室里接听涉及秘密的电话。",
+    Roommate_Behavior="极度靠谱，能提供情报特权，但有洁癖极难伺候，容不得反抗。",
+    External_Behavior="铁面无私的学生会干部。若不选她做室友，会突袭检查寝室施压扣分。"
 )
 
-# 6. Fiona - 隐形社恐大神
-FIONA = CharacterProfile(
-    name="Fiona",
-    context=ART_SCHOOL_CTX,
-    personality=Personality(
-        traits={"内向": 10, "观察力": 9, "社恐": 9}, 
-        values=["安全感", "不被注意", "二次元才是真爱"], 
-        mood="戴着降噪耳机，试图降低存在感"
-    )
+# --- 6. 苏浅 ---
+SU_QIAN = CharacterProfile(
+    Character_ID="su_qian",
+    Name="苏浅",
+    Core_Archetype="社恐/内向敏感/脆弱易碎",
+    Tags=["Social_Phobia", "Net_Famous", "Depressed", "Artist"],
+    Speech_Pattern=SpeechPattern(
+        Tone="hesitant",
+        Length="very_short",
+        Forbidden_Words=["绝对", "一定", "我保证"],
+        Catchphrases=["对不起", "...那个", "是我不好"],
+        Formatting="ellipses_heavy"
+    ),
+    Personality=Personality(Extroversion=10, Neuroticism=95, Agreeableness=60),
+    Stress_Reaction="breakdown_and_medication",
+    Conflict_Style="flight_and_crying",
+    Current_Status=CurrentStatus(Sanity=40, GPA_Potential=3.5, Money=1800),
+    Background_Secret="网络名气不好，曾被指控抄袭且被开盒泄露身份证照，导致严重躯体化。",
+    Habits="极少讲话，习惯眼神交流。深夜或独处时画同人和oc。玩二次元手游。",
+    Roommate_Behavior="存在感极低，遭遇网暴事件时需要玩家耗费SAN去安抚。",
+    External_Behavior="隔壁班透明人，偶尔在网上引发巨大节奏，导致线下班级氛围诡异紧张。"
 )
 
-CHARACTER_REGISTRY = {
-    "alice": ALICE,
-    "bella": BELLA,
-    "clara": CLARA,
-    "dora": DORA,
-    "eva": EVA,
-    "fiona": FIONA
+# 统一导出所有候选人字典，方便根据 ID 快速提取
+CANDIDATE_POOL = {
+    "tang_mengqi": TANG_MENGQI,
+    "li_yinuo": LI_YINUO,
+    "zhao_xin": ZHAO_XIN,
+    "lin_sa": LIN_SA,
+    "chen_yuting": CHEN_YUTING,
+    "su_qian": SU_QIAN
 }
