@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0ab950461030f4ea09836161ef068d70, type: 3}
+  m_Name: Su
+  m_EditorClassIdentifier: 
+  id: Su
+  displayName: "\u82CF\u6D45"
+  portrait: {fileID: 21300000, guid: a9ce86fa2d457468fb769482dfd17bef, type: 3}
+  description: "\u9690\u5F62\u793E\u6050\u5927\u795E"
