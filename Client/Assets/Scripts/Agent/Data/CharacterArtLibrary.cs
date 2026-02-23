@@ -7,11 +7,16 @@ public class CharacterArtLibrary : ScriptableObject
 {
     public List<CharacterData> characters;
     
-    public CharacterData GetCharacter(string id)
+    public CharacterData GetCharacter(string identifier)
     {
-        if (string.IsNullOrEmpty(id)) return null;
+        if (string.IsNullOrEmpty(identifier)) return null;
         
-        // 在列表中查找 ID 匹配的数据
-        return characters.FirstOrDefault(c => c.id.ToLower() == id.ToLower());
+        string lowerId = identifier.ToLower();
+        
+        // 优先匹配ID，如果ID不匹配，再尝试匹配 displayName(中文名)
+        return characters.FirstOrDefault(c => 
+            c.id.ToLower() == lowerId || 
+            c.displayName.ToLower() == lowerId || 
+            c.displayName.Contains(identifier)); 
     }
 }

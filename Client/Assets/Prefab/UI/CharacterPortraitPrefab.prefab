@@ -107,3 +107,5 @@ MonoBehaviour:
   moveDuration: 0.5
   fadeDuration: 0.3
   dimColor: {r: 0.6, g: 0.6, b: 0.6, a: 1}
+  portraitSize: {x: 500, y: 800}
+  preserveAspect: 1
