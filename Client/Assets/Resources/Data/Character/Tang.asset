@@ -12,7 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0ab950461030f4ea09836161ef068d70, type: 3}
   m_Name: Tang
   m_EditorClassIdentifier: 
-  id: Tang
+  id: tang_mengqi
   displayName: "\u5510\u68A6\u742A"
-  portrait: {fileID: 21300000, guid: 181d6830019364cc280b44c940c6d4ee, type: 3}
   description: "\u5BCC\u8C6A\u5343\u91D1"
+  defaultPortrait: {fileID: 21300000, guid: 181d6830019364cc280b44c940c6d4ee, type: 3}
+  expressions: []

@@ -12,7 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0ab950461030f4ea09836161ef068d70, type: 3}
   m_Name: Su
   m_EditorClassIdentifier: 
-  id: Su
+  id: su_qian
   displayName: "\u82CF\u6D45"
-  portrait: {fileID: 21300000, guid: a9ce86fa2d457468fb769482dfd17bef, type: 3}
   description: "\u9690\u5F62\u793E\u6050\u5927\u795E"
+  defaultPortrait: {fileID: 21300000, guid: a9ce86fa2d457468fb769482dfd17bef, type: 3}
+  expressions: []

@@ -6,42 +6,43 @@ using TMPro;
 
 public class StageController : MonoBehaviour
 {
-    [Header("Data")] [SerializeField] private CharacterArtLibrary artLibrary;
+    [Header("Data")] 
+    [SerializeField] private CharacterArtLibrary artLibrary;
+    [SerializeField] private CharacterData playerData;
 
-    [Header("Stage Settings")] [SerializeField]
-    private RectTransform stageContainer; // 角色立绘父节点
-
+    [Header("Stage Settings")] 
+    [SerializeField] private RectTransform stageContainer; 
     [SerializeField] private GameObject characterPrefab;
 
-    [Header("Dialogue UI")] [SerializeField]
-    private TMP_Text speakerNameText;
-
+    [Header("Dialogue UI")] 
+    [SerializeField] private TMP_Text speakerNameText;
     [SerializeField] private TextAnimator textAnimator;
     [SerializeField] private GameObject dialoguePanel;
 
-    [Header("Options UI")] [SerializeField]
-    private GameObject optionsContainer;
-
+    [Header("Options UI")] 
+    [SerializeField] private GameObject optionsContainer;
     [SerializeField] private Button[] optionButtons;
 
-    [Header("Buttons")] [SerializeField] private Button historyButton;
+    [Header("Buttons")] 
+    [SerializeField] private Button historyButton;
 
     // 运行时数据
     private Dictionary<string, CharacterPortrait> activeCharacters = new Dictionary<string, CharacterPortrait>();
-
-    // 事件
     public System.Action<string> OnOptionSelected;
-
-    private readonly Vector2 POS_LEFT = new Vector2(-400, 0);
-    private readonly Vector2 POS_CENTER = new Vector2(0, 0);
-    private readonly Vector2 POS_RIGHT = new Vector2(400, 0);
+    
+    private readonly Vector2 POS_PLAYER = new Vector2(-550, -100); // 主角位置(偏左下)
+    private readonly Vector2 POS_RIGHT_1 = new Vector2(100, 0);    // 仅1个室友时
+    private readonly Vector2 POS_RIGHT_2_L = new Vector2(-100, 0); // 2个室友-左
+    private readonly Vector2 POS_RIGHT_2_R = new Vector2(350, 0);  // 2个室友-右
+    private readonly Vector2 POS_RIGHT_3_L = new Vector2(-200, 0); // 3个室友-左
+    private readonly Vector2 POS_RIGHT_3_C = new Vector2(100, 0);  // 3个室友-中
+    private readonly Vector2 POS_RIGHT_3_R = new Vector2(400, 0);  // 3个室友-右
 
     private void Start()
     {
         if (historyButton) historyButton.onClick.AddListener(() => UIManager.Instance.OpenPanel("HistoryPanel"));
         if (optionsContainer) optionsContainer.SetActive(false);
 
-        // 订阅 GameManager 事件
         if (GameManager.Instance != null)
         {
             GameManager.Instance.OnInitRoommates += InitializeRoommates;
@@ -62,58 +63,39 @@ public class StageController : MonoBehaviour
         }
     }
 
-    private void HandlePlayDialogueSequence(List<DialogueTurn> sequence, System.Action onComplete)
-    {
-        StartCoroutine(PlayDialogueSequence(sequence, onComplete));
-    }
-    
-    public void ShowOptions(List<string> options)
-    {
-        optionsContainer.SetActive(true);
-        for (int i = 0; i < optionButtons.Length; i++)
-        {
-            if (i < options.Count)
-            {
-                optionButtons[i].gameObject.SetActive(true);
-                var btnText = optionButtons[i].GetComponentInChildren<TMP_Text>();
-                if (btnText) btnText.text = options[i];
-
-                string selectedContent = options[i];
-                optionButtons[i].onClick.RemoveAllListeners();
-                optionButtons[i].onClick.AddListener(() =>
-                {
-                    optionsContainer.SetActive(false);
-                    GameManager.Instance.HandlePlayerChoice(selectedContent);
-                });
-            }
-            else
-            {
-                optionButtons[i].gameObject.SetActive(false);
-            }
-        }
-    }
-    
     public void InitializeRoommates(List<string> roommateIds)
     {
-        // 1. 清理上一局/上一个场景遗留的立绘
+        // 1. 清理
         foreach (var kvp in activeCharacters)
         {
             if (kvp.Value != null) Destroy(kvp.Value.gameObject);
         }
         activeCharacters.Clear();
 
+        // 2. 【新增】生成主角立绘
+        if (playerData != null)
+        {
+            GameObject playerObj = Instantiate(characterPrefab, stageContainer);
+            CharacterPortrait pPortrait = playerObj.GetComponent<CharacterPortrait>();
+            pPortrait.Initialize(playerData);
+            pPortrait.SetPosition(POS_PLAYER, instant: true);
+            pPortrait.Enter();
+            
+            // 为了兼容 LLM 可能返回的不同主角称呼，多注册几个Key
+            activeCharacters["player"] = pPortrait;
+            activeCharacters["陆陈安然"] = pPortrait;
+            activeCharacters["安然"] = pPortrait;
+            activeCharacters["我"] = pPortrait;
+        }
+
         if (roommateIds == null || roommateIds.Count == 0) return;
 
-        // 2. 动态计算站位
+        // 3. 生成室友
         List<Vector2> positions = GetStandPositions(roommateIds.Count);
-
-        // 3. 遍历 ID 列表，依次生成角色
         for (int i = 0; i < roommateIds.Count; i++)
         {
             string cid = roommateIds[i];
-            
             Vector2 targetPos = (i < positions.Count) ? positions[i] : Vector2.zero;
-            
             SpawnCharacter(cid, targetPos);
         }
     }
@@ -126,54 +108,66 @@ public class StageController : MonoBehaviour
         GameObject go = Instantiate(characterPrefab, stageContainer);
         CharacterPortrait portrait = go.GetComponent<CharacterPortrait>();
 
-        portrait.Initialize(id, data.portrait);
+        portrait.Initialize(data);
         portrait.SetPosition(targetPos, instant: true);
         portrait.Enter();
 
         activeCharacters[id.ToLower()] = portrait;
     }
 
+    // 【修改】根据室友数量返回靠右侧的站位
     private List<Vector2> GetStandPositions(int count)
     {
         List<Vector2> pos = new List<Vector2>();
-        if (count == 1) pos.Add(POS_CENTER);
+        if (count == 1) pos.Add(POS_RIGHT_1);
         else if (count == 2)
         {
-            pos.Add(new Vector2(-300, 0));
-            pos.Add(new Vector2(300, 0));
+            pos.Add(POS_RIGHT_2_L);
+            pos.Add(POS_RIGHT_2_R);
         }
         else
         {
-            pos.Add(POS_LEFT);
-            pos.Add(POS_CENTER);
-            pos.Add(POS_RIGHT);
+            pos.Add(POS_RIGHT_3_L);
+            pos.Add(POS_RIGHT_3_C);
+            pos.Add(POS_RIGHT_3_R);
         }
-
         return pos;
     }
 
-    // --- 对话播放 ---
+    private void HandlePlayDialogueSequence(List<DialogueTurn> sequence, System.Action onComplete)
+    {
+        StartCoroutine(PlayDialogueSequence(sequence, onComplete));
+    }
+
     public IEnumerator PlayDialogueSequence(List<DialogueTurn> sequence, System.Action onComplete)
     {
         foreach (var turn in sequence)
         {
+            string speakerKey = turn.speaker.ToLower();
+
             if (turn.speaker == "System" || turn.speaker == "Narrator" || turn.speaker == "GM")
             {
                 speakerNameText.text = "";
             }
             else
             {
-                speakerNameText.text = turn.speaker;
+                // 如果是主角，可以选择把名字显示为“我”或者“陆陈安然”
+                speakerNameText.text = (speakerKey == "player" || speakerKey == "我") ? "陆陈安然" : turn.speaker;
+
+                if (activeCharacters.ContainsKey(speakerKey))
+                {
+                    activeCharacters[speakerKey].ChangeExpression(turn.mood);
+                }
             }
 
-            UpdatePortraitFocus(turn.speaker);
+            UpdatePortraitFocus(speakerKey);
 
             bool finished = false;
             if (textAnimator != null)
                 textAnimator.ShowText(turn.content, () => finished = true);
             else
                 finished = true;
-            
+
             GameManager.Instance.AddChatLog(turn.speaker, turn.content);
 
             while (!finished) yield return null;
@@ -183,7 +177,6 @@ public class StageController : MonoBehaviour
         onComplete?.Invoke();
     }
 
-    // 显示单条消息 (例如玩家的选择，或系统错误)
     public void ShowImmediateMessage(string speaker, string content, Color color)
     {
         speakerNameText.text = speaker;
@@ -192,11 +185,37 @@ public class StageController : MonoBehaviour
         UpdatePortraitFocus(speaker);
     }
 
-    private void UpdatePortraitFocus(string speakerName)
+    public void ShowOptions(List<string> options)
     {
-        string speakerKey = speakerName.ToLower();
+        optionsContainer.SetActive(true);
+        for (int i = 0; i < optionButtons.Length; i++)
+        {
+            if (i < options.Count)
+            {
+                optionButtons[i].gameObject.SetActive(true);
+                var btnText = optionButtons[i].GetComponentInChildren<TMP_Text>();
+                if(btnText) btnText.text = options[i];
+                
+                string selectedContent = options[i];
+                optionButtons[i].onClick.RemoveAllListeners();
+                optionButtons[i].onClick.AddListener(() => {
+                    optionsContainer.SetActive(false);
+                    GameManager.Instance.HandlePlayerChoice(selectedContent);
+                });
+            }
+            else
+            {
+                optionButtons[i].gameObject.SetActive(false);
+            }
+        }
+    }
+
+    private void UpdatePortraitFocus(string speakerKey)
+    {
+        speakerKey = speakerKey.ToLower();
         foreach (var kvp in activeCharacters)
         {
+            // 匹配到当前说话人时高亮，其余变暗
             if (kvp.Key == speakerKey) kvp.Value.SetFocus(true);
             else kvp.Value.SetFocus(false);
         }

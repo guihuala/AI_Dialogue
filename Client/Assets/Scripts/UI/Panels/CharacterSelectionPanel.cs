@@ -48,7 +48,7 @@ public class CharacterSelectionPanel : BasePanel
         {
             GameObject item = Instantiate(characterItemPrefab, gridContainer);
             item.transform.Find("Name").GetComponent<TMP_Text>().text = data.displayName;
-            item.transform.Find("Portrait").GetComponent<Image>().sprite = data.portrait;
+            item.transform.Find("Portrait").GetComponent<Image>().sprite = data.defaultPortrait;
 
             Toggle toggle = item.GetComponentInChildren<Toggle>();
             toggle.isOn = false;

@@ -12,7 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0ab950461030f4ea09836161ef068d70, type: 3}
   m_Name: Li
   m_EditorClassIdentifier: 
-  id: Li
+  id: li_yinuo
   displayName: "\u674E\u4E00\u8BFA"
-  portrait: {fileID: 21300000, guid: 5b1708f5fde6f494a8af8b58ed12eb89, type: 3}
   description: "\u5377\u738B"
+  defaultPortrait: {fileID: 21300000, guid: 5b1708f5fde6f494a8af8b58ed12eb89, type: 3}
+  expressions: []

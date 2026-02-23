@@ -20,18 +20,31 @@ public class CharacterPortrait : MonoBehaviour
     [SerializeField] private bool preserveAspect = true; // 保持宽高比
     
     public string CharacterID { get; private set; }
-
-    // 初始化角色
-    public void Initialize(string id, Sprite sprite)
+    
+    private CharacterData characterData; // 缓存角色数据
+    
+    public void Initialize(CharacterData data)
     {
-        CharacterID = id;
-        portraitImage.sprite = sprite;
-        
-        // 设置固定尺寸而不是使用原始尺寸
+        characterData = data;
+        CharacterID = data.id;
+    
+        // 初始使用默认立绘
+        portraitImage.sprite = data.defaultPortrait;
+    
         SetPortraitSize();
-        
-        // 初始设为全透明
         canvasGroup.alpha = 0f;
+    }
+    
+    public void ChangeExpression(string mood)
+    {
+        if (characterData == null) return;
+    
+        Sprite newSprite = characterData.GetSpriteByMood(mood);
+        if (newSprite != null && portraitImage.sprite != newSprite)
+        {
+            portraitImage.sprite = newSprite;
+            transform.DOPunchScale(new Vector3(0.02f, 0.02f, 0), 0.2f, 1);
+        }
     }
     
     // 设置立绘尺寸
