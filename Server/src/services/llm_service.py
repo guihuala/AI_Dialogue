@@ -8,7 +8,7 @@ load_dotenv(find_dotenv()) # 自动向上层目录寻找 .env 并加载
 class LLMService:
     def __init__(self, api_key: Optional[str] = None, model: str = "deepseek-chat"):
         self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
-        
+
         if not self.api_key:
             print("⚠️ 警告: 未找到 DEEPSEEK_API_KEY，API 调用将失败。请检查 .env 文件。")
             self.api_key = "dummy"
@@ -25,7 +25,7 @@ class LLMService:
     def set_model(self, model: str):
         self.model = model
 
-    def generate_response(self, system_prompt: str, user_input: str, context: str = "") -> str:
+    def generate_response(self, system_prompt: str, user_input: str, context: str = "", temperature: float = 0.7) -> str:
         if self.api_key == "dummy":
             return "Error: API Key is missing. Please check .env file."
 
@@ -35,6 +35,9 @@ class LLMService:
             {"role": "user", "content": f"Context:\n{context}\n\nUser: {user_input}"}
         ]
 
+        print("\n" + "="*40)
+        print(f"🚀 [SENDING TO LLM] (Temp: {temperature})")
+     
         print("\n" + "="*40)
         print("🚀 [SENDING TO LLM] (发送给 AI)")
         print("-" * 20)

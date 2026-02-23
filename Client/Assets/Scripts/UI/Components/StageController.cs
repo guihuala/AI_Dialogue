@@ -140,7 +140,7 @@ public class StageController : MonoBehaviour
         return spk == "player" || spk == "我" || spk == "陆陈安然" || spk == "安然" || (playerData != null && spk == playerData.id.ToLower());
     }
 
-    private void HandlePlayDialogueSequence(List<DialogueTurn> sequence, System.Action onComplete)
+    public void HandlePlayDialogueSequence(List<DialogueTurn> sequence, System.Action onComplete)
     {
         // 1. 扫描本轮对话，找出所有需要出场的角色规范 ID
         HashSet<string> currentSpeakerIDs = new HashSet<string>();
@@ -236,7 +236,7 @@ public class StageController : MonoBehaviour
             }
             else
             {
-                // 【修改点】只要是主角说话，名字强制显示为“我”
+                // 只要是主角说话，名字强制显示为“我”
                 speakerNameText.text = isPlayerTurn ? "我" : turn.speaker;
 
                 // 寻找在场的立绘来切换表情
@@ -320,6 +320,15 @@ public class StageController : MonoBehaviour
         {
             if (kvp.Value.CharacterID.ToLower() == canonicalId) kvp.Value.SetFocus(true);
             else kvp.Value.SetFocus(false);
+        }
+    }
+    
+    // 专门播放固定剧本的重载方法
+    public void PlayFixedDialogue(FixedDialogueData fixedData, System.Action onComplete = null)
+    {
+        if (fixedData != null && fixedData.sequence != null)
+        {
+            HandlePlayDialogueSequence(fixedData.sequence, onComplete);
         }
     }
 }
