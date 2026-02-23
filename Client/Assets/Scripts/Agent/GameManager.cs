@@ -38,20 +38,21 @@ public class GameManager : Singleton<GameManager>
     public event Action<List<DialogueTurn>, Action> OnPlayDialogueSequence;
 
     // --- 游戏流程 ---
-    private void Start()
+    private IEnumerator Start()
     {
+        // 等待一帧，确保 StageController 等 UI 已经完成了事件订阅
+        yield return null; 
+
         // 从跨场景总线中读取选中的角色
         List<string> charsToLoad = GameContext.SelectedRoommates;
 
-        // 如果在开发时直接从 Gameplay 场景点 Play 运行，静态列表会是空的
-        // 这里给个默认数据防止报错，方便你平时测试
+        // 默认数据防报错（用于直接在Gameplay场景测试）
         if (charsToLoad == null || charsToLoad.Count == 0)
         {
             Debug.LogWarning("[GameManager] 未检测到选人数据，正在使用默认测试阵容！");
             charsToLoad = new List<string> { "tang_mengqi", "li_yinuo", "chen_yuting" };
         }
 
-        // 启动游戏逻辑
         StartNewGame(charsToLoad);
     }
     

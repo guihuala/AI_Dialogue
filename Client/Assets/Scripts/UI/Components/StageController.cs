@@ -11,7 +11,7 @@ public class StageController : MonoBehaviour
     [Header("Stage Settings")] [SerializeField]
     private RectTransform stageContainer; // 角色立绘父节点
 
-    [SerializeField] private GameObject characterPrefab; // CharacterPortrait Prefab
+    [SerializeField] private GameObject characterPrefab;
 
     [Header("Dialogue UI")] [SerializeField]
     private TMP_Text speakerNameText;
@@ -83,7 +83,6 @@ public class StageController : MonoBehaviour
                 optionButtons[i].onClick.AddListener(() =>
                 {
                     optionsContainer.SetActive(false);
-                    // 修改：直接调用单例的方法，不再抛出委托
                     GameManager.Instance.HandlePlayerChoice(selectedContent);
                 });
             }
@@ -93,24 +92,29 @@ public class StageController : MonoBehaviour
             }
         }
     }
-
-    // --- 角色立绘管理 ---
-    public void InitializeRoommates(List<string> activeRoommates)
+    
+    public void InitializeRoommates(List<string> roommateIds)
     {
-        foreach (var charCtrl in activeCharacters.Values)
+        // 1. 清理上一局/上一个场景遗留的立绘
+        foreach (var kvp in activeCharacters)
         {
-            if (charCtrl != null) Destroy(charCtrl.gameObject);
+            if (kvp.Value != null) Destroy(kvp.Value.gameObject);
         }
-
         activeCharacters.Clear();
 
-        if (activeRoommates != null && activeRoommates.Count > 0)
+        if (roommateIds == null || roommateIds.Count == 0) return;
+
+        // 2. 动态计算站位
+        List<Vector2> positions = GetStandPositions(roommateIds.Count);
+
+        // 3. 遍历 ID 列表，依次生成角色
+        for (int i = 0; i < roommateIds.Count; i++)
         {
-            List<Vector2> positions = GetStandPositions(activeRoommates.Count);
-            for (int i = 0; i < activeRoommates.Count; i++)
-            {
-                SpawnCharacter(activeRoommates[i], positions[i]);
-            }
+            string cid = roommateIds[i];
+            
+            Vector2 targetPos = (i < positions.Count) ? positions[i] : Vector2.zero;
+            
+            SpawnCharacter(cid, targetPos);
         }
     }
 

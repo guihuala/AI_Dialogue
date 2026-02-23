@@ -1,19 +1,24 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any
+import json
 import random
-
 import sys
 import os
-# 把当前文件的上一级目录（即 Server 文件夹）加入系统路径
+
+# 把当前文件的上一级目录加入系统路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.core.presets import CANDIDATE_POOL
 from src.models.schema import PlayerStats
+from src.services.llm_service import LLMService
 
 app = FastAPI(title="Roommate Survival Game API")
 
-# --- 请求体定义 ---
+# 初始化你封装好的 LLM 客户端
+llm_service = LLMService()
+
+# --- 保持你原有的请求体定义完全不变 ---
 class GetOptionsRequest(BaseModel):
     active_roommates: List[str]
 
@@ -24,72 +29,105 @@ class PerformActionRequest(BaseModel):
 # --- 路由与接口 ---
 
 @app.post("/api/get_options")
-async def get_options(req: GetOptionsRequest):
+def get_options(req: GetOptionsRequest): # 去掉 async，适配你的同步 LLMService
     """
-    接收当前存活的室友名单，返回玩家本回合可以做出的行为选项。
-    将来这里可以接入 LLM，根据上下文动态生成选项。
+    接入 LLM 动态生成玩家的行动选项
     """
     if not req.active_roommates:
         raise HTTPException(status_code=400, detail="没有传入室友数据")
         
-    # 意图选项系统
-    base_options = ["附和", "质疑", "沉默", "阴阳怪气", "转移话题"]
+    active_profiles = [CANDIDATE_POOL[c_id] for c_id in req.active_roommates if c_id in CANDIDATE_POOL]
+    char_names = [p.Name for p in active_profiles]
     
-    # 模拟 LLM 动态生成的具体话术
-    dynamic_options = [
-        f"[{opt}] {random.choice(['确实是这样...', '你确定吗？', '...', '呵呵，你开心就好。', '对了，你们吃饭了吗？'])}" 
-        for opt in random.sample(base_options, 3)
-    ]
+    # 构建发给 LLM 的系统指令
+    system_prompt = f"""
+    你是一个文字冒险游戏的选项生成器。玩家正在宿舍，面对的室友有：{', '.join(char_names)}。
+    请根据当前情况，提供3个不同态度的对话选项（必须包含：附和、沉默/转移话题、阴阳怪气/质疑）。
     
-    return {"options": dynamic_options}
+    请严格返回 JSON 格式（不要有任何 markdown 标记），结构如下：
+    {{
+        "options": ["选项1的文本", "选项2的文本", "选项3的文本"]
+    }}
+    """
+    
+    try:
+        # 调用你写好的方法
+        response_text = llm_service.generate_response(
+            system_prompt=system_prompt,
+            user_input="请为我生成本回合的三个行动选项。",
+            context="当前处于宿舍日常互动阶段。"
+        )
+        
+        # 清理可能存在的 ```json 标记
+        if "```json" in response_text:
+            response_text = response_text.replace("```json", "").replace("```", "").strip()
+            
+        result = json.loads(response_text)
+        return result
+    except Exception as e:
+        print(f"LLM 解析选项失败: {e}")
+        # 兜底机制，防止游戏因网络波动卡死
+        return {"options": ["[附和] 确实是这样...", "[沉默] ...", "[阴阳怪气] 呵呵，你开心就好。"]}
 
 
 @app.post("/api/perform_action")
-async def perform_action(req: PerformActionRequest):
+def perform_action(req: PerformActionRequest): # 去掉 async
     """
-    接收玩家的选择，调用 LLM 进行推演，返回状态更新和对话演出序列。
+    接收玩家选择，调用 LLM 进行对话推演和数值结算
     """
-    # 1. 解析玩家选择（实际开发中，这里要把 choice 喂给大模型）
-    print(f"玩家选择了: {req.choice}，当前室友: {req.active_roommates}")
+    active_profiles = [CANDIDATE_POOL[c_id] for c_id in req.active_roommates if c_id in CANDIDATE_POOL]
     
-    # 2. 模拟数值结算 (对应你文档中的增量结算制)
-    # 实际应从后端的 GameState 或数据库中读取当前值并修改
-    mock_stats = {
-        "san": random.randint(30, 80),
-        "gpa": round(random.uniform(2.0, 4.0), 2),
-        "money": random.randint(500, 2000)
-    }
+    # 提取室友设定，防止 AI 发生 OOC
+    char_descriptions = ""
+    for p in active_profiles:
+        char_descriptions += f"""
+        - 姓名: {p.Name} ({p.Core_Archetype})
+        - 行为逻辑: {p.Roommate_Behavior}
+        - 说话风格: 语气{p.Speech_Pattern.Tone}，口头禅【{', '.join(p.Speech_Pattern.Catchphrases)}】。禁语：{', '.join(p.Speech_Pattern.Forbidden_Words)}。
+        """
+
+    system_prompt = f"""
+    你是一个多角色大学生存游戏的底层系统。
+    当前在宿舍的室友设定如下：
+    {char_descriptions}
     
-    # 3. 模拟时间推进
-    mock_time = {
-        "year": "一",
-        "month": random.randint(9, 12),
-        "week": random.randint(1, 4)
-    }
+    请根据室友的性格，推演接下来的对话发展（1~3句即可）。同时，评估玩家行动对自身属性（SAN值 0-100, 资金, GPA 0-4.0）的影响。
     
-    # 4. 模拟大模型生成的剧本演出序列 (Dialogue Sequence)
-    # 根据 active_roommates 随机挑两个人说话
-    speakers = random.sample(req.active_roommates, min(2, len(req.active_roommates))) if req.active_roommates else ["System"]
-    
-    mock_dialogue = [
-        {
-            "speaker": speakers[0], 
-            "content": f"（针对玩家的'{req.choice}'）你这话是什么意思？"
-        },
-        {
-            "speaker": speakers[1] if len(speakers) > 1 else "System", 
-            "content": "好了好了，别吵了，辅导员马上来查寝了！"
+    必须严格返回以下 JSON 格式（不要有任何 markdown 标记）：
+    {{
+        "dialogue_sequence": [
+            {{"speaker": "室友姓名", "content": "说的话", "mood": "情绪"}}
+        ],
+        "player_stats": {{"san": 75, "gpa": 3.0, "money": 1500}},
+        "game_time": {{"year": "一", "month": 10, "week": 2}},
+        "current_event": "宿舍日常纷争"
+    }}
+    """
+
+    try:
+        # 调用你写好的推演方法
+        response_text = llm_service.generate_response(
+            system_prompt=system_prompt,
+            user_input=f"我的行动/说话内容是：\"{req.choice}\"",
+            context="当前时间：大一 第一学期"
+        )
+        
+        # 清理 JSON 格式
+        if "```json" in response_text:
+            response_text = response_text.replace("```json", "").replace("```", "").strip()
+            
+        result = json.loads(response_text)
+        return result
+
+    except Exception as e:
+        print(f"LLM 推演对话失败: {e}")
+        return {
+            "dialogue_sequence": [{"speaker": "System", "content": "室友们陷入了尴尬的沉默...", "mood": "neutral"}],
+            "player_stats": {"san": 80, "gpa": 3.0, "money": 1500},
+            "game_time": {"year": "一", "month": 9, "week": 1},
+            "current_event": "系统卡顿"
         }
-    ]
-    
-    return {
-        "player_stats": mock_stats,
-        "game_time": mock_time,
-        "current_event": "日常：突击查寝",
-        "dialogue_sequence": mock_dialogue
-    }
 
 if __name__ == "__main__":
     import uvicorn
-    # 运行于 8000 端口，Unity 端请求地址应为 http://127.0.0.1:8000/api/...
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -2,17 +2,18 @@ from openai import OpenAI
 import os
 from typing import List, Dict, Optional
 
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv()) # 自动向上层目录寻找 .env 并加载
+
 class LLMService:
     def __init__(self, api_key: Optional[str] = None, model: str = "deepseek-chat"):
-        # 1. 读取 API Key
-        # 修正：优先读取 .env 里的 DEEPSEEK_API_KEY
         self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
         
         if not self.api_key:
             print("⚠️ 警告: 未找到 DEEPSEEK_API_KEY，API 调用将失败。请检查 .env 文件。")
             self.api_key = "dummy"
 
-        # 2. 初始化 OpenAI 客户端 (DeepSeek 兼容)
+        # 2. 初始化 OpenAI 客户端
         self.client = OpenAI(
             base_url="https://api.deepseek.com", 
             api_key=self.api_key,
@@ -34,7 +35,6 @@ class LLMService:
             {"role": "user", "content": f"Context:\n{context}\n\nUser: {user_input}"}
         ]
 
-        # --- 🕵️‍♂️ DEBUG: 打印发送给 AI 的内容 ---
         print("\n" + "="*40)
         print("🚀 [SENDING TO LLM] (发送给 AI)")
         print("-" * 20)
@@ -42,7 +42,6 @@ class LLMService:
         print("-" * 20)
         print(f"【User Input + Context】:\n{context}\nUser: {user_input}")
         print("="*40 + "\n")
-        # ---------------------------------------
 
         try:
             completion = self.client.chat.completions.create(
@@ -51,13 +50,11 @@ class LLMService:
             )
             content = completion.choices[0].message.content
 
-            # --- 🕵️‍♂️ DEBUG: 打印 AI 返回的内容 ---
             print("\n" + "="*40)
             print("🤖 [LLM RESPONSE] (AI 回复)")
             print("-" * 20)
             print(content)
             print("="*40 + "\n")
-            # ------------------------------------
 
             return content
         except Exception as e:

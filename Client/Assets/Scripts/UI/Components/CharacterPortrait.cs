@@ -15,6 +15,10 @@ public class CharacterPortrait : MonoBehaviour
     [SerializeField] private float fadeDuration = 0.3f;
     [SerializeField] private Color dimColor = new Color(0.6f, 0.6f, 0.6f, 1f);
     
+    [Header("Portrait Size")]
+    [SerializeField] private Vector2 portraitSize = new Vector2(300, 400); // 添加默认尺寸
+    [SerializeField] private bool preserveAspect = true; // 保持宽高比
+    
     public string CharacterID { get; private set; }
 
     // 初始化角色
@@ -22,12 +26,53 @@ public class CharacterPortrait : MonoBehaviour
     {
         CharacterID = id;
         portraitImage.sprite = sprite;
-        portraitImage.SetNativeSize(); // 保持图片原始比例
+        
+        // 设置固定尺寸而不是使用原始尺寸
+        SetPortraitSize();
         
         // 初始设为全透明
         canvasGroup.alpha = 0f;
     }
+    
+    // 设置立绘尺寸
+    private void SetPortraitSize()
+    {
+        if (preserveAspect)
+        {
+            // 保持宽高比设置尺寸
+            float spriteAspect = portraitImage.sprite.rect.width / portraitImage.sprite.rect.height;
+            float targetAspect = portraitSize.x / portraitSize.y;
+            
+            if (spriteAspect > targetAspect)
+            {
+                // 图片更宽，以宽度为基准
+                float width = portraitSize.x;
+                float height = width / spriteAspect;
+                rectTransform.sizeDelta = new Vector2(width, height);
+            }
+            else
+            {
+                // 图片更高，以高度为基准
+                float height = portraitSize.y;
+                float width = height * spriteAspect;
+                rectTransform.sizeDelta = new Vector2(width, height);
+            }
+        }
+        else
+        {
+            // 直接拉伸到目标尺寸
+            rectTransform.sizeDelta = portraitSize;
+        }
+    }
 
+    // 可以添加一个方法动态调整尺寸
+    public void SetPortraitSize(Vector2 newSize, bool preserveAspect = true)
+    {
+        this.portraitSize = newSize;
+        this.preserveAspect = preserveAspect;
+        SetPortraitSize();
+    }
+    
     // 设置位置（支持动画）
     public void SetPosition(Vector2 anchoredPosition, bool instant = false)
     {
