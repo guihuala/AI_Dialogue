@@ -12,4 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: de24b6133a8c40739eab36fb563ccfac, type: 3}
   m_Name: NewFixedDialogue
   m_EditorClassIdentifier: 
-  sequence: []
+  sequence:
+  - speaker: 
+    content: 
+    mood: 

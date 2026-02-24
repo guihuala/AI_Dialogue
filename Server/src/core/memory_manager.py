@@ -56,7 +56,26 @@ class MemoryManager:
 
         response = self.llm_service.generate_response(system_prompt, user_input, context_str)
         return response, relevant_memories
-        
+    
+    def clear_game_history(self):
+        """清空上一轮游戏的互动记忆，保留角色专属语料(lore)"""
+        try:
+            # 获取底层的所有数据
+            data = self.vector_store.collection.get()
+            if data and data['ids']:
+                ids_to_delete = []
+                # 遍历判断：如果类型不是 lore，就加入删除列表
+                for i, meta in enumerate(data['metadatas']):
+                    if meta and meta.get("type") != "lore":
+                        ids_to_delete.append(data['ids'][i])
+                
+                # 执行批量删除
+                if ids_to_delete:
+                    self.vector_store.collection.delete(ids=ids_to_delete)
+                    print(f"✅ 成功清理了 {len(ids_to_delete)} 条上一局的临时记忆！")
+        except Exception as e:
+            print(f"❌ 清理历史记忆失败: {e}")
+            
     def _construct_system_prompt(self, player_stats: str = "", player_persona: str = "", current_time: str = "", current_event_obj = None) -> str:
         p = self.profile
         rel_str = "\n".join([f"- {name}: {r.tags} (Affinity: {r.affinity})" for name, r in p.relationships.items()])

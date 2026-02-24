@@ -1,4 +1,5 @@
 import gradio as gr
+import pandas as pd
 import json
 import sys
 import os
@@ -12,6 +13,12 @@ from src.services.llm_service import LLMService
 from src.core.memory_manager import MemoryManager
 from src.core.event_director import EventDirector
 from src.core.event_script import EVENT_DATABASE
+
+try:
+    from build_knowledge import build_knowledge
+    build_knowledge()
+except Exception as e:
+    print(f"提示：请确保已手动运行过 build_knowledge.py 注入语料。({e})")
 
 # 动态组装全角色池
 CANDIDATE_POOL = {}
@@ -74,10 +81,16 @@ def process_action(selected_chars, current_evt_id, player_choice, is_transition,
     
     # === 状态机逻辑 ===
     if is_transition or current_evt_id == "":
+        if turn == 0:  
+            mm.clear_game_history()
+            
         next_evt = director.get_next_event(mock_player_stats, selected_chars)
-        if not next_evt:
-            return gr.update(), "卡池已空！", gr.update(visible=False), hist, turn, "🏁 游戏结束", False, current_evt_id, san, money, gpa, arg_count, chapter, f"**SAN**: {san}"
         
+        # 补上防止游戏结束报错的拦截
+        if not next_evt:
+            return gr.update(), "卡池已空或游戏通关！", gr.update(visible=False), hist, turn, "🏁 游戏结束", False, current_evt_id, san, money, gpa, arg_count, chapter, f"**SAN**: {san}"
+        
+        # 这里是漏掉的那行 if 判断（跨章结算）！
         if next_evt.chapter > chapter:
             money -= 800  
             gpa_penalty = 0.5 if money < 500 else 0.0
@@ -90,6 +103,7 @@ def process_action(selected_chars, current_evt_id, player_choice, is_transition,
         action_text = "（开启了新的阶段...）"
         event_context = f"【过渡指令】\n旧事件结束，进入第 {chapter} 章。\n【触发新事件】:{next_evt.name}\n【场景描述】:{next_evt.description}"
     else:
+        # ... 后面的保持不变 ...
         next_evt = EVENT_DATABASE[current_evt_id]
         turn += 1
         action_text = player_choice
@@ -186,8 +200,113 @@ def process_action(selected_chars, current_evt_id, player_choice, is_transition,
     except Exception as e:
         return f"出错: {e}", gr.update(), hist, turn, "错误", gr.update(), False, current_evt_id, san, money, gpa, arg_count, chapter, f"**SAN**: {san}"
 
-# --- 构建 Gradio 网页 UI ---
-with gr.Blocks(title="大学档案 - 沉浸式", theme=gr.themes.Soft()) as demo:
+# --- 辅助函数：读取所有 ChromaDB 记忆 ---
+def fetch_all_memories():
+    try:
+        # 获取底层 collection 的所有数据
+        data = mm.vector_store.collection.get()
+        if not data or not data['ids']:
+            return pd.DataFrame(columns=["ID", "内容", "类型", "重要度", "时间戳"])
+            
+        rows = []
+        for i in range(len(data['ids'])):
+            meta = data['metadatas'][i] if data['metadatas'] else {}
+            rows.append({
+                "ID": data['ids'][i],
+                "内容": data['documents'][i],
+                "类型": meta.get("type", "unknown"),
+                "重要度": meta.get("importance", 5),
+                "时间戳": meta.get("timestamp", "")
+            })
+        return pd.DataFrame(rows)
+    except Exception as e:
+        return pd.DataFrame(columns=["ID", f"读取出错: {e}", "类型", "重要度", "时间戳"])
+
+# --- 构建 Gradio 网页 UI (带后台管理系统) ---
+with gr.Blocks(title="大学档案 - 沉浸式与后台管理", theme=gr.themes.Soft()) as demo:
+    
+    # 🌟 使用 Tabs 将“游戏前台”和“开发者后台”分开
+    with gr.Tabs():
+        
+        # ==========================================
+        # Tab 1: 游戏主控台 (前台)
+        # ==========================================
+        with gr.TabItem("游戏主控台"):
+            state_current_event_id = gr.State("")
+            state_turn = gr.State(0)
+            state_is_transition = gr.State(True) 
+            state_san, state_money, state_gpa, state_args, state_chapter = gr.State(80), gr.State(1500), gr.State(3.0), gr.State(0), gr.State(1)
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    char_checkboxes = gr.CheckboxGroup(choices=list(CANDIDATE_POOL.keys()), label="在场室友", value=list(CANDIDATE_POOL.keys())[:3])
+                    stats_panel = gr.Markdown("### 玩家当前状态\n**SAN值**: 80/100 | **生活费**: ¥1500 | **当前GPA**: 3.00")
+                    status_text = gr.Markdown("### 当前进度：等待游戏开始")
+                    
+                    chatbot = gr.Chatbot(label="游戏画面 (旁白与交互)", height=450)
+                    dynamic_options = gr.Radio(choices=[], label="意图轮盘 (请选择)", visible=False)
+                    action_btn = gr.Button("开启大学生活", variant="primary")
+                    
+                with gr.Column(scale=1):
+                    output_json = gr.Code(language="json", label="底层 JSON 数据")
+                    
+                    with gr.Accordion("参数调整", open=False):
+                        temp_slider = gr.Slider(minimum=0.1, maximum=1.5, value=0.7, label="温度")
+                        prompt_input = gr.Textbox(lines=5, value=DEFAULT_PROMPT)
+
+            action_btn.click(
+                fn=process_action,
+                inputs=[char_checkboxes, state_current_event_id, dynamic_options, state_is_transition, prompt_input, temp_slider, chatbot, state_turn, state_san, state_money, state_gpa, state_args, state_chapter],
+                outputs=[output_json, dynamic_options, chatbot, state_turn, status_text, action_btn, state_is_transition, state_current_event_id, state_san, state_money, state_gpa, state_args, state_chapter, stats_panel]
+            )
+
+        # ==========================================
+        # Tab 2: RAG 记忆流与档案库 (后台)
+        # ==========================================
+        with gr.TabItem("记忆与语料库 (RAG Backstage)"):
+            gr.Markdown("### ChromaDB 向量数据库监视器\n这里展示了原项目中的 Memory Stream，你可以查看 AI 目前学到的所有**专属语料**和**历史互动记忆**。")
+            
+            with gr.Row():
+                refresh_btn = gr.Button("刷新数据库列表", variant="secondary")
+                clear_mem_btn = gr.Button("清空所有互动记忆 (危险)", variant="stop")
+
+            def clear_and_refresh():
+                mm.clear_game_history()
+                return fetch_all_memories()
+            
+            memory_dataframe = gr.Dataframe(
+                headers=["ID", "内容", "类型", "重要度", "时间戳"],
+                datatype=["str", "str", "str", "number", "str"],
+                interactive=False,
+                wrap=True
+            )
+            
+            clear_mem_btn.click(fn=clear_and_refresh, outputs=memory_dataframe)
+            refresh_btn.click(fn=fetch_all_memories, outputs=memory_dataframe)
+            
+            # 页面加载时自动刷新一次
+            demo.load(fn=fetch_all_memories, outputs=memory_dataframe)
+
+        # ==========================================
+        # Tab 3: 玩家动态存档 (Profile)
+        # ==========================================
+        with gr.TabItem("玩家本地存档 (profile.json)"):
+            gr.Markdown("### `profile.json` 实时数据\n此页面对应原项目中的 Character Profile，用于永久保存玩家通关状态、剩余资金和心理健康。")
+            
+            def load_profile_json():
+                try:
+                    with open(mm.json_store.file_path, 'r', encoding='utf-8') as f:
+                        return f.read()
+                except:
+                    return "{}"
+                    
+            profile_code = gr.Code(language="json", label="当前 profile.json 的内容")
+            refresh_profile_btn = gr.Button("刷新存档文件")
+            refresh_profile_btn.click(fn=load_profile_json, outputs=profile_code)
+            demo.load(fn=load_profile_json, outputs=profile_code)
+
+if __name__ == "__main__":
+    demo.launch(server_name="127.0.0.1", server_port=7860, inbrowser=True)
     gr.Markdown("## 宿舍生存游戏 - 沉浸式演出模式")
     
     state_current_event_id = gr.State("")
@@ -219,6 +338,3 @@ with gr.Blocks(title="大学档案 - 沉浸式", theme=gr.themes.Soft()) as demo
         inputs=[char_checkboxes, state_current_event_id, dynamic_options, state_is_transition, prompt_input, temp_slider, chatbot, state_turn, state_san, state_money, state_gpa, state_args, state_chapter],
         outputs=[output_json, dynamic_options, chatbot, state_turn, status_text, action_btn, state_is_transition, state_current_event_id, state_san, state_money, state_gpa, state_args, state_chapter, stats_panel]
     )
-
-if __name__ == "__main__":
-    demo.launch(server_name="127.0.0.1", server_port=7860, inbrowser=True)
