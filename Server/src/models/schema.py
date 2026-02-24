@@ -104,11 +104,17 @@ class PlayerStats(BaseModel):
 class ScriptedEvent(BaseModel):
     id: str
     name: str
-    duration_days: int
+    chapter: int = 1         # 属于第几章 (1-4)
+    is_boss: bool = False    # 是否是该章底层的 Boss 事件
+    duration_days: int = 1
     description: str
     potential_conflicts: List[str] = []
     mandatory_participants: List[str] = []
     next_event_id: Optional[str] = None
+    
+    # 对接策划表格的选项与结果机制
+    options: Dict[str, str] = {}  # 例如 {"A": "少数服从多数", "B": "独裁"}
+    outcomes: Dict[str, str] = {} # 例如 {"A": "输的一方叹气掉SAN", "B": "得罪一半人"}
 
 class GameState(BaseModel):
     current_event_id: str
