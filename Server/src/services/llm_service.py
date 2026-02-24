@@ -25,45 +25,33 @@ class LLMService:
     def set_model(self, model: str):
         self.model = model
 
-    def generate_response(self, system_prompt: str, user_input: str, context: str = "", temperature: float = 0.7) -> str:
-        if self.api_key == "dummy":
-            return "Error: API Key is missing. Please check .env file."
+    def generate_response(self, system_prompt: str, user_input: str, context: str = "", 
+                          temperature: float = 0.7, top_p: float = 1.0, 
+                          max_tokens: int = 1000, presence_penalty: float = 0.0, 
+                          frequency_penalty: float = 0.0) -> str:
+        
+        if not self.api_key or self.api_key == "dummy":
+            return "Error: API Key not set."
 
-        # 构造完整的消息列表
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Context:\n{context}\n\nUser: {user_input}"}
         ]
 
-        print("\n" + "="*40)
-        print(f"🚀 [SENDING TO LLM] (Temp: {temperature})")
-     
-        print("\n" + "="*40)
-        print("🚀 [SENDING TO LLM] (发送给 AI)")
-        print("-" * 20)
-        print(f"【System Prompt】:\n{system_prompt}")
-        print("-" * 20)
-        print(f"【User Input + Context】:\n{context}\nUser: {user_input}")
-        print("="*40 + "\n")
-
         try:
+            # 🌟 2. 在这里把参数传给大模型 (OpenAI 标准接口)
             completion = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
+                temperature=temperature,
+                top_p=top_p,
+                max_tokens=max_tokens,
+                presence_penalty=presence_penalty,
+                frequency_penalty=frequency_penalty
             )
-            content = completion.choices[0].message.content
-
-            print("\n" + "="*40)
-            print("🤖 [LLM RESPONSE] (AI 回复)")
-            print("-" * 20)
-            print(content)
-            print("="*40 + "\n")
-
-            return content
+            return completion.choices[0].message.content
         except Exception as e:
-            print(f"❌ LLM Error Details: {e}") 
-            return f"Error calling LLM: {str(e)}"
-            
+            return f"Error calling LLM: {str(e)}"       
     def generate_response_stream(self, system_prompt: str, user_input: str, context: str = ""):
         if not self.api_key or self.api_key == "dummy":
             yield "Error: API Key not set."
