@@ -26,18 +26,20 @@ os.makedirs(data_dir, exist_ok=True)
 mm = MemoryManager(os.path.join(data_dir, "profile.json"), os.path.join(data_dir, "chroma_db"), llm_service)
 director = EventDirector()
 
-# 🌟 升级版 Prompt：引入防 OOC 与全角色图鉴指令
 DEFAULT_PROMPT = """你是一个多角色大学生存游戏的 AI 跑团 DM。
 
 [核心职责]
 1. 你的首要任务是维持角色人设（防OOC）！请严格遵守下方的【全角色图鉴与设定】。
-2. 注意区分【同寝室友】和【非室友】。被标记为【非室友】的角色，除非是在上课、开会或发生特定交叉事件，否则绝对不要让她们在404寝室里凭空出场！
-3. 角色说话必须贴合其【说话风格】、【口头禅】，性格表现要符合【行为习惯】和【隐藏秘密】。必须包含人类的瑕疵与情绪。
-4. 如果是【过渡指令】，请用一段旁白总结上个事件，并引出新事件背景。
-5. 严格输出以下 JSON 格式。
+2. 注意区分【同寝室友】和【非室友】。
+3. 【关键指令：台词生成原则】我会给你提供一些【动态检索到的角色语录】。
+   - 必须深刻体会这些语录中的“情绪内核”、“阴阳怪气的技巧”和“断句习惯”。
+   - 绝对、绝对不可原样照抄这些语录！必须结合【当前事件】和【玩家最新行动】生成全新的对白！
+   - 角色说话必须极其口语化，包含人类的瑕疵与情绪，不能太长，大约10字到15字。
+   - 不要描述角色动作和神态，仅生成对话文本。
+4. 严格输出以下 JSON 格式。
 
 {
-    "narrator_transition": "旁白过渡文本(仅过渡时填写)",
+    "narrator_transition": "旁白过渡文本(主角视角的心理描写，仅过渡时填写)",
     "dialogue_sequence": [{"speaker": "角色", "content": "内容", "mood": "情绪"}],
     "next_options": ["选项A", "选项B", "选项C"],
     "stat_changes": {"san_delta": -5, "money_delta": 0, "is_argument": true},
@@ -46,13 +48,13 @@ DEFAULT_PROMPT = """你是一个多角色大学生存游戏的 AI 跑团 DM。
 
 def process_action(selected_chars, current_evt_id, player_choice, is_transition, prm, tmp, hist, turn, san, money, gpa, arg_count, chapter):
     
-    # 🌟 1. 组装全局世界观
+    # 1. 组装全局世界观
     world_info = ""
     if hasattr(presets_module, "WORLD_SETTING"):
         ws = presets_module.WORLD_SETTING
         world_info = f"【全局世界观】\n地点：{ws.university_name} {ws.dorm_number} ({ws.major})\n生存法则：{ws.background_rule}\n\n"
 
-    # 🌟 2. 组装极度丰富的【全角色图鉴】(区分室友与非室友)
+    # 2. 组装极度丰富的【全角色图鉴】(区分室友与非室友)
     encyclopedia = "【全角色图鉴与设定】\n"
     for name, p in CANDIDATE_POOL.items():
         role_status = "🏠【同寝室友】(常驻)" if name in selected_chars else "🚶‍♀️【非室友/隔壁寝室】(仅客串)"
@@ -95,18 +97,43 @@ def process_action(selected_chars, current_evt_id, player_choice, is_transition,
         pacing = "【当前节奏：结局】请明确收尾，将 is_end 置为 true。" if force_end else "【当前节奏：激化】冲突升级。"
         event_context = f"【当前事件】: {next_evt.name}\n【回合】: {turn}/3\n{pacing}\n【玩家行动】: {action_text}"
 
+    # 3. RAG 记忆与动态语料检索
+    memory_str = "暂无相关回忆"
+    lore_str = "暂无专属语录"
+    
+    try:
+        # 用 当前事件的名称 + 玩家动作 去搜索，最容易搜出匹配的语录和记忆
+        search_query = f"{next_evt.name} {next_evt.description} {action_text}"
+        relevant_docs = mm.vector_store.search(search_query, n_results=5)
+        
+        memories = []
+        lores = []
+        for doc in relevant_docs:
+            if "专属语录" in doc.get('content', ''):
+                lores.append(doc['content'])
+            else:
+                memories.append(doc['content'])
+                
+        if memories: memory_str = "\n".join([f"- {m}" for m in memories[:3]])
+        if lores: lore_str = "\n".join([f"- {l}" for l in lores[:3]])
+    except Exception as e:
+        print(f"检索出错: {e}")
+
+    # 将记忆和语录拼接到上下文中
+    event_context += f"\n\n【我的长期记忆/过去恩怨】:\n{memory_str}\n\n【动态检索到的角色语录 (仅供风格模仿，严禁照抄！)】:\n{lore_str}"
+
     # 合并发给大模型的终极系统指令
     full_system_prompt = f"{prm}\n\n{world_info}{encyclopedia}"
     status_hint = f"\n[玩家当前状态] SAN:{san}, 金钱:{money}。请根据玩家行动评估数值增减。"
 
     try:
-        # 🌟 3. CG 播放器增强：秒播文本，排版优化
+        # 4. CG 播放器增强：秒播文本
         if getattr(next_evt, 'is_cg', False):
             if is_transition or current_evt_id == "":
                 parsed = {
-                    "narrator_transition": f"🎬 【剧情演出】 {next_evt.name}\n{next_evt.description}",
+                    "narrator_transition": f"【剧情演出】 {next_evt.name}\n{next_evt.description}",
                     "dialogue_sequence": getattr(next_evt, 'fixed_dialogue', []),
-                    "next_options": ["👉 阅毕，进入下一阶段"],
+                    "next_options": ["阅毕，进入下一阶段"],
                     "stat_changes": {"san_delta": 0, "money_delta": 0, "is_argument": False},
                     "is_end": False
                 }
@@ -123,16 +150,18 @@ def process_action(selected_chars, current_evt_id, player_choice, is_transition,
             res_text = json.dumps(parsed, ensure_ascii=False)
             
         else:
+            # 正常事件的 LLM 呼叫
             res_text = llm_service.generate_response(system_prompt=full_system_prompt, user_input=event_context + status_hint, temperature=tmp)
             if "```json" in res_text: res_text = res_text.replace("```json", "").replace("```", "").strip()
             parsed = json.loads(res_text)
             
+        # 5. 应用状态变动
         stats_data = parsed.get("stat_changes", {})
         san = max(0, min(100, san + stats_data.get("san_delta", 0)))
         money += stats_data.get("money_delta", 0)
         if stats_data.get("is_argument", False): arg_count += 1
             
-        # 🌟 优化聊天框排版，使得阅读像看剧本一样
+        # 6. 优化聊天框排版，使得阅读像看剧本一样
         display_text = settlement_msg
         if parsed.get("narrator_transition"):
             display_text += f"📜 【旁白】 {parsed['narrator_transition']}\n\n"
@@ -144,6 +173,10 @@ def process_action(selected_chars, current_evt_id, player_choice, is_transition,
         hist.append((action_text, display_text))
         is_end = parsed.get("is_end", False)
         
+        # 保存短期和长期记忆
+        if not getattr(next_evt, 'is_cg', False) and action_text and "（开启了新的阶段" not in action_text:
+            mm.save_interaction(user_input=action_text, ai_response=" ".join(dialogue_lines), user_name="陆陈安然")
+        
         stats_md_text = f"**SAN值**: {san}/100 | **生活费**: ¥{money} | **当前GPA**: {gpa:.2f} | **本章吵架**: {arg_count}次"
         btn_text = "⏳ 事件已落幕，点击由 AI 引导过渡至下一剧情..." if is_end else "➡️ 确认选择并推演本回合"
         options_ui = gr.update(choices=[], visible=False) if is_end else gr.update(choices=parsed.get("next_options", []), visible=True)
@@ -151,11 +184,11 @@ def process_action(selected_chars, current_evt_id, player_choice, is_transition,
         return res_text, options_ui, hist, turn, f"第 {chapter} 章 - {next_evt.name} (第 {turn} 回合)", gr.update(value=btn_text), is_end, next_evt.id, san, money, gpa, arg_count, chapter, stats_md_text
         
     except Exception as e:
-        return f"出错: {e}", gr.update(), hist, turn, "❌ 错误", gr.update(), False, current_evt_id, san, money, gpa, arg_count, chapter, f"**SAN**: {san}"
+        return f"出错: {e}", gr.update(), hist, turn, "错误", gr.update(), False, current_evt_id, san, money, gpa, arg_count, chapter, f"**SAN**: {san}"
 
 # --- 构建 Gradio 网页 UI ---
 with gr.Blocks(title="大学档案 - 沉浸式", theme=gr.themes.Soft()) as demo:
-    gr.Markdown("## 🎮 宿舍生存游戏 - 沉浸式演出模式")
+    gr.Markdown("## 宿舍生存游戏 - 沉浸式演出模式")
     
     state_current_event_id = gr.State("")
     state_turn = gr.State(0)
@@ -166,20 +199,20 @@ with gr.Blocks(title="大学档案 - 沉浸式", theme=gr.themes.Soft()) as demo
         with gr.Column(scale=1):
             char_checkboxes = gr.CheckboxGroup(choices=list(CANDIDATE_POOL.keys()), label="在场室友 (未选中的角色将被标记为非室友)", value=list(CANDIDATE_POOL.keys())[:3])
             
-            gr.Markdown("### 📊 玩家当前状态")
+            gr.Markdown("### 玩家当前状态")
             stats_panel = gr.Markdown("**SAN值**: 80/100 | **生活费**: ¥1500 | **当前GPA**: 3.00 | **本章吵架**: 0次")
-            status_text = gr.Markdown("### 🕒 当前进度：等待游戏开始")
+            status_text = gr.Markdown("### 当前进度：等待游戏开始")
             
-            chatbot = gr.Chatbot(label="💬 游戏画面 (旁白与交互)", height=450)
-            dynamic_options = gr.Radio(choices=[], label="🕹️ 意图轮盘 (请选择)", visible=False)
-            action_btn = gr.Button("🎬 开启大学生活", variant="primary")
+            chatbot = gr.Chatbot(label="游戏画面 (旁白与交互)", height=450)
+            dynamic_options = gr.Radio(choices=[], label="意图轮盘 (请选择)", visible=False)
+            action_btn = gr.Button("开启大学生活", variant="primary")
             
-            with gr.Accordion("⚙️ 参数", open=False):
+            with gr.Accordion("参数", open=False):
                 temp_slider = gr.Slider(minimum=0.1, maximum=1.5, value=0.7, label="温度")
                 prompt_input = gr.Textbox(lines=5, value=DEFAULT_PROMPT)
             
         with gr.Column(scale=1):
-            output_json = gr.Code(language="json", label="🤖 底层 JSON 数据 (发送给大模型的完整百科都在这里)")
+            output_json = gr.Code(language="json", label="底层 JSON 数据 (发送给大模型的完整百科都在这里)")
 
     action_btn.click(
         fn=process_action,
