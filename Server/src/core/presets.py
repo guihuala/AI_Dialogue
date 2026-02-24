@@ -1,4 +1,12 @@
-from src.models.schema import CharacterProfile, SpeechPattern, Personality, Relationship, CurrentStatus
+from src.models.schema import CharacterProfile, SpeechPattern, Personality, Relationship, CurrentStatus, WorldSetting
+
+# 全局世界观配置
+WORLD_SETTING = WorldSetting(
+    university_name="江城艺术大学",
+    major="视觉传达与设计专业",
+    dorm_number="南区女生宿舍4栋-404寝室",
+    background_rule="这是一所充满竞争的艺术类院校。学生们表面精致，背地里疯狂内卷。辅导员极其势利，奖学金和保研名额是大家暗中争夺的焦点。寝室实行严格的查寝制度，违规电器和夜不归宿会被全院通报。室友之间充满了塑料姐妹情，比起直接骂人，她们更喜欢阴阳怪气和道德绑架。"
+)
 
 # --- 0. 玩家设定 ---
 PLAYER_ANRAN = CharacterProfile(

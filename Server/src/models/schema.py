@@ -105,19 +105,34 @@ class ScriptedEvent(BaseModel):
     id: str
     name: str
     chapter: int = 1         # 属于第几章 (1-4)
-    is_boss: bool = False    # 是否是该章底层的 Boss 事件
-    duration_days: int = 1
+
+    # 四大分类与触发条件
+    event_type: str = "通用随机池"  # 可选: "固定池", "通用随机池", "条件触发池", "角色专属事件"
+    trigger_conditions: str = ""   # 对应表格里的 "Hygiene<60", "与角色好感度>50" 等
+    exclusive_char: str = ""       # 如果是专属事件，对应角色名（如 "唐梦琪"）
+
     description: str
     potential_conflicts: List[str] = []
     mandatory_participants: List[str] = []
     next_event_id: Optional[str] = None
     
-    # 对接策划表格的选项与结果机制
     options: Dict[str, str] = {}  # 例如 {"A": "少数服从多数", "B": "独裁"}
     outcomes: Dict[str, str] = {} # 例如 {"A": "输的一方叹气掉SAN", "B": "得罪一半人"}
+
+    is_cg: bool = False
+    fixed_dialogue: List[Dict[str, str]] = []
 
 class GameState(BaseModel):
     current_event_id: str
     current_phase_progress: int = 0
     display_event_name: str = ""
     display_date: str = ""
+
+# ==========================================
+# 4. 全局世界观与背景设定
+# ==========================================
+class WorldSetting(BaseModel):
+    university_name: str = "某不知名大学"
+    major: str = "未知专业"
+    dorm_number: str = "404寝室"
+    background_rule: str = "普通的大学生活。"

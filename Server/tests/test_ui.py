@@ -4,207 +4,187 @@ import sys
 import os
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from src.core.presets import CANDIDATE_POOL
+
+# 动态反射自动抓取 presets 里的所有角色
+import src.core.presets as presets_module
+from src.models.schema import CharacterProfile
 from src.services.llm_service import LLMService
 from src.core.memory_manager import MemoryManager
-from src.core.event_script import EVENT_DATABASE, CHAPTER_TRANSITIONS, get_random_event, get_boss_event
+from src.core.event_director import EventDirector
+from src.core.event_script import EVENT_DATABASE
+
+# 动态组装全角色池
+CANDIDATE_POOL = {}
+for key, obj in vars(presets_module).items():
+    if isinstance(obj, CharacterProfile) and obj.Name != "陆陈安然": 
+        CANDIDATE_POOL[obj.Name] = obj
 
 llm_service = LLMService()
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 data_dir = os.path.join(base_dir, "data")
 os.makedirs(data_dir, exist_ok=True)
+mm = MemoryManager(os.path.join(data_dir, "profile.json"), os.path.join(data_dir, "chroma_db"), llm_service)
+director = EventDirector()
 
-mm = MemoryManager(
-    profile_path=os.path.join(data_dir, "profile_test.json"), 
-    vector_db_path=os.path.join(data_dir, "chroma_db"), 
-    llm_service=llm_service
-)
-
-char_choices = [p.Name for p in CANDIDATE_POOL.values()]
-
-DEFAULT_PROMPT = """你是一个多角色大学生存游戏的跑团DM。
+# 🌟 升级版 Prompt：引入防 OOC 与全角色图鉴指令
+DEFAULT_PROMPT = """你是一个多角色大学生存游戏的 AI 跑团 DM。
 
 [核心职责]
-1. 关注【当前剧情节奏】，推进群像交互（包含3~6句不同角色的发言）。
-2. 根据【玩家行动】和【长期记忆】，严格推演室友反应，必须带有人类瑕疵和情绪。
-3. 如果未到结局(is_end为false)，请动态生成 3 个供玩家下一步选择的【意图】。
-4. 如果到达最终回合，给出强制收尾，并将 is_end 设为 true。
+1. 你的首要任务是维持角色人设（防OOC）！请严格遵守下方的【全角色图鉴与设定】。
+2. 注意区分【同寝室友】和【非室友】。被标记为【非室友】的角色，除非是在上课、开会或发生特定交叉事件，否则绝对不要让她们在404寝室里凭空出场！
+3. 角色说话必须贴合其【说话风格】、【口头禅】，性格表现要符合【行为习惯】和【隐藏秘密】。必须包含人类的瑕疵与情绪。
+4. 如果是【过渡指令】，请用一段旁白总结上个事件，并引出新事件背景。
+5. 严格输出以下 JSON 格式。
 
-严格返回以下 JSON 格式：
 {
-    "dialogue_sequence": [
-        {"speaker": "室友姓名", "content": "对话", "mood": "情绪"}
-    ],
+    "narrator_transition": "旁白过渡文本(仅过渡时填写)",
+    "dialogue_sequence": [{"speaker": "角色", "content": "内容", "mood": "情绪"}],
     "next_options": ["选项A", "选项B", "选项C"],
+    "stat_changes": {"san_delta": -5, "money_delta": 0, "is_argument": true},
     "is_end": false
 }"""
 
-# ==========================================
-# 肉鸽爬塔系统核心逻辑
-# ==========================================
-def advance_node(chapter, stage, used_events):
-    """处理节点晋升与发牌"""
-    stage += 1
-    transition_text = ""
+def process_action(selected_chars, current_evt_id, player_choice, is_transition, prm, tmp, hist, turn, san, money, gpa, arg_count, chapter):
     
-    # 过关判定：一村 4 层，第 4 层必定是 Boss，打完进下一章
-    if stage > 4:
-        chapter += 1
-        stage = 1
-        used_events = []
-        if chapter > 4:
-            return 5, 1, used_events, None, "🏆 恭喜毕业！游戏通关！"
-        transition_text = CHAPTER_TRANSITIONS.get(chapter, f"进入第 {chapter} 章")
-    
-    # 第一层时，显示章节开头语
-    if stage == 1 and chapter == 1:
-        transition_text = CHAPTER_TRANSITIONS.get(1, "")
+    # 🌟 1. 组装全局世界观
+    world_info = ""
+    if hasattr(presets_module, "WORLD_SETTING"):
+        ws = presets_module.WORLD_SETTING
+        world_info = f"【全局世界观】\n地点：{ws.university_name} {ws.dorm_number} ({ws.major})\n生存法则：{ws.background_rule}\n\n"
 
-    # 发牌（抽事件）
-    if stage == 4:
-        next_event = get_boss_event(chapter)
-        node_name = "👹 【章节 Boss】"
+    # 🌟 2. 组装极度丰富的【全角色图鉴】(区分室友与非室友)
+    encyclopedia = "【全角色图鉴与设定】\n"
+    for name, p in CANDIDATE_POOL.items():
+        role_status = "🏠【同寝室友】(常驻)" if name in selected_chars else "🚶‍♀️【非室友/隔壁寝室】(仅客串)"
+        tags = ",".join(p.Tags) if p.Tags else "无"
+        tone = p.Speech_Pattern.Tone if p.Speech_Pattern else "普通"
+        catchphrases = ",".join(p.Speech_Pattern.Catchphrases) if p.Speech_Pattern and p.Speech_Pattern.Catchphrases else "无"
+        
+        encyclopedia += f"🔹 {name} {role_status}\n"
+        encyclopedia += f"  - 人设标签: {p.Core_Archetype} | {tags}\n"
+        encyclopedia += f"  - 说话风格: 语气[{tone}]，口头禅[{catchphrases}]\n"
+        encyclopedia += f"  - 行为习惯: {p.Habits or '无'}\n"
+        encyclopedia += f"  - 冲突风格: 压力下会[{p.Stress_Reaction}], 冲突时倾向[{p.Conflict_Style}]\n"
+        encyclopedia += f"  - 隐藏秘密(AI独家掌握): {p.Background_Secret or '无'}\n\n"
+
+    mock_player_stats = {"hygiene": 50, "affinity_xueba": 5} 
+    settlement_msg = ""
+    
+    # === 状态机逻辑 ===
+    if is_transition or current_evt_id == "":
+        next_evt = director.get_next_event(mock_player_stats, selected_chars)
+        if not next_evt:
+            return gr.update(), "卡池已空！", gr.update(visible=False), hist, turn, "🏁 游戏结束", False, current_evt_id, san, money, gpa, arg_count, chapter, f"**SAN**: {san}"
+        
+        if next_evt.chapter > chapter:
+            money -= 800  
+            gpa_penalty = 0.5 if money < 500 else 0.0
+            gpa = max(0.0, min(4.0, 3.0 + (mock_player_stats["affinity_xueba"] * 0.1) - (arg_count * 0.05) - gpa_penalty))
+            settlement_msg = f"⏳ **【大{chapter}学年结算】**\n生活费扣除 800。\n本年度吵架 {arg_count} 次，期末 GPA 结算为：{gpa:.2f}\n\n"
+            chapter = next_evt.chapter
+            arg_count = 0 
+
+        turn = 1
+        action_text = "（开启了新的阶段...）"
+        event_context = f"【过渡指令】\n旧事件结束，进入第 {chapter} 章。\n【触发新事件】:{next_evt.name}\n【场景描述】:{next_evt.description}"
     else:
-        next_event = get_random_event(chapter, used_events)
-        node_name = f"❓ 【随机冲突 {stage}/3】"
+        next_evt = EVENT_DATABASE[current_evt_id]
+        turn += 1
+        action_text = player_choice
+        force_end = (turn >= 3)
+        pacing = "【当前节奏：结局】请明确收尾，将 is_end 置为 true。" if force_end else "【当前节奏：激化】冲突升级。"
+        event_context = f"【当前事件】: {next_evt.name}\n【回合】: {turn}/3\n{pacing}\n【玩家行动】: {action_text}"
 
-    if next_event:
-        used_events.append(next_event.id)
-        
-    return chapter, stage, used_events, next_event, transition_text
-
-def process_turn(selected_chars, current_event_id, player_choice, custom_prompt, temperature, chat_history, current_turn):
-    if not current_event_id:
-        return "请先点击【抽取下一节点】！", gr.update(), chat_history, current_turn, "出错了", gr.update(), "无"
-        
-    evt = EVENT_DATABASE.get(current_event_id)
-    max_turns = 3 if not evt.is_boss else 4 # Boss战回合数更长
-    
-    # 1. 组装室友设定
-    active_profiles = [p for p in CANDIDATE_POOL.values() if p.Name in selected_chars]
-    char_descriptions = "\n".join([f"- {p.Name} | 性格: {p.Core_Archetype}" for p in active_profiles])
-
-    # 2. 对话历史
-    history_text = "\n".join([f"玩家：{u}\n室友：{a}" for u, a in chat_history])
-
-    # 3. 推进状态与节奏指令
-    current_turn += 1
-    force_end = (current_turn >= max_turns)
-    action_text = player_choice if player_choice else "（事件刚发生，我正在观察局势）"
-
-    if current_turn == 1: pacing_instruction = "【当前节奏：开端】抛出矛盾，室友初步表态。"
-    elif force_end: pacing_instruction = "【当前节奏：结局】必须明确收尾，有人破防或妥协，将 is_end 置为 true。"
-    else: pacing_instruction = "【当前节奏：激化】冲突升级，逼迫玩家做出艰难决定。"
-
-    # 🌟 4. 恢复记忆系统 (RAG 检索)
-    try:
-        relevant_memories = mm.vector_store.search(action_text, n_results=2)
-        memory_str = "\n".join([f"- {m['content']}" for m in relevant_memories]) if relevant_memories else "暂无相关回忆"
-    except:
-        memory_str = "记忆检索跳过（或无数据）"
-
-    # 5. 组装发给 AI 的指令
-    reference_options = "\n".join([f"{k}: {v}" for k, v in evt.options.items()])
-    event_context = f"""
-【当前事件】: {evt.name} {'(👑BOSS战)' if evt.is_boss else ''}
-{evt.description}
-【回合】: 第 {current_turn} / {max_turns} 回合
-{pacing_instruction}
-
-【过去对话历史】:\n{history_text if history_text else "无"}
-
-【我的长期记忆/过去恩怨】:\n{memory_str}
-
-【玩家(陆陈安然)本回合行动】: \n{action_text}
-(参考原设：{reference_options})
-"""
-
-    final_system_prompt = f"{custom_prompt}\n\n【在场室友设定】\n{char_descriptions}"
+    # 合并发给大模型的终极系统指令
+    full_system_prompt = f"{prm}\n\n{world_info}{encyclopedia}"
+    status_hint = f"\n[玩家当前状态] SAN:{san}, 金钱:{money}。请根据玩家行动评估数值增减。"
 
     try:
-        res_text = llm_service.generate_response(system_prompt=final_system_prompt, user_input=event_context, temperature=temperature)
-        
-        if "```json" in res_text: res_text = res_text.replace("```json", "").replace("```", "").strip()
-        parsed_json = json.loads(res_text)
-        
-        ai_combined_text = " ".join([f"[{t['speaker']}] {t['content']}" for t in parsed_json.get("dialogue_sequence", [])])
-        
-        # 保存进短期和长期记忆
-        chat_history.append((action_text, ai_combined_text))
-        mm.save_interaction(user_input=action_text, ai_response=ai_combined_text, user_name="陆陈安然")
-        
-        next_options = parsed_json.get("next_options", [])
-        is_end = parsed_json.get("is_end", force_end) or force_end
-
-        if is_end:
-            return json.dumps(parsed_json, indent=4, ensure_ascii=False), gr.update(visible=False), chat_history, current_turn, f"✅ 事件【{evt.name}】已结束！请抽取下一节点。", gr.update(interactive=False), memory_str
-        else:
-            return json.dumps(parsed_json, indent=4, ensure_ascii=False), gr.update(choices=next_options, value=None, visible=True), chat_history, current_turn, f"🔄 第 {current_turn} 回合 (等待选择)", gr.update(interactive=True), memory_str
+        # 🌟 3. CG 播放器增强：秒播文本，排版优化
+        if getattr(next_evt, 'is_cg', False):
+            if is_transition or current_evt_id == "":
+                parsed = {
+                    "narrator_transition": f"🎬 【剧情演出】 {next_evt.name}\n{next_evt.description}",
+                    "dialogue_sequence": getattr(next_evt, 'fixed_dialogue', []),
+                    "next_options": ["👉 阅毕，进入下一阶段"],
+                    "stat_changes": {"san_delta": 0, "money_delta": 0, "is_argument": False},
+                    "is_end": False
+                }
+            else:
+                choice_key = player_choice.split(":")[0].strip() if player_choice else ""
+                outcome = next_evt.outcomes.get(choice_key, "")
+                parsed = {
+                    "narrator_transition": f"【演出结束】 {outcome}",
+                    "dialogue_sequence": [],
+                    "next_options": [],
+                    "stat_changes": {"san_delta": 0, "money_delta": 0, "is_argument": False},
+                    "is_end": True
+                }
+            res_text = json.dumps(parsed, ensure_ascii=False)
             
+        else:
+            res_text = llm_service.generate_response(system_prompt=full_system_prompt, user_input=event_context + status_hint, temperature=tmp)
+            if "```json" in res_text: res_text = res_text.replace("```json", "").replace("```", "").strip()
+            parsed = json.loads(res_text)
+            
+        stats_data = parsed.get("stat_changes", {})
+        san = max(0, min(100, san + stats_data.get("san_delta", 0)))
+        money += stats_data.get("money_delta", 0)
+        if stats_data.get("is_argument", False): arg_count += 1
+            
+        # 🌟 优化聊天框排版，使得阅读像看剧本一样
+        display_text = settlement_msg
+        if parsed.get("narrator_transition"):
+            display_text += f"📜 【旁白】 {parsed['narrator_transition']}\n\n"
+        
+        # 将对话用双换行隔开，清晰明了
+        dialogue_lines = [f"[{t.get('speaker', '神秘人')}] {t.get('content', '')}" for t in parsed.get("dialogue_sequence", [])]
+        display_text += "\n\n".join(dialogue_lines)
+        
+        hist.append((action_text, display_text))
+        is_end = parsed.get("is_end", False)
+        
+        stats_md_text = f"**SAN值**: {san}/100 | **生活费**: ¥{money} | **当前GPA**: {gpa:.2f} | **本章吵架**: {arg_count}次"
+        btn_text = "⏳ 事件已落幕，点击由 AI 引导过渡至下一剧情..." if is_end else "➡️ 确认选择并推演本回合"
+        options_ui = gr.update(choices=[], visible=False) if is_end else gr.update(choices=parsed.get("next_options", []), visible=True)
+        
+        return res_text, options_ui, hist, turn, f"第 {chapter} 章 - {next_evt.name} (第 {turn} 回合)", gr.update(value=btn_text), is_end, next_evt.id, san, money, gpa, arg_count, chapter, stats_md_text
+        
     except Exception as e:
-        return f"生成失败：{e}", gr.update(), chat_history, current_turn - 1, "❌ 发生错误", gr.update(), memory_str
+        return f"出错: {e}", gr.update(), hist, turn, "❌ 错误", gr.update(), False, current_evt_id, san, money, gpa, arg_count, chapter, f"**SAN**: {san}"
 
 # --- 构建 Gradio 网页 UI ---
-with gr.Blocks(title="大学档案", theme=gr.themes.Soft()) as demo:
-    gr.Markdown("## 大学档案")
+with gr.Blocks(title="大学档案 - 沉浸式", theme=gr.themes.Soft()) as demo:
+    gr.Markdown("## 🎮 宿舍生存游戏 - 沉浸式演出模式")
     
-    # 状态机变量
-    state_chapter = gr.State(1)
-    state_stage = gr.State(0)
-    state_used_events = gr.State([])
     state_current_event_id = gr.State("")
-    state_current_turn = gr.State(0)
+    state_turn = gr.State(0)
+    state_is_transition = gr.State(True) 
+    state_san, state_money, state_gpa, state_args, state_chapter = gr.State(80), gr.State(1500), gr.State(3.0), gr.State(0), gr.State(1)
     
     with gr.Row():
         with gr.Column(scale=1):
-            char_checkboxes = gr.CheckboxGroup(choices=char_choices, label="在场室友", value=["陈雨婷", "唐梦琪", "李一诺"])
+            char_checkboxes = gr.CheckboxGroup(choices=list(CANDIDATE_POOL.keys()), label="在场室友 (未选中的角色将被标记为非室友)", value=list(CANDIDATE_POOL.keys())[:3])
             
-            # 进度显示区
-            progress_md = gr.Markdown("### 当前进度：第一章 大一未开始 | 节点 0/4")
-            draw_node_btn = gr.Button("抽取下一节点", variant="primary")
+            gr.Markdown("### 📊 玩家当前状态")
+            stats_panel = gr.Markdown("**SAN值**: 80/100 | **生活费**: ¥1500 | **当前GPA**: 3.00 | **本章吵架**: 0次")
+            status_text = gr.Markdown("### 🕒 当前进度：等待游戏开始")
             
-            gr.Markdown("---")
-            event_desc_md = gr.Markdown("> 点击上方抽取节点开始游戏...")
-            status_text = gr.Markdown("### 当前状态：等待开始")
+            chatbot = gr.Chatbot(label="💬 游戏画面 (旁白与交互)", height=450)
+            dynamic_options = gr.Radio(choices=[], label="🕹️ 意图轮盘 (请选择)", visible=False)
+            action_btn = gr.Button("🎬 开启大学生活", variant="primary")
             
-            chatbot = gr.Chatbot(label="事件推演记录 (短期记忆)", height=250)
-            dynamic_options = gr.Radio(choices=[], label="意图轮盘 (请选择)", visible=False)
-            next_turn_btn = gr.Button("确认选择并推演", interactive=False)
-            
-            with gr.Accordion("参数与提示词", open=False):
+            with gr.Accordion("⚙️ 参数", open=False):
                 temp_slider = gr.Slider(minimum=0.1, maximum=1.5, value=0.7, label="温度")
                 prompt_input = gr.Textbox(lines=5, value=DEFAULT_PROMPT)
             
         with gr.Column(scale=1):
-            memory_monitor = gr.Textbox(label="唤醒的长期记忆 (RAG 监视)", interactive=False)
-            output_json = gr.Code(language="json", label="大模型返回 JSON")
+            output_json = gr.Code(language="json", label="🤖 底层 JSON 数据 (发送给大模型的完整百科都在这里)")
 
-    # 1. 抽取新节点逻辑
-    def on_draw_node(chap, stg, used):
-        new_chap, new_stg, new_used, nxt_evt, trans_txt = advance_node(chap, stg, used)
-        if not nxt_evt:
-            return new_chap, new_stg, new_used, "", f"### {trans_txt}", "> 游戏结束或此章节无更多事件", gr.update(visible=False), gr.update(interactive=False), [], 0, "通关", ""
-            
-        prog_str = f"### 当前进度：第 {new_chap} 章 | 节点 {new_stg}/4 {'(BOSS关)' if new_stg==4 else ''}"
-        desc_str = f"**【{nxt_evt.name}】**\n\n{trans_txt}\n\n*背景：{nxt_evt.description}*"
-        return new_chap, new_stg, new_used, nxt_evt.id, prog_str, desc_str, gr.update(visible=False), gr.update(interactive=True), [], 0, "等待生成开局对话...", "记忆将在行动后唤醒"
-
-    draw_node_btn.click(
-        fn=on_draw_node,
-        inputs=[state_chapter, state_stage, state_used_events],
-        outputs=[state_chapter, state_stage, state_used_events, state_current_event_id, progress_md, event_desc_md, dynamic_options, next_turn_btn, chatbot, state_current_turn, status_text, memory_monitor]
-    ).then(
-        # 抽完卡后，自动触发第一回合（开局介绍）
-        fn=lambda chars, eid, prm, tmp, hist, turn: process_turn(chars, eid, None, prm, tmp, hist, turn),
-        inputs=[char_checkboxes, state_current_event_id, prompt_input, temp_slider, chatbot, state_current_turn],
-        outputs=[output_json, dynamic_options, chatbot, state_current_turn, status_text, next_turn_btn, memory_monitor]
-    )
-
-    # 2. 玩家推进回合
-    next_turn_btn.click(
-        fn=lambda chars, eid, opt, prm, tmp, hist, turn: process_turn(chars, eid, opt, prm, tmp, hist, turn),
-        inputs=[char_checkboxes, state_current_event_id, dynamic_options, prompt_input, temp_slider, chatbot, state_current_turn],
-        outputs=[output_json, dynamic_options, chatbot, state_current_turn, status_text, next_turn_btn, memory_monitor]
+    action_btn.click(
+        fn=process_action,
+        inputs=[char_checkboxes, state_current_event_id, dynamic_options, state_is_transition, prompt_input, temp_slider, chatbot, state_turn, state_san, state_money, state_gpa, state_args, state_chapter],
+        outputs=[output_json, dynamic_options, chatbot, state_turn, status_text, action_btn, state_is_transition, state_current_event_id, state_san, state_money, state_gpa, state_args, state_chapter, stats_panel]
     )
 
 if __name__ == "__main__":
