@@ -46,8 +46,6 @@ class LLMService:
                 max_tokens=max_tokens,
                 presence_penalty=presence_penalty,
                 frequency_penalty=frequency_penalty,
-                # 如果使用支持 JSON_OBJECT 的高级模型，可以强制开启，但保险起见目前靠 prompt 约束
-                # response_format={"type": "json_object"} 
             )
             return completion.choices[0].message.content
         except Exception as e:
