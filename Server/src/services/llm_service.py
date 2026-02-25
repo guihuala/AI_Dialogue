@@ -1,28 +1,27 @@
 from openai import OpenAI
 import os
-from typing import List, Dict, Optional
-
-from dotenv import load_dotenv, find_dotenv
-load_dotenv(find_dotenv()) # 自动向上层目录寻找 .env 并加载
+from typing import Optional
 
 class LLMService:
-    def __init__(self, api_key: Optional[str] = None, model: str = "deepseek-chat"):
-        self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
-
-        if not self.api_key:
-            print("⚠️ 警告: 未找到 DEEPSEEK_API_KEY，API 调用将失败。请检查 .env 文件。")
-            self.api_key = "dummy"
-
-        # 2. 初始化 OpenAI 客户端
+    def __init__(self, api_key: Optional[str] = None, base_url: str = "https://api.deepseek.com/v1", model: str = "deepseek-chat"):
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY") or "dummy"
+        self.base_url = base_url
+        self.model = model
         self.client = OpenAI(
-            base_url="https://api.deepseek.com", 
+            base_url=self.base_url,
             api_key=self.api_key,
         )
-        
-        # 3. 修复：确保 self.model 被正确赋值
-        self.model = model 
 
-    def set_model(self, model: str):
+    def update_config(self, api_key: str, base_url: str, model: str):
+        """动态更新 API 配置"""
+        # 只有当 key 或 url 发生变化时才重新实例化 Client，节省开销
+        if api_key != self.api_key or base_url != self.base_url:
+            self.api_key = api_key
+            self.base_url = base_url
+            self.client = OpenAI(
+                base_url=self.base_url,
+                api_key=self.api_key,
+            )
         self.model = model
 
     def generate_response(self, system_prompt: str, user_input: str, context: str = "", 
@@ -31,7 +30,7 @@ class LLMService:
                           frequency_penalty: float = 0.0) -> str:
         
         if not self.api_key or self.api_key == "dummy":
-            return "Error: API Key not set."
+            return '{"narrator_transition": "Error: API Key not set. Please configure in UI.", "dialogue_sequence": [], "next_options": [], "stat_changes": {}, "is_end": false}'
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -39,7 +38,6 @@ class LLMService:
         ]
 
         try:
-            # 🌟 2. 在这里把参数传给大模型 (OpenAI 标准接口)
             completion = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
@@ -47,53 +45,10 @@ class LLMService:
                 top_p=top_p,
                 max_tokens=max_tokens,
                 presence_penalty=presence_penalty,
-                frequency_penalty=frequency_penalty
+                frequency_penalty=frequency_penalty,
+                # 如果使用支持 JSON_OBJECT 的高级模型，可以强制开启，但保险起见目前靠 prompt 约束
+                # response_format={"type": "json_object"} 
             )
             return completion.choices[0].message.content
         except Exception as e:
-            return f"Error calling LLM: {str(e)}"       
-    def generate_response_stream(self, system_prompt: str, user_input: str, context: str = ""):
-        if not self.api_key or self.api_key == "dummy":
-            yield "Error: API Key not set."
-            return
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Context:\n{context}\n\nUser: {user_input}"}
-        ]
-        
-        try:
-            stream = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                stream=True,
-            )
-            for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
-                    yield chunk.choices[0].delta.content
-        except Exception as e:
-            yield f"Error calling LLM: {str(e)}"
-
-    def generate_summary(self, memories: str) -> str:
-        if not self.api_key:
-            return "Error: API Key not set."
-            
-        prompt = f"Summarize the following events into a concise memory update:\n{memories}"
-        
-        try:
-            completion = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            return completion.choices[0].message.content
-        except Exception as e:
-            return f"Error summarizing: {str(e)}"
-
-if __name__=="__main__":
-    llm_service = LLMService()
-    response = llm_service.generate_response(
-        system_prompt="You are a helpful assistant.",
-        user_input="Hello, how are you?",
-        context="Some relevant context."
-    )
-    print("Response:", response)
+            raise Exception(f"API 调用失败: {str(e)}")
