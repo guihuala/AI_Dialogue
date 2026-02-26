@@ -52,7 +52,9 @@ class GameEngine:
             evt = EVENT_DATABASE[current_evt_id]
             event_context = f"【当前现实局势】: 现实中正在发生事件“{evt.name}”。"
 
-        system_prm = f"{self.pm.get_wechat_prompt(current_chat_name, members)}\n\n{encyclopedia}\n{event_context}"
+        # 为了演示，我们将传参写活：
+        context = {"chapter": 1} # 未来如果微信也有学年进度，从 mm 或者传入参数中获取
+        system_prm = f"{self.pm.get_wechat_prompt(current_chat_name, members, context)}\n\n{encyclopedia}\n{event_context}"
         user_prm = f"玩家（陆陈安然）发送了：{player_msg}"
 
         try:
@@ -123,7 +125,12 @@ class GameEngine:
                 has_recent_wechat = True
         if not has_recent_wechat: wechat_summary += "无\n"
 
-        sys_prm = f"{self.pm.get_main_system_prompt()}\n\n{encyclopedia}\n【供模仿语录】:\n{lore_str}"
+        game_context = {
+            "chapter": chapter,
+            "turn": turn,
+            "is_exam_week": "期末" in next_evt.name # 未来你可以这样动态判断是否触发考试技能
+        }
+        sys_prm = f"{self.pm.get_main_system_prompt(game_context)}\n\n{encyclopedia}\n【供模仿语录】:\n{lore_str}"
         user_prm = f"{event_context}\n\n【现有微信通讯录】: {', '.join(wechat_data_dict.keys())}\n{wechat_summary}\n[状态] SAN:{san}, 资金:{money}。\n\n{self.pm.get_main_author_note()}"
 
         try:
