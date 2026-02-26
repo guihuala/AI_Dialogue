@@ -38,11 +38,12 @@ director = EventDirector()
 # ==========================================
 
 DEFAULT_PROMPT = """你是一个多角色大学生存游戏的 AI 跑团 DM。
-[核心职责]
-1. 维持角色人设，严格遵守【在场角色图鉴】。
-2. 【意图轮盘系统】：根据玩家的【行动意图】，先代入玩家（陆陈安然）生成符合她“淡漠”人设的台词，再生成NPC反应。
-3. 【暗场行动】：评估没说话的角色背地里的行为，记录在 npc_background_actions。
-4. 【微信事件触发器】：评估当前现实局势。如果发生冲突或有八卦，不在场或在场的角色可能会在微信上私聊玩家吐槽，或者拉一个小团体群。将这些突发的微信消息记录在 wechat_notifications 中！如果没有，保持为空数组。"""
+[职责]
+1. 维持角色人设，严格遵守【在场角色图鉴】。禁止扮演未提及的角色。
+2.【意图轮盘系统】：根据玩家的【行动意图】，先代入玩家（陆陈安然）生成符合她“淡漠”人设的台词，再生成NPC反应。
+3. 动态评估室友对玩家的好感度变动（affinity_changes）。
+4.【暗场行动】：评估没说话的角色背地里的行为，记录在 npc_background_actions。
+5.【表里不一判定】（极其重要）：我会提供【近期微信动态】。你需要对比玩家在微信里的发言和她当下的现实行动。如果玩家“当面一套背后一套”，请让知道内情的 NPC 立刻在对话中阴阳怪气或直接拆穿她！"""
 
 AUTHOR_NOTE = """[系统最高指令]
 你必须严格输出合法的 JSON 格式。
@@ -144,6 +145,10 @@ def process_wechat_action(player_msg, current_chat_name, wechat_data_dict, curre
             
         reply_text = "\n\n".join(chat_lines)
         if not reply_text: reply_text = "（对方已读不回）"
+
+        # 将微信记录写入长期记忆，以后可以被 RAG 翻旧账
+        clean_ai_reply = reply_text.replace("\n\n", " ") # 简单清洗一下格式
+        mm.save_interaction(user_input=f"[在微信 {current_chat_name} 中说] {player_msg}", ai_response=clean_ai_reply, user_name="陆陈安然")
             
         wechat_data_dict[current_chat_name][-1] = (player_msg, reply_text)
         yield gr.update(), wechat_data_dict[current_chat_name], wechat_data_dict, affinity, gr.update()
@@ -203,6 +208,17 @@ def process_action(selected_chars, current_evt_id, player_choice, is_transition,
         relevant_docs = mm.vector_store.search(f"{next_evt.name} {action_text}", n_results=3)
         lore_str = "\n".join([d['content'] for d in relevant_docs if "语录" in d.get('content', '')])
     except: lore_str = ""
+
+    # 提取微信动态
+    wechat_summary = "【近期微信动态】\n"
+    has_recent_wechat = False
+    for chat_name, messages in wechat_data_dict.items():
+        if messages: # 提取每个频道最后一条消息
+            last_msg = messages[-1]
+            wechat_summary += f"- 在 {chat_name} 中，玩家刚刚说了：“{last_msg[0]}”。\n"
+            has_recent_wechat = True
+    if not has_recent_wechat:
+        wechat_summary += "无\n"
 
     full_system_prompt = f"{prm}\n\n{encyclopedia}\n【供模仿语录】:\n{lore_str}"
     final_user_input = f"{event_context}\n\n[状态] SAN:{san}, 资金:{money}。\n\n{AUTHOR_NOTE}"
