@@ -6,21 +6,24 @@ class PromptManager:
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.prompts_dir = os.path.join(base_dir, "data", "prompts")
         self.skills_dir = os.path.join(self.prompts_dir, "skills")
+        self.world_dir = os.path.join(self.prompts_dir, "world") # 🌟 新增：专门存放世界观的文件夹
         
         # 确保目录存在
         os.makedirs(self.skills_dir, exist_ok=True)
+        os.makedirs(self.world_dir, exist_ok=True)
         
-        # 自动生成默认的 Markdown 文件（仅在文件不存在时创建，方便你后续独立编辑）
+        # 自动生成默认的 Markdown 文件
         self._init_default_prompt_files()
         
         # 注册系统技能库 (Skills Library)
         self.skills = {
             "wechat_monitor": self._skill_wechat_monitor,
             "slang_dict": self._skill_slang_dict,
+            "academic_world": self._skill_academic_world, # 🌟 注册校园世界观技能
         }
 
     # ==========================================
-    # 🗂️ 文件读取引擎
+    # 文件读取引擎
     # ==========================================
     def _read_md(self, relative_path: str) -> str:
         """从 data/prompts 目录读取 Markdown 文件，支持热更新"""
@@ -31,55 +34,59 @@ class PromptManager:
             return f.read().strip()
 
     # ==========================================
-    # 🧩 技能模块 (Skills) - 通过读取独立的 MD 文件实现
+    # 技能模块 (Skills) - 通过读取独立的 MD 文件实现
     # ==========================================
     def _skill_wechat_monitor(self, context: dict) -> str:
-        """抓绿茶技能：监控微信发言与现实意图的冲突"""
         return self._read_md("skills/wechat_monitor.md")
 
     def _skill_slang_dict(self, context: dict) -> str:
-        """流行词知识库技能：根据学年动态加载对应的 MD 词库文件"""
         chapter = context.get("chapter", 1)
-        # 动态寻找对应学年的流行词库，例如 skills/slang_chapter_1.md
         return self._read_md(f"skills/slang_chapter_{chapter}.md")
 
+    def _skill_academic_world(self, context: dict) -> str:
+        """校园世界观技能：按需加载 Markdown 世界观设定"""
+        # 1. 读取基础学校和专业设定（常驻）
+        world_text = self._read_md("world/base_setting.md") + "\n"
+        
+        # 2. 动态判定：是否处于学术场景
+        event_desc = context.get("event_description", "")
+        event_name = context.get("event_name", "")
+        is_academic_scene = any(keyword in event_desc + event_name for keyword in ["课", "教室", "期末", "老师", "班长", "作业", "发表", "图书馆"])
+        
+        # 3. 如果是学术场景，追加老师和同学的 Markdown 设定
+        if is_academic_scene:
+            world_text += "\n" + self._read_md("world/academic_npcs.md")
+            world_text += "\n⚠️【指令】：当前处于教学区，请在对话中自然引入上述老师或同学的互动，维持他们的性格设定！\n"
+            
+        return world_text
+
     # ==========================================
-    # 🍔 动态组装流水线 (Prompt Assembly)
+    # 动态组装流水线 (Prompt Assembly)
     # ==========================================
     def get_main_system_prompt(self, context: dict) -> str:
-        """读取主线 Prompt 模板，并动态拼接 Skills"""
         base_prompt = self._read_md("main_system.md")
-        
-        # 动态按需加载 Skills
         active_skills = []
         for skill_name, skill_func in self.skills.items():
             skill_text = skill_func(context)
             if skill_text:
                 active_skills.append(skill_text)
                 
-        # 占位符替换：将激活的技能拼接到 [ACTIVE_SKILLS] 位置
         skills_str = "\n\n[已加载的系统动态插件 (Skills)]\n" + "\n".join(active_skills) if active_skills else ""
         
-        # 如果模板里有占位符则替换，没有则直接追加在末尾
         if "[ACTIVE_SKILLS]" in base_prompt:
             return base_prompt.replace("[ACTIVE_SKILLS]", skills_str)
         else:
             return base_prompt + skills_str
 
     def get_main_author_note(self) -> str:
-        """读取底层格式铁律"""
         return self._read_md("main_author_note.md")
 
     def get_wechat_prompt(self, channel_name: str, members: list, context: dict) -> str:
-        """读取微信专用 Prompt 模板，并进行占位符替换"""
         base_wechat = self._read_md("wechat_system.md")
-        
-        # 替换上下文变量
         members_str = ", ".join(members)
         base_wechat = base_wechat.replace("[CHANNEL_NAME]", channel_name)
         base_wechat = base_wechat.replace("[MEMBERS]", members_str)
         
-        # 在微信里也加载流行词技能
         slang_skill = self._skill_slang_dict(context)
         skills_str = "\n\n" + slang_skill if slang_skill else ""
         
@@ -89,11 +96,10 @@ class PromptManager:
             return base_wechat + skills_str
 
     # ==========================================
-    # 🛠️ 首次运行自动生成默认文件 (仅起引导作用)
+    # 🛠️ 首次运行自动生成默认文件
     # ==========================================
     def _init_default_prompt_files(self):
         """如果 MD 文件不存在，则自动创建并写入初始内容"""
-        
         files_to_create = {
             "main_system.md": """你是一个多角色大学生存游戏的 AI 跑团 DM。
 [核心职责]
@@ -103,7 +109,6 @@ class PromptManager:
 4. 【暗场行动】：评估没说话的角色背地里的行为，记录在 npc_background_actions。
 [ACTIVE_SKILLS]
 """,
-            
             "main_author_note.md": """[⚠️ 系统最高指令 / 格式铁律]
 你必须严格输出合法的 JSON 格式。
 ⚠️ 铁律1：字符串内部【绝对不准】使用双引号（"）！如需引述请使用单引号（'）。
@@ -123,14 +128,16 @@ class PromptManager:
     "stat_changes": {"san_delta": -5, "money_delta": 0, "is_argument": true, "affinity_changes": {"陈雨婷": -2}},
     "is_end": false
 }""",
-
             "wechat_system.md": """你正在模拟大学女生寝室的微信聊天。
-[系统级物理隔离警告]
-当前玩家正在【[CHANNEL_NAME]】中发言。该聊天窗口内 **仅存在** 以下角色：[MEMBERS]。
-⚠️ 绝对禁止生成名单之外的任何角色发言！私聊窗口绝对不能出现第三个人！
+
+[群成员与逻辑防线警告]
+当前聊天窗口：【[CHANNEL_NAME]】
+本群/私聊的成员包含：**玩家(陆陈安然)** 以及 **[MEMBERS]**。
+⚠️ 逻辑铁律1：玩家(陆陈安然) 就在这个聊天窗口里！室友们清楚地知道安然能看到这些消息！绝不允许出现“当着安然的面，把安然当做不在场的第三人进行背地里蛐蛐/八卦”的降智行为（除非她们想直接当面撕破脸吵架）！
+⚠️ 逻辑铁律2：绝对禁止生成名单之外的任何角色发言！如果是私聊窗口，绝对不能出现第三个人！
 
 [核心指令]
-1. 玩家刚发了消息，请扮演上述成员进行回复。结合【当前现实进展】。
+1. 玩家(陆陈安然) 刚发了消息，请扮演上述 NPC 成员进行回复。结合【当前现实进展】。
 2. 语言必须是极度真实的【大学生微信风格】：爱用缩写、乱用标点、表情包代词。
 3. 必须严格输出合法 JSON，严禁自创键名！字符串内部严禁使用双引号！
 [ACTIVE_SKILLS]
@@ -140,16 +147,26 @@ class PromptManager:
     "chat_history": [{"sender": "对方名字", "message": "回复内容"}],
     "affinity_changes": {"唐梦琪": 2}
 }""",
-            
             "skills/wechat_monitor.md": "🕵️‍♀️【表里不一判定】：我会提供【近期微信动态】。若玩家在微信里的发言和现实意图严重冲突（当面一套背后一套），请让知道内情的 NPC 立刻在对话中阴阳怪气或直接拆穿她！",
-            
             "skills/slang_chapter_1.md": "💬【年度流行词插件(大一)】：当前是2018年，请在角色（特别是冲浪达人人设）的对话中极其自然地使用以下词汇：[xswl, 绝绝子, 锦鲤, skr, 安排上了]。",
-            
             "skills/slang_chapter_2.md": "💬【年度流行词插件(大二)】：当前是2019年，本学年流行词：[雨女无瓜, 柠檬精, 硬核, 996, 盘他]。",
+            
+            # 世界观基础设定文件
+            "world/base_setting.md": """🏫【全局世界观】：位于江城传媒大学 (虚拟双非院校)。学校位于郊区，物价高，宿管阿姨极其严格，看重考勤。食堂饭菜便宜但常有“神秘加餐”（虫子）。
+📚【专业设定】：你们就读于广播电视编导专业，学业压力极高，经常需要熬夜剪视频、写剧本。""",
+            
+            # 学术 NPC 图鉴文件
+            "world/academic_npcs.md": """👨‍🏫【在场 NPC 图鉴 (教师与同班同学)】：
+- 李建国老师 (《视听语言》): 极其古板、严厉。上课必须收手机，迟到一分钟平时分扣光。口头禅是“你们是我带过最差的一届”。
+- 王莫非老师 (《剧本创作》): 青年讲师，文艺青年，随性自由。上课经常放电影放一半开始扯闲篇，给分极高，但作业非常抽象。
+- 张浩宇 (班长): 极其圆滑，喜欢打官腔，辅导员的狗腿子。经常在班级群发毫无意义的“收到请回复”。
+- 林夏 (学神): 独来独往，永远坐第一排。找她借笔记她会冷漠拒绝。"""
         }
 
         for rel_path, content in files_to_create.items():
             full_path = os.path.join(self.prompts_dir, rel_path)
             if not os.path.exists(full_path):
+                # 确保子目录存在
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
                 with open(full_path, 'w', encoding='utf-8') as f:
                     f.write(content)
