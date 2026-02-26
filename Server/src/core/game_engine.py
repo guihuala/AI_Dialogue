@@ -42,19 +42,21 @@ class GameEngine:
         self.llm.update_config(api_key=api_key, base_url=base_url, model=model)
         
         members = wechat_sys.channels.get(current_chat_name, [])
-        encyclopedia = "【群聊成员图鉴】\n"
-        for name in members:
-            if name in self.candidate_pool:
-                encyclopedia += f"- {name}: {self.candidate_pool[name].Core_Archetype}。冲突风格: {self.candidate_pool[name].Conflict_Style}。\n"
-
+        
+        # 1. 确定现实局势
         event_context = "【当前现实局势】: 日常阶段。"
         if current_evt_id in EVENT_DATABASE:
             evt = EVENT_DATABASE[current_evt_id]
             event_context = f"【当前现实局势】: 现实中正在发生事件“{evt.name}”。"
 
-        # 为了演示，我们将传参写活：
-        context = {"chapter": 1} # 未来如果微信也有学年进度，从 mm 或者传入参数中获取
-        system_prm = f"{self.pm.get_wechat_prompt(current_chat_name, members, context)}\n\n{encyclopedia}\n{event_context}"
+        # 2. 组装微信上下文
+        wechat_context = {
+            "chapter": turn, 
+            "active_chars": members 
+        }
+        
+        # 3. 生成 Prompt
+        system_prm = f"{self.pm.get_wechat_prompt(current_chat_name, members, wechat_context)}\n\n{event_context}"
         user_prm = f"玩家（陆陈安然）发送了：{player_msg}"
 
         try:
@@ -89,6 +91,7 @@ class GameEngine:
         mock_player_stats = {"hygiene": 50, "affinity_xueba": 5} 
         settlement_msg = ""
         
+        # 1. 剧本推进与事件抽取
         if is_transition or current_evt_id == "":
             if turn == 0: self.mm.clear_game_history()
             next_evt = self.director.get_next_event(mock_player_stats, selected_chars)
@@ -107,32 +110,38 @@ class GameEngine:
             pacing = "【节奏：结局】明确收尾，is_end 置为 true。" if turn >= 3 else "【节奏：激化】冲突升级。"
             event_context = f"【事件】: {next_evt.name}\n【回合】: {turn}/3\n{pacing}\n【玩家选择意图】: {action_text}\n⚠️先写玩家的行动/台词，再写室友反应。"
 
-        encyclopedia = "【在场图鉴】\n"
-        for name in selected_chars:
-            if name in self.candidate_pool:
-                encyclopedia += f"- {name}: {self.candidate_pool[name].Core_Archetype}。倾向:[{self.candidate_pool[name].Conflict_Style}]。\n"
-
+        # 2. RAG 检索专属语料 (必须先检索，才能塞入 game_context)
         try:
             relevant_docs = self.mm.vector_store.search(f"{next_evt.name} {action_text}", n_results=3)
             lore_str = "\n".join([d['content'] for d in relevant_docs if "语录" in d.get('content', '')])
-        except: lore_str = ""
+        except: 
+            lore_str = ""
 
+        # 3. 提取微信动态总结
         wechat_summary = "【近期微信动态】\n"
         has_recent_wechat = False
         for chat_name, messages in wechat_data_dict.items():
             if messages:
                 wechat_summary += f"- 在 {chat_name} 中，玩家刚刚说了：“{messages[-1][0]}”。\n"
                 has_recent_wechat = True
-        if not has_recent_wechat: wechat_summary += "无\n"
+        if not has_recent_wechat: 
+            wechat_summary += "无\n"
 
+        # 4. 组装游戏状态 Context
         game_context = {
             "chapter": chapter,
             "turn": turn,
-            "is_exam_week": "期末" in next_evt.name # 未来你可以这样动态判断是否触发考试技能
+            "event_name": next_evt.name,               
+            "event_description": next_evt.description, 
+            "active_chars": selected_chars,
+            "rag_lore": lore_str
         }
-        sys_prm = f"{self.pm.get_main_system_prompt(game_context)}\n\n{encyclopedia}\n【供模仿语录】:\n{lore_str}"
+
+        # 5. 调用 PromptManager 彻底生成纯净的指令
+        sys_prm = self.pm.get_main_system_prompt(game_context)
         user_prm = f"{event_context}\n\n【现有微信通讯录】: {', '.join(wechat_data_dict.keys())}\n{wechat_summary}\n[状态] SAN:{san}, 资金:{money}。\n\n{self.pm.get_main_author_note()}"
 
+        # 6. 开始大模型通讯
         try:
             if getattr(next_evt, 'is_cg', False):
                 parsed = {"narrator_transition": f"[演出] {next_evt.name}", "dialogue_sequence": getattr(next_evt, 'fixed_dialogue', []), "next_options": ["继续"], "stat_changes": {}, "is_end": True if not is_transition else False}
@@ -141,6 +150,7 @@ class GameEngine:
                 res_text = self.llm.generate_response(system_prompt=sys_prm, user_input=user_prm, temperature=tmp, top_p=top_p, max_tokens=max_t, presence_penalty=pres_p, frequency_penalty=freq_p)
                 parsed = self.parse_and_repair_json(res_text)
 
+            # 数值结算
             stats_data = parsed.get("stat_changes", {})
             san = max(0, min(100, san + stats_data.get("san_delta", 0)))
             money += stats_data.get("money_delta", 0)
