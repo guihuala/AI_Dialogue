@@ -110,6 +110,7 @@ class ScriptedEvent(BaseModel):
     event_type: str = "通用随机池"  # 可选: "固定池", "通用随机池", "条件触发池", "角色专属事件"
     trigger_conditions: str = ""   # 对应表格里的 "Hygiene<60", "与角色好感度>50" 等
     exclusive_char: str = ""       # 如果是专属事件，对应角色名（如 "唐梦琪"）
+    is_boss: bool = False
 
     description: str
     potential_conflicts: List[str] = []
