@@ -15,46 +15,140 @@ except Exception as e:
 from src.core.game_engine import GameEngine
 from src.core.wechat_system import WeChatSystem
 
-# 初始化全局唯一游戏引擎实例
 engine = GameEngine()
 
 # ==========================================
-# ⚙️ 新增：后台文件管理系统逻辑 (CMS)
+# ⚙️ CMS 后台目录配置
 # ==========================================
 PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "prompts")
+EVENTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "events")
 
-def get_prompt_files():
-    """获取所有 prompts 目录下的 md 文件"""
-    if not os.path.exists(PROMPTS_DIR):
-        return []
-    search_pattern = os.path.join(PROMPTS_DIR, "**", "*.md")
+DIR_MAPPING = {
+    "root": "🏠 核心基座 (底层 Prompt)",
+    "characters": "👥 角色档案 (室友人设与语料)",
+    "skills": "🧩 动态技能 (流行词等插件)",
+    "world": "🌍 世界观 (学校与 NPC 设定)"
+}
+INV_DIR_MAPPING = {v: k for k, v in DIR_MAPPING.items()}
+
+# --- Prompt CMS 逻辑 ---
+def get_categories():
+    if not os.path.exists(PROMPTS_DIR): return [DIR_MAPPING["root"]]
+    items = os.listdir(PROMPTS_DIR)
+    dirs = [d for d in items if os.path.isdir(os.path.join(PROMPTS_DIR, d))]
+    display_dirs = [DIR_MAPPING["root"]]
+    for d in sorted(dirs): display_dirs.append(DIR_MAPPING.get(d, f"📁 {d}"))
+    return display_dirs
+
+def get_files_by_category(display_cat):
+    if not os.path.exists(PROMPTS_DIR): return []
+    real_cat = INV_DIR_MAPPING.get(display_cat, display_cat.replace("📁 ", ""))
+    target_dir = PROMPTS_DIR if real_cat == "root" else os.path.join(PROMPTS_DIR, real_cat)
+    if not os.path.exists(target_dir): return []
+    search_pattern = os.path.join(target_dir, "**", "*.md")
     files = glob.glob(search_pattern, recursive=True)
-    # 返回相对路径，方便在 UI 中展示
-    return sorted([os.path.relpath(f, PROMPTS_DIR) for f in files])
+    return sorted([os.path.relpath(f, target_dir) for f in files])
 
-def load_prompt_content(rel_path):
-    """读取指定的文件内容"""
+def _get_real_path(display_cat, filename):
+    if not filename: return None
+    real_cat = INV_DIR_MAPPING.get(display_cat, display_cat.replace("📁 ", ""))
+    return filename if real_cat == "root" else os.path.join(real_cat, filename)
+
+def load_prompt_content_ui(display_cat, filename):
+    rel_path = _get_real_path(display_cat, filename)
     if not rel_path: return ""
-    full_path = os.path.join(PROMPTS_DIR, rel_path)
     try:
-        with open(full_path, 'r', encoding='utf-8') as f:
-            return f.read()
-    except Exception as e:
-        return f"读取失败: {e}"
+        with open(os.path.join(PROMPTS_DIR, rel_path), 'r', encoding='utf-8') as f: return f.read()
+    except Exception as e: return f"读取失败: {e}"
 
-def save_prompt_content(rel_path, content):
-    """保存内容到指定文件"""
-    if not rel_path: return gr.update(value="⚠️ 请先在左侧选择一个配置文件！")
-    full_path = os.path.join(PROMPTS_DIR, rel_path)
+def save_prompt_content_ui(display_cat, filename, content):
+    rel_path = _get_real_path(display_cat, filename)
+    if not rel_path: return gr.update(value="⚠️ 请选择文件！")
     try:
-        with open(full_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        return gr.update(value=f"✅ `{rel_path}` 保存成功！(下一回合立即生效)")
-    except Exception as e:
-        return gr.update(value=f"❌ 保存失败: {e}")
+        with open(os.path.join(PROMPTS_DIR, rel_path), 'w', encoding='utf-8') as f: f.write(content)
+        return gr.update(value=f"✅ `{rel_path}` 保存成功！")
+    except Exception as e: return gr.update(value=f"❌ 保存失败: {e}")
+
+def create_new_file_ui(display_cat, new_path):
+    if not new_path.strip(): return gr.update(), gr.update(), gr.update(value="⚠️ 路径不能为空！"), gr.update()
+    if not new_path.endswith('.md'): new_path += '.md'
+    real_cat = INV_DIR_MAPPING.get(display_cat, display_cat.replace("📁 ", ""))
+    target_dir = PROMPTS_DIR if real_cat == "root" else os.path.join(PROMPTS_DIR, real_cat)
+    full_path = os.path.join(target_dir, new_path)
+    try:
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        init_content = "\n\n在此输入设定内容..."
+        if not os.path.exists(full_path):
+            with open(full_path, 'w', encoding='utf-8') as f: f.write(init_content)
+        else:
+            with open(full_path, 'r', encoding='utf-8') as f: init_content = f.read()
+        return gr.update(choices=get_files_by_category(display_cat), value=new_path), init_content, gr.update(value=f"✅ 成功创建！"), gr.update(value="")
+    except Exception as e: return gr.update(), gr.update(), gr.update(value=f"❌ 创建失败: {e}"), gr.update()
 
 # ==========================================
-# 🎮 原有：主线推演逻辑
+# 🌟 升级：基于 Pandas 的事件剧本表逻辑 (Excel式)
+# ==========================================
+def get_event_files():
+    if not os.path.exists(EVENTS_DIR):
+        os.makedirs(EVENTS_DIR, exist_ok=True)
+        return []
+    return sorted([f for f in os.listdir(EVENTS_DIR) if f.endswith('.csv')])
+
+def load_event_csv(filename):
+    """读取 CSV 并转换为 Pandas DataFrame 给 Gradio 渲染"""
+    if not filename: return pd.DataFrame()
+    try:
+        # dtype=str 极其重要：防止类似于"001"的ID被pandas自动转成数字1
+        df = pd.read_csv(os.path.join(EVENTS_DIR, filename), dtype=str)
+        # 将空值(NaN)填为空字符串，防止前端显示错误
+        return df.fillna("")
+    except Exception as e: 
+        return pd.DataFrame({"错误": [f"读取失败: {e}"]})
+
+def save_event_csv(filename, df_content):
+    """接收前端传回的 DataFrame 并保存为 CSV"""
+    if not filename: return gr.update(value="⚠️ 请选择剧本文件！")
+    try:
+        # 如果是字符串说明前端报错了没传回df
+        if isinstance(df_content, str):
+            return gr.update(value="❌ 数据格式错误，请检查表格。")
+            
+        # 将 DataFrame 保存回 CSV
+        df_content.to_csv(os.path.join(EVENTS_DIR, filename), index=False, encoding='utf-8-sig')
+        
+        # 🌟 触发剧本热重载 (Hot Reload)
+        import src.core.event_script as es
+        from src.core.data_loader import load_all_events
+        es.EVENT_DATABASE.clear()
+        es.EVENT_DATABASE.update(load_all_events(EVENTS_DIR))
+        
+        return gr.update(value=f"✅ `{filename}` 写入成功！剧本系统已热更新，当前可用事件: {len(es.EVENT_DATABASE)} 个。")
+    except Exception as e: 
+        return gr.update(value=f"❌ 保存失败: {e}")
+
+def create_new_event_file(filename):
+    if not filename.strip(): return gr.update(), pd.DataFrame(), gr.update(value="⚠️ 不能为空", visible=True)
+    if not filename.endswith('.csv'): filename += '.csv'
+    path = os.path.join(EVENTS_DIR, filename)
+    try:
+        os.makedirs(EVENTS_DIR, exist_ok=True)
+        # 预设标准的剧本表头和一行默认数据
+        cols = ["Event_ID", "事件标题", "所属章节", "事件类型", "触发条件", "专属角色", "是否Boss", "描述", "潜在冲突点", "玩家交互", "结果", "预设剧本"]
+        default_data = [["EVT_NEW_01", "新事件片段", "1", "CG过场", "", "", "FALSE", "描述内容...", "", "", "", "玩家:说话|室友:回复"]]
+        df = pd.DataFrame(default_data, columns=cols)
+        
+        if not os.path.exists(path):
+            df.to_csv(path, index=False, encoding='utf-8-sig')
+        else:
+            df = pd.read_csv(path, dtype=str).fillna("")
+            
+        return gr.update(choices=get_event_files(), value=filename), df, gr.update(value=f"✅ 创建成功！", visible=True)
+    except Exception as e: 
+        return gr.update(), pd.DataFrame(), gr.update(value=f"❌ 创建失败: {e}", visible=True)
+
+
+# ==========================================
+# 🎮 主线推演逻辑
 # ==========================================
 def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition, api_key_val, base_url_val, model_val, tmp, top_p, max_tokens, pres_pen, freq_pen, hist, turn, san, money, gpa, arg_count, chapter, affinity, wechat_data_dict):
     if not is_transition and current_evt_id != "" and not player_choice:
@@ -92,8 +186,7 @@ def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition
                 wechat_data_dict[c_name].append((msg, None)) 
             else:
                 wechat_data_dict[c_name].append((None, f"**{sender}**: {msg}")) 
-                
-            notif_msg += f"- *来自 {c_name}*: {msg[:10]}...\n"
+                notif_msg += f"- *来自 {c_name}*: {msg[:10]}...\n"
             
         hist[-1] = (hist[-1][0], hist[-1][1] + notif_msg) 
         new_chats_ui_update = gr.update(choices=list(wechat_data_dict.keys()), value=res["wechat_notifications"][-1].get("chat_name"))
@@ -180,30 +273,69 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
             )
 
         # ==========================================
-        # Tab 2: 提示词与设定后台 (新增的 CMS 模块)
+        # Tab 2: 提示词与设定后台
         # ==========================================
         with gr.TabItem("⚙️ 设定与提示词后台 (CMS)"):
-            gr.Markdown("### 📝 动态 Prompt 实时编辑器\n> 在此处修改世界观、角色设定或底层指令，点击保存后，**下一回合的对话将立刻应用新设定**，无需重启服务器！")
-            
+            gr.Markdown("### 📝 动态 Prompt 结构化管理器\n> 修改设定后点击保存，**下一回合即刻生效。**")
             with gr.Row():
                 with gr.Column(scale=3):
-                    prompt_file_selector = gr.Dropdown(choices=get_prompt_files(), label="📁 配置文件树", interactive=True)
-                    refresh_files_btn = gr.Button("🔄 刷新文件列表", size="sm")
+                    category_selector = gr.Dropdown(choices=get_categories(), value=DIR_MAPPING["root"], label="📂 第一级：功能模块", interactive=True)
+                    file_selector = gr.Dropdown(choices=get_files_by_category(DIR_MAPPING["root"]), label="📄 第二级：配置文件", interactive=True)
+                    with gr.Accordion("➕ 新建子目录/文件", open=False):
+                        new_file_input = gr.Textbox(label="相对路径 (如: 配角/阿姨.md)", placeholder="输入路径...", show_label=True)
+                        create_file_btn = gr.Button("✨ 新建并打开", variant="secondary")
+                    refresh_files_btn = gr.Button("🔄 重新扫描目录", size="sm")
                 with gr.Column(scale=9):
-                    prompt_editor = gr.Code(language="markdown", label="文件内容编辑器", lines=25, interactive=True)
-                    save_prompt_btn = gr.Button("💾 保存修改 (立即生效)", variant="primary")
+                    prompt_editor = gr.Code(language="markdown", label="文件内容编辑器", lines=20, interactive=True)
+                    save_prompt_btn = gr.Button("💾 写入到硬盘 (立即生效)", variant="primary")
                     save_status = gr.Markdown("")
 
-            # 事件绑定
-            prompt_file_selector.change(fn=load_prompt_content, inputs=[prompt_file_selector], outputs=[prompt_editor])
-            save_prompt_btn.click(fn=save_prompt_content, inputs=[prompt_file_selector, prompt_editor], outputs=[save_status])
-            
-            def update_file_list():
-                return gr.update(choices=get_prompt_files())
-            refresh_files_btn.click(fn=update_file_list, outputs=[prompt_file_selector])
+            def on_category_change(cat):
+                files = get_files_by_category(cat)
+                first_file = files[0] if files else None
+                return gr.update(choices=files, value=first_file), load_prompt_content_ui(cat, first_file) if first_file else ""
+            category_selector.change(fn=on_category_change, inputs=[category_selector], outputs=[file_selector, prompt_editor])
+            file_selector.change(fn=load_prompt_content_ui, inputs=[category_selector, file_selector], outputs=[prompt_editor])
+            save_prompt_btn.click(fn=save_prompt_content_ui, inputs=[category_selector, file_selector, prompt_editor], outputs=[save_status])
+            create_file_btn.click(fn=create_new_file_ui, inputs=[category_selector, new_file_input], outputs=[file_selector, prompt_editor, save_status, new_file_input])
+            refresh_files_btn.click(fn=lambda: (gr.update(choices=get_categories(), value=DIR_MAPPING["root"]), gr.update(choices=get_files_by_category(DIR_MAPPING["root"]), value=None), ""), outputs=[category_selector, file_selector, prompt_editor])
 
         # ==========================================
-        # Tab 3: RAG 记忆后台
+        # Tab 3: 🌟 终极进化：剧本表 Excel 编辑器
+        # ==========================================
+        with gr.TabItem("🎬 剧本数据表后台 (Excel 模式)"):
+            gr.Markdown("### 📅 剧本数据表热更新后台\n> 双击单元格即可修改数据。右下角可以翻页。支持在表格末尾点击增加新行！\n> **修改完毕后点击【💾 保存并热重载】，剧情引擎会立刻读取你的最新剧本！**")
+            
+            with gr.Row():
+                with gr.Column(scale=2):
+                    event_file_selector = gr.Dropdown(choices=get_event_files(), label="📄 现有剧本表 (CSV)", interactive=True)
+                    
+                    with gr.Accordion("➕ 新建空剧本表", open=False):
+                        new_event_input = gr.Textbox(label="文件名 (如: chapter2.csv)", placeholder="输入名称...")
+                        create_event_btn = gr.Button("✨ 新建表单", variant="secondary")
+                        
+                    refresh_events_btn = gr.Button("🔄 重新扫描目录", size="sm")
+                    
+                with gr.Column(scale=10):
+                    # 🌟 核心替换：使用支持 Pandas 数据帧的可编辑表格组件
+                    event_editor = gr.Dataframe(
+                        type="pandas", 
+                        label="剧本表可视化编辑器 (支持直接增删行列)", 
+                        interactive=True, 
+                        wrap=True, 
+                        height=500
+                    )
+                    save_event_btn = gr.Button("💾 保存表格数据并强制热重载", variant="primary")
+                    save_event_status = gr.Markdown("")
+
+            # 绑定表格独有的读取/保存逻辑
+            event_file_selector.change(fn=load_event_csv, inputs=[event_file_selector], outputs=[event_editor])
+            save_event_btn.click(fn=save_event_csv, inputs=[event_file_selector, event_editor], outputs=[save_event_status])
+            create_event_btn.click(fn=create_new_event_file, inputs=[new_event_input], outputs=[event_file_selector, event_editor, save_event_status])
+            refresh_events_btn.click(fn=lambda: gr.update(choices=get_event_files()), outputs=[event_file_selector])
+
+        # ==========================================
+        # Tab 4: RAG 记忆后台
         # ==========================================
         with gr.TabItem("🧠 向量记忆数据库 (RAG)"):
             with gr.Row():

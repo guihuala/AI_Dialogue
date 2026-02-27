@@ -5,86 +5,65 @@ class EventDirector:
     def __init__(self):
         self.used_events = []
         self.current_chapter = 1
-        self.chapter_progress = 0 # 当前章节已经历的事件数
-        self.max_events_per_chapter = 4 # 🌟 设定每章的长度（例如：第4个事件必定是期末Boss结算）
+        self.chapter_progress = 0 # 当前章节进度 (0 到 4)
+        self.max_events_per_chapter = 4 # 🌟 严格设定：1=CG, 2=日常, 3=日常, 4=期末考Boss
         
     def get_next_event(self, player_stats: dict, active_chars: list):
-        """核心调度逻辑：重新编排优先级，确保 CG 和日常交替进行"""
+        """核心调度逻辑：强制遵循 CG -> 随机/专属 -> 随机/专属 -> Boss 的节奏"""
         self.chapter_progress += 1
         
-        # 0. 过滤出当前章节，且未发生过的可用事件
+        # 获取当前章节，且未被消耗过的事件池
         available_events = [e for e in EVENT_DATABASE.values() if e.id not in self.used_events and e.chapter == self.current_chapter]
         
-        # ---------------------------------------------------------
-        # 🌟 优先级 1: 章节 Boss 战 / 关底结算 (进度达到阈值强制触发)
-        # ---------------------------------------------------------
+        # ==========================================
+        # 🎬 阶段 1: 章节开场 CG (必须是本章第 1 个事件)
+        # ==========================================
+        if self.chapter_progress == 1:
+            # 寻找标记了 CG 的事件
+            cg_events = [e for e in available_events if "CG" in e.event_type.upper() or getattr(e, 'is_cg', False)]
+            if cg_events:
+                evt = cg_events[0] # 按配置表顺序取第一段 CG
+                self.used_events.append(evt.id)
+                return evt
+
+        # ==========================================
+        # ⚔️ 阶段 4: 期末 Boss / 关底结算
+        # ==========================================
         if self.chapter_progress >= self.max_events_per_chapter:
-            self.chapter_progress = 0
-            self.current_chapter += 1 # 推进到下一章
-            
-            boss_events = [e for e in EVENT_DATABASE.values() if e.chapter == self.current_chapter - 1 and getattr(e, 'is_boss', False)]
-            if boss_events: 
+            boss_events = [e for e in available_events if getattr(e, 'is_boss', False)]
+            evt = None
+            if boss_events:
                 evt = boss_events[0]
                 self.used_events.append(evt.id)
-                return evt
+            
+            # 🌟 状态重置，偷偷把回合推进到下一章，等这个事件结束后生效
+            self.chapter_progress = 0
+            self.current_chapter += 1 
+            
+            # 如果这章忘了配 Boss，就直接无缝递归进入下一章的 CG
+            return evt if evt else self.get_next_event(player_stats, active_chars)
 
-        # ---------------------------------------------------------
-        # 🌟 优先级 2: 章节开场 CG 或 固定主线 (只要是本章的第 1 个事件，强制播过场)
-        # ---------------------------------------------------------
-        if self.chapter_progress == 1:
-            fixed_events = [e for e in available_events if "固定" in e.event_type or getattr(e, 'is_cg', False)]
-            if fixed_events:
-                evt = fixed_events[0] # 按配置表顺序取第一个
-                self.used_events.append(evt.id)
-                return evt
-
-        # ---------------------------------------------------------
-        # 🌟 优先级 3: 紧急条件触发池 (玩家数值告急时，强制打断日常)
-        # ---------------------------------------------------------
-        if player_stats.get("hygiene", 100) < 60:
-            cond_events = [e for e in available_events if "条件" in e.event_type and "Hygiene" in e.trigger_conditions]
-            if cond_events:
-                evt = random.choice(cond_events)
-                self.used_events.append(evt.id)
-                return evt
-                
-        if player_stats.get("money", 1500) < 300: # 如果玩家快破产了，触发吃土事件
-            cond_events = [e for e in available_events if "条件" in e.event_type and "Money" in e.trigger_conditions]
-            if cond_events:
-                evt = random.choice(cond_events)
-                self.used_events.append(evt.id)
-                return evt
-
-        # ---------------------------------------------------------
-        # 🌟 优先级 4: 角色专属事件 (根据在场人员概率触发)
-        # ---------------------------------------------------------
-        ex_events = []
-        for e in available_events:
-            # 如果事件专属角色在场，加入备选池
-            if "专属" in e.event_type and e.exclusive_char in active_chars:
-                ex_events.append(e)
+        # ==========================================
+        # 🎲 阶段 2 & 3: 日常随机池与角色专属事件
+        # ==========================================
+        pool = []
         
-        # 50%的几率触发专属剧情，留50%给日常，防止太生硬
+        # 1. 先尝试捞取“在场角色”的专属事件 (50% 几率触发，防止太突兀)
+        ex_events = [e for e in available_events if "专属" in e.event_type and e.exclusive_char in active_chars]
         if ex_events and random.random() < 0.5:
-            evt = random.choice(ex_events)
+            pool = ex_events
+            
+        # 2. 如果没触发专属，则捞取“通用随机池”
+        if not pool:
+            pool = [e for e in available_events if "通用" in e.event_type or "随机" in e.event_type]
+            
+        # 3. 终极兜底：如果上面的池子都空了，剩下的事件有什么抽什么
+        if not pool:
+            pool = available_events
+            
+        if pool:
+            evt = random.choice(pool)
             self.used_events.append(evt.id)
             return evt
             
-        # ---------------------------------------------------------
-        # 🌟 优先级 5: 通用随机池 (日常划水填充)
-        # ---------------------------------------------------------
-        rand_events = [e for e in available_events if "通用" in e.event_type or "随机" in e.event_type]
-        if rand_events:
-            evt = random.choice(rand_events)
-            self.used_events.append(evt.id)
-            return evt
-            
-        # ---------------------------------------------------------
-        # 🌟 兜底：如果上面的卡池都没抽到，有什么出什么
-        # ---------------------------------------------------------
-        if available_events:
-            evt = random.choice(available_events)
-            self.used_events.append(evt.id)
-            return evt
-            
-        return None # 卡池彻底抽空，游戏结束
+        return None # 剧本池被彻底抽干，游戏通关结束
