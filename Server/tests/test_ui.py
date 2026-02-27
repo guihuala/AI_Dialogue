@@ -2,6 +2,7 @@ import gradio as gr
 import pandas as pd
 import sys
 import os
+import glob
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -14,14 +15,52 @@ except Exception as e:
 from src.core.game_engine import GameEngine
 from src.core.wechat_system import WeChatSystem
 
+# 初始化全局唯一游戏引擎实例
 engine = GameEngine()
 
+# ==========================================
+# ⚙️ 新增：后台文件管理系统逻辑 (CMS)
+# ==========================================
+PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "prompts")
+
+def get_prompt_files():
+    """获取所有 prompts 目录下的 md 文件"""
+    if not os.path.exists(PROMPTS_DIR):
+        return []
+    search_pattern = os.path.join(PROMPTS_DIR, "**", "*.md")
+    files = glob.glob(search_pattern, recursive=True)
+    # 返回相对路径，方便在 UI 中展示
+    return sorted([os.path.relpath(f, PROMPTS_DIR) for f in files])
+
+def load_prompt_content(rel_path):
+    """读取指定的文件内容"""
+    if not rel_path: return ""
+    full_path = os.path.join(PROMPTS_DIR, rel_path)
+    try:
+        with open(full_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception as e:
+        return f"读取失败: {e}"
+
+def save_prompt_content(rel_path, content):
+    """保存内容到指定文件"""
+    if not rel_path: return gr.update(value="⚠️ 请先在左侧选择一个配置文件！")
+    full_path = os.path.join(PROMPTS_DIR, rel_path)
+    try:
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return gr.update(value=f"✅ `{rel_path}` 保存成功！(下一回合立即生效)")
+    except Exception as e:
+        return gr.update(value=f"❌ 保存失败: {e}")
+
+# ==========================================
+# 🎮 原有：主线推演逻辑
+# ==========================================
 def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition, api_key_val, base_url_val, model_val, tmp, top_p, max_tokens, pres_pen, freq_pen, hist, turn, san, money, gpa, arg_count, chapter, affinity, wechat_data_dict):
     if not is_transition and current_evt_id != "" and not player_choice:
         yield gr.update(), gr.update(), hist + [("（未作选择）", "⚠️ 请选择一项行为！")], turn, gr.update(), gr.update(), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, gr.update(), gr.update(), affinity, gr.update(), wechat_data_dict
         return
 
-    # 动态生成/同步微信白名单
     ws = WeChatSystem(selected_chars)
     for ch in ws.channels.keys():
         if ch not in wechat_data_dict: wechat_data_dict[ch] = []
@@ -42,8 +81,6 @@ def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition
     hist.append((action_text, res["display_text"]))
     
     new_chats_ui_update = gr.update()
-    
-    # 🌟 核心：将玩家与NPC的微信消息分类渲染到手机屏幕上
     if res["wechat_notifications"]:
         notif_msg = "\n\n🔔 **【手机震动】您收到新的微信消息！**\n"
         for w in res["wechat_notifications"]:
@@ -51,11 +88,10 @@ def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition
             sender = w.get("sender", "神秘人")
             msg = w.get("message", "")
             
-            # 区分玩家发言和 NPC 发言在 Gradio 里的左右侧显示
             if sender == "陆陈安然":
-                wechat_data_dict[c_name].append((msg, None)) # 玩家在右
+                wechat_data_dict[c_name].append((msg, None)) 
             else:
-                wechat_data_dict[c_name].append((None, f"**{sender}**: {msg}")) # NPC在左
+                wechat_data_dict[c_name].append((None, f"**{sender}**: {msg}")) 
                 
             notif_msg += f"- *来自 {c_name}*: {msg[:10]}...\n"
             
@@ -93,6 +129,9 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
     state_wechat_data = gr.State({"【404 仙女下凡大群】": []}) 
     
     with gr.Tabs():
+        # ==========================================
+        # Tab 1: 核心游戏视窗
+        # ==========================================
         with gr.TabItem("🎮 核心游戏视窗"):
             state_current_event_id = gr.State("")
             state_turn, state_is_transition = gr.State(0), gr.State(True) 
@@ -140,7 +179,33 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
                 outputs=[output_json, dynamic_options, chatbot, state_turn, status_text, action_btn, state_is_transition, state_current_event_id, state_san, state_money, state_gpa, state_args, state_chapter, stats_panel, char_info_panel, state_affinity, chat_selector, state_wechat_data]
             )
 
-        with gr.TabItem("后台数据库 (RAG)"):
+        # ==========================================
+        # Tab 2: 提示词与设定后台 (新增的 CMS 模块)
+        # ==========================================
+        with gr.TabItem("⚙️ 设定与提示词后台 (CMS)"):
+            gr.Markdown("### 📝 动态 Prompt 实时编辑器\n> 在此处修改世界观、角色设定或底层指令，点击保存后，**下一回合的对话将立刻应用新设定**，无需重启服务器！")
+            
+            with gr.Row():
+                with gr.Column(scale=3):
+                    prompt_file_selector = gr.Dropdown(choices=get_prompt_files(), label="📁 配置文件树", interactive=True)
+                    refresh_files_btn = gr.Button("🔄 刷新文件列表", size="sm")
+                with gr.Column(scale=9):
+                    prompt_editor = gr.Code(language="markdown", label="文件内容编辑器", lines=25, interactive=True)
+                    save_prompt_btn = gr.Button("💾 保存修改 (立即生效)", variant="primary")
+                    save_status = gr.Markdown("")
+
+            # 事件绑定
+            prompt_file_selector.change(fn=load_prompt_content, inputs=[prompt_file_selector], outputs=[prompt_editor])
+            save_prompt_btn.click(fn=save_prompt_content, inputs=[prompt_file_selector, prompt_editor], outputs=[save_status])
+            
+            def update_file_list():
+                return gr.update(choices=get_prompt_files())
+            refresh_files_btn.click(fn=update_file_list, outputs=[prompt_file_selector])
+
+        # ==========================================
+        # Tab 3: RAG 记忆后台
+        # ==========================================
+        with gr.TabItem("🧠 向量记忆数据库 (RAG)"):
             with gr.Row():
                 refresh_btn = gr.Button("刷新数据库表单", variant="secondary")
                 clear_mem_btn = gr.Button("清除历史记录", variant="stop")

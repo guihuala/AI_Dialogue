@@ -30,29 +30,30 @@ class GameEngine:
         self.pm = PromptManager()
 
     def parse_and_repair_json(self, raw_text):
-        """强化版 JSON 容错解析器"""
-        # 1. 剥离大模型经常附带的 markdown 标记
+        """装甲强化版 JSON 容错解析器"""
         raw_text = re.sub(r'```json\s*', '', raw_text)
         raw_text = re.sub(r'```\s*', '', raw_text)
         
         match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         raw_json = match.group(0) if match else raw_text
-        
-        # ⚠️ 致命修复：绝对不要把中文引号替换为英文双引号！
-        # 只修复常犯的全角冒号问题
         raw_json = raw_json.replace("：", ":")
         
         try:
-            return json.loads(repair_json(raw_json))
+            repaired = repair_json(raw_json)
+            parsed = json.loads(repaired) if isinstance(repaired, str) else repaired
+            
+            # 🌟 防御 1：如果大模型连最外层都没生成字典，直接打回重做
+            if not isinstance(parsed, dict):
+                raise ValueError(f"大模型返回了非字典结构: {type(parsed)}")
+            return parsed
         except Exception as e:
             print(f"❌ JSON 彻底解析失败: {e}\n原文: {raw_json}")
-            # 终极兜底：如果解析彻底失败，返回一个安全结构，防止游戏直接卡死崩溃
             return {
                 "narrator_transition": "（系统受到了一阵未知的干扰，局势变得有些混乱...）",
                 "dialogue_sequence": [],
                 "npc_background_actions": [],
                 "wechat_notifications": [],
-                "next_options": ["【深呼吸】", "【继续观察】", "【试图理清现状】", "【转移视线】", "【沉默】"],
+                "next_options": ["【深呼吸】", "【继续观察】", "【试图理清现状】", "【沉默】", "【叹气】"],
                 "stat_changes": {},
                 "is_end": False
             }
@@ -91,7 +92,6 @@ class GameEngine:
         has_recent_wechat = False
         for chat_name, messages in wechat_data_dict.items():
             if messages:
-                # 记录最后一条消息的内容
                 last_msg = messages[-1]
                 msg_content = last_msg[0] if last_msg[0] else last_msg[1].replace("**", "")
                 wechat_summary += f"- 在 {chat_name} 中，最后消息：“{msg_content}”。\n"
@@ -118,52 +118,67 @@ class GameEngine:
                 res_text = self.llm.generate_response(system_prompt=sys_prm, user_input=user_prm, temperature=tmp, top_p=top_p, max_tokens=max_t, presence_penalty=pres_p, frequency_penalty=freq_p)
                 parsed = self.parse_and_repair_json(res_text)
 
+            # 🌟 防御 2：安全提取数值变动
             stats_data = parsed.get("stat_changes", {})
+            if not isinstance(stats_data, dict): stats_data = {} # 防御字符串
+            
             san = max(0, min(100, san + stats_data.get("san_delta", 0)))
             money += stats_data.get("money_delta", 0)
             if stats_data.get("is_argument", False): arg_count += 1
-            for char_name, change_val in stats_data.get("affinity_changes", {}).items():
-                if char_name in affinity: affinity[char_name] = max(0, min(100, affinity[char_name] + change_val))
+            
+            aff_changes = stats_data.get("affinity_changes", {})
+            if isinstance(aff_changes, dict):
+                for char_name, change_val in aff_changes.items():
+                    if char_name in affinity: affinity[char_name] = max(0, min(100, affinity[char_name] + change_val))
                 
             display_text = settlement_msg
             if parsed.get("narrator_transition"): display_text += f"{parsed['narrator_transition']}\n\n"
             
+            # 🌟 防御 3：安全提取对话
             dialogue_lines = []
-            for t in parsed.get("dialogue_sequence", []):
-                spk, cont = t.get("speaker", "神秘人"), t.get("content", "")
-                if not cont: cont = max([str(v) for k, v in t.items() if k not in ['speaker', 'mood']], key=len, default="")
-                dialogue_lines.append(f"**[{spk}]** {cont}")
+            seq = parsed.get("dialogue_sequence", [])
+            if isinstance(seq, list):
+                for t in seq:
+                    if not isinstance(t, dict): continue
+                    spk, cont = t.get("speaker", "神秘人"), t.get("content", "")
+                    if not cont: cont = max([str(v) for k, v in t.items() if k not in ['speaker', 'mood']], key=len, default="")
+                    dialogue_lines.append(f"**[{spk}]** {cont}")
             display_text += "\n\n".join(dialogue_lines)
             
-            for act in parsed.get("npc_background_actions", []):
-                c_name, c_act, c_aff = act.get("character", "神秘人"), act.get("action", ""), act.get("affinity_change", 0)
-                if c_name in affinity and c_aff != 0:
-                    affinity[c_name] = max(0, min(100, affinity[c_name] + c_aff))
-                    aff_sign = f" (好感 {c_aff})" if c_aff < 0 else f" (好感 +{c_aff})"
-                else: aff_sign = ""
-                display_text += f"\n\n> 👁️ **[暗场动态] {c_name}**: {c_act}{aff_sign}"
+            # 🌟 防御 4：安全提取暗场动作
+            acts = parsed.get("npc_background_actions", [])
+            if isinstance(acts, list):
+                for act in acts:
+                    if not isinstance(act, dict): continue
+                    c_name, c_act, c_aff = act.get("character", "神秘人"), act.get("action", ""), act.get("affinity_change", 0)
+                    if c_name in affinity and isinstance(c_aff, (int, float)) and c_aff != 0:
+                        affinity[c_name] = max(0, min(100, affinity[c_name] + c_aff))
+                        aff_sign = f" (好感 {c_aff})" if c_aff < 0 else f" (好感 +{c_aff})"
+                    else: aff_sign = ""
+                    display_text += f"\n\n> 👁️ **[暗场动态] {c_name}**: {c_act}{aff_sign}"
 
             is_end = True if turn >= 3 else parsed.get("is_end", False)
             if not getattr(next_evt, 'is_cg', False) and action_text and "（时间推移..." not in action_text:
                 self.mm.save_interaction(user_input=action_text, ai_response=" ".join(dialogue_lines), user_name="陆陈安然")
             
-            # 这里提取所有的微信通知并过滤合法群聊
-            # 这里提取所有的微信通知并过滤合法群聊
+            # 🌟 防御 5：安全提取微信消息
             valid_notifs = []
-            for w in parsed.get("wechat_notifications", []):
-                c_name = w.get("chat_name", "")
-                if not c_name: continue
-                # 动态建群
-                if c_name not in wechat_data_dict:
-                    wechat_data_dict[c_name] = []
-                valid_notifs.append(w)
+            wechat_list = parsed.get("wechat_notifications", [])
+            if isinstance(wechat_list, list):
+                for w in wechat_list:
+                    if not isinstance(w, dict): continue # 如果 AI 输出了字符串，直接跳过
+                    c_name = w.get("chat_name", "")
+                    if not c_name: continue
+                    # 动态建群
+                    if c_name not in wechat_data_dict:
+                        wechat_data_dict[c_name] = []
+                    valid_notifs.append(w)
 
-            # 🌟 修复：必须在 return 字典之前，先把选项提取和兜底逻辑算好
+            # 🌟 防御 6：安全提取并兜底选项
             extracted_options = parsed.get("next_options", [])
-            if not extracted_options: # 如果 AI 犯病忘记生成选项，强行补上
+            if not isinstance(extracted_options, list) or not extracted_options:
                 extracted_options = ["【深呼吸】", "【继续观察】", "【转移话题】", "【沉默】", "【叹气】"]
 
-            # 最后统一返回干净的字典
             return {
                 "is_game_over": False, 
                 "res_text": res_text, 
@@ -177,7 +192,7 @@ class GameEngine:
                 "affinity": affinity, 
                 "current_evt_id": next_evt.id,
                 "is_end": is_end, 
-                "next_options": extracted_options, # 使用兜底选项
+                "next_options": extracted_options, 
                 "wechat_notifications": valid_notifs
             }
         except Exception as e:
