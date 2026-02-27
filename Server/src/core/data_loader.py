@@ -13,7 +13,6 @@ def load_all_events(events_dir: str) -> dict:
             
         file_path = os.path.join(events_dir, filename)
         
-        # 1. 根据文件名判定类型
         default_type = "通用随机池"
         if "CG" in filename.upper(): default_type = "CG过场"
         elif "固定" in filename: default_type = "固定池"
@@ -27,21 +26,21 @@ def load_all_events(events_dir: str) -> dict:
                     evt_id = row.get("Event_ID", "").strip()
                     if not evt_id: continue 
                     
-                    options_dict = {k.strip(): v.strip() for opt in row.get("玩家交互", "").split("|") if ":" in opt for k, v in [opt.split(":", 1)]}
-                    outcomes_dict = {k.strip(): v.strip() for out in row.get("结果", "").split("|") if ":" in out for k, v in [out.split(":", 1)]}
+                    options_dict = {k.strip(): v.strip() for opt in row.get("玩家交互", "").split("|") if ":" in opt.replace("：", ":") for k, v in [opt.replace("：", ":").split(":", 1)]}
+                    outcomes_dict = {k.strip(): v.strip() for out in row.get("结果", "").split("|") if ":" in out.replace("：", ":") for k, v in [out.replace("：", ":").split(":", 1)]}
                     
                     is_boss_str = str(row.get("是否Boss", "FALSE")).strip().upper()
                     
-                    # 🌟 2. 解析 CG 专属的“预设剧本”
+                    # 🌟 核心修复：强制将所有中文冒号转为英文冒号，完美防错！
                     raw_fixed_dialogue = row.get("预设剧本", "").strip()
                     fixed_dialogue = []
                     if raw_fixed_dialogue:
                         for line in raw_fixed_dialogue.split("|"):
+                            line = line.replace("：", ":")
                             if ":" in line:
                                 spk, cont = line.split(":", 1)
                                 fixed_dialogue.append({"speaker": spk.strip(), "content": cont.strip(), "mood": "neutral"})
                     
-                    # 如果填了预设剧本，或者在这个表里，就是 CG
                     is_cg = (len(fixed_dialogue) > 0 or default_type == "CG过场")
 
                     event = ScriptedEvent(

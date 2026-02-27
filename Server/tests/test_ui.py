@@ -3,6 +3,7 @@ import pandas as pd
 import sys
 import os
 import glob
+import json
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -31,7 +32,6 @@ DIR_MAPPING = {
 }
 INV_DIR_MAPPING = {v: k for k, v in DIR_MAPPING.items()}
 
-# --- Prompt CMS 逻辑 ---
 def get_categories():
     if not os.path.exists(PROMPTS_DIR): return [DIR_MAPPING["root"]]
     items = os.listdir(PROMPTS_DIR)
@@ -85,46 +85,26 @@ def create_new_file_ui(display_cat, new_path):
         return gr.update(choices=get_files_by_category(display_cat), value=new_path), init_content, gr.update(value=f"✅ 成功创建！"), gr.update(value="")
     except Exception as e: return gr.update(), gr.update(), gr.update(value=f"❌ 创建失败: {e}"), gr.update()
 
-# ==========================================
-# 🌟 升级：基于 Pandas 的事件剧本表逻辑 (Excel式)
-# ==========================================
 def get_event_files():
-    if not os.path.exists(EVENTS_DIR):
-        os.makedirs(EVENTS_DIR, exist_ok=True)
-        return []
+    if not os.path.exists(EVENTS_DIR): os.makedirs(EVENTS_DIR, exist_ok=True)
     return sorted([f for f in os.listdir(EVENTS_DIR) if f.endswith('.csv')])
 
 def load_event_csv(filename):
-    """读取 CSV 并转换为 Pandas DataFrame 给 Gradio 渲染"""
     if not filename: return pd.DataFrame()
-    try:
-        # dtype=str 极其重要：防止类似于"001"的ID被pandas自动转成数字1
-        df = pd.read_csv(os.path.join(EVENTS_DIR, filename), dtype=str)
-        # 将空值(NaN)填为空字符串，防止前端显示错误
-        return df.fillna("")
-    except Exception as e: 
-        return pd.DataFrame({"错误": [f"读取失败: {e}"]})
+    try: return pd.read_csv(os.path.join(EVENTS_DIR, filename), dtype=str).fillna("")
+    except Exception as e: return pd.DataFrame({"错误": [f"读取失败: {e}"]})
 
 def save_event_csv(filename, df_content):
-    """接收前端传回的 DataFrame 并保存为 CSV"""
     if not filename: return gr.update(value="⚠️ 请选择剧本文件！")
     try:
-        # 如果是字符串说明前端报错了没传回df
-        if isinstance(df_content, str):
-            return gr.update(value="❌ 数据格式错误，请检查表格。")
-            
-        # 将 DataFrame 保存回 CSV
+        if isinstance(df_content, str): return gr.update(value="❌ 数据格式错误，请检查表格。")
         df_content.to_csv(os.path.join(EVENTS_DIR, filename), index=False, encoding='utf-8-sig')
-        
-        # 🌟 触发剧本热重载 (Hot Reload)
         import src.core.event_script as es
         from src.core.data_loader import load_all_events
         es.EVENT_DATABASE.clear()
         es.EVENT_DATABASE.update(load_all_events(EVENTS_DIR))
-        
-        return gr.update(value=f"✅ `{filename}` 写入成功！剧本系统已热更新，当前可用事件: {len(es.EVENT_DATABASE)} 个。")
-    except Exception as e: 
-        return gr.update(value=f"❌ 保存失败: {e}")
+        return gr.update(value=f"✅ `{filename}` 保存成功并已热重载！")
+    except Exception as e: return gr.update(value=f"❌ 保存失败: {e}")
 
 def create_new_event_file(filename):
     if not filename.strip(): return gr.update(), pd.DataFrame(), gr.update(value="⚠️ 不能为空", visible=True)
@@ -132,20 +112,27 @@ def create_new_event_file(filename):
     path = os.path.join(EVENTS_DIR, filename)
     try:
         os.makedirs(EVENTS_DIR, exist_ok=True)
-        # 预设标准的剧本表头和一行默认数据
         cols = ["Event_ID", "事件标题", "所属章节", "事件类型", "触发条件", "专属角色", "是否Boss", "描述", "潜在冲突点", "玩家交互", "结果", "预设剧本"]
-        default_data = [["EVT_NEW_01", "新事件片段", "1", "CG过场", "", "", "FALSE", "描述内容...", "", "", "", "玩家:说话|室友:回复"]]
+        default_data = [["EVT_NEW_01", "新事件片段", "1", "CG过场", "", "", "FALSE", "描述内容...", "", "", "", "旁白:开始了|玩家:说话"]]
         df = pd.DataFrame(default_data, columns=cols)
-        
-        if not os.path.exists(path):
-            df.to_csv(path, index=False, encoding='utf-8-sig')
-        else:
-            df = pd.read_csv(path, dtype=str).fillna("")
-            
+        if not os.path.exists(path): df.to_csv(path, index=False, encoding='utf-8-sig')
+        else: df = pd.read_csv(path, dtype=str).fillna("")
         return gr.update(choices=get_event_files(), value=filename), df, gr.update(value=f"✅ 创建成功！", visible=True)
-    except Exception as e: 
-        return gr.update(), pd.DataFrame(), gr.update(value=f"❌ 创建失败: {e}", visible=True)
+    except Exception as e: return gr.update(), pd.DataFrame(), gr.update(value=f"❌ 创建失败: {e}", visible=True)
 
+# 🌟 新增：读取和保存 timeline.json 逻辑
+def load_timeline_config():
+    timeline_path = os.path.join(EVENTS_DIR, "timeline.json")
+    if not os.path.exists(timeline_path): engine.director.reload_timeline()
+    with open(timeline_path, 'r', encoding='utf-8') as f: return f.read()
+
+def save_timeline_config(content):
+    try:
+        json.loads(content) # 校验 JSON 合法性
+        with open(os.path.join(EVENTS_DIR, "timeline.json"), 'w', encoding='utf-8') as f: f.write(content)
+        engine.director.reload_timeline()
+        return gr.update(value="✅ 时间轴保存成功并已热重载生效！")
+    except Exception as e: return gr.update(value=f"❌ 格式错误，请检查 JSON 语法: {e}")
 
 # ==========================================
 # 🎮 主线推演逻辑
@@ -301,34 +288,41 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
             refresh_files_btn.click(fn=lambda: (gr.update(choices=get_categories(), value=DIR_MAPPING["root"]), gr.update(choices=get_files_by_category(DIR_MAPPING["root"]), value=None), ""), outputs=[category_selector, file_selector, prompt_editor])
 
         # ==========================================
-        # Tab 3: 🌟 终极进化：剧本表 Excel 编辑器
+        # Tab 3: 🌟 剧本与事件编辑器 (Excel + 时间轴)
         # ==========================================
-        with gr.TabItem("🎬 剧本数据表后台 (Excel 模式)"):
-            gr.Markdown("### 📅 剧本数据表热更新后台\n> 双击单元格即可修改数据。右下角可以翻页。支持在表格末尾点击增加新行！\n> **修改完毕后点击【💾 保存并热重载】，剧情引擎会立刻读取你的最新剧本！**")
+        with gr.TabItem("🎬 剧本数据表与时间轴"):
+            
+            with gr.Accordion("📅 章节时间轴配置 (timeline.json)", open=True):
+                gr.Markdown("> 编写 **JSON 数组** 来严格定义每一章触发哪些事件卡池。可用关键词：`CG`, `条件`, `专属`, `通用`, `随机或专属`, `Boss`。")
+                # 初始加载时自动获取 JSON 字符串
+                timeline_editor = gr.Code(language="json", label="时间轴配置", value=load_timeline_config(), lines=8, interactive=True)
+                save_timeline_btn = gr.Button("💾 保存时间轴并重载", variant="secondary")
+                timeline_status = gr.Markdown("")
+                save_timeline_btn.click(fn=save_timeline_config, inputs=[timeline_editor], outputs=[timeline_status])
+
+            gr.Markdown("---")
+            gr.Markdown("### 剧本数据表热更新后台\n> 双击单元格直接修改。CG剧情请将类型填为`CG过场`并在【预设剧本】中写`人名:台词|人名:台词`。")
             
             with gr.Row():
                 with gr.Column(scale=2):
-                    event_file_selector = gr.Dropdown(choices=get_event_files(), label="📄 现有剧本表 (CSV)", interactive=True)
+                    event_file_selector = gr.Dropdown(choices=get_event_files(), label="现有剧本表 (CSV)", interactive=True)
                     
                     with gr.Accordion("➕ 新建空剧本表", open=False):
                         new_event_input = gr.Textbox(label="文件名 (如: chapter2.csv)", placeholder="输入名称...")
-                        create_event_btn = gr.Button("✨ 新建表单", variant="secondary")
+                        create_event_btn = gr.Button("新建表单", variant="secondary")
                         
-                    refresh_events_btn = gr.Button("🔄 重新扫描目录", size="sm")
+                    refresh_events_btn = gr.Button("重新扫描目录", size="sm")
                     
                 with gr.Column(scale=10):
-                    # 🌟 核心替换：使用支持 Pandas 数据帧的可编辑表格组件
                     event_editor = gr.Dataframe(
                         type="pandas", 
-                        label="剧本表可视化编辑器 (支持直接增删行列)", 
+                        label="剧本表可视化编辑器", 
                         interactive=True, 
-                        wrap=True, 
-                        height=500
+                        height=400
                     )
-                    save_event_btn = gr.Button("💾 保存表格数据并强制热重载", variant="primary")
+                    save_event_btn = gr.Button("保存表格数据并强制热重载", variant="primary")
                     save_event_status = gr.Markdown("")
 
-            # 绑定表格独有的读取/保存逻辑
             event_file_selector.change(fn=load_event_csv, inputs=[event_file_selector], outputs=[event_editor])
             save_event_btn.click(fn=save_event_csv, inputs=[event_file_selector, event_editor], outputs=[save_event_status])
             create_event_btn.click(fn=create_new_event_file, inputs=[new_event_input], outputs=[event_file_selector, event_editor, save_event_status])
@@ -342,7 +336,7 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
                 refresh_btn = gr.Button("刷新数据库表单", variant="secondary")
                 clear_mem_btn = gr.Button("清除历史记录", variant="stop")
             def clear_and_refresh(): engine.mm.clear_game_history(); return fetch_all_memories()
-            memory_dataframe = gr.Dataframe(headers=["ID", "内容", "类型", "重要度", "时间戳"], datatype=["str", "str", "str", "number", "str"], interactive=False, wrap=True)
+            memory_dataframe = gr.Dataframe(headers=["ID", "内容", "类型", "重要度", "时间戳"], datatype=["str", "str", "str", "number", "str"], interactive=False)
             clear_mem_btn.click(fn=clear_and_refresh, outputs=memory_dataframe)
             refresh_btn.click(fn=fetch_all_memories, outputs=memory_dataframe)
             demo.load(fn=fetch_all_memories, outputs=memory_dataframe)

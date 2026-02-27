@@ -112,13 +112,19 @@ class GameEngine:
 
         try:
             if getattr(next_evt, 'is_cg', False):
-                parsed = {"narrator_transition": f"[演出] {next_evt.name}", "dialogue_sequence": getattr(next_evt, 'fixed_dialogue', []), "next_options": ["继续"], "stat_changes": {}, "is_end": True if not is_transition else False}
+                parsed = {
+                    "narrator_transition": f"🎬 **[剧情演出] {next_evt.name}**\n---", 
+                    "dialogue_sequence": getattr(next_evt, 'fixed_dialogue', []), 
+                    "next_options": [], # 留空，强制显示“继续下一步”按钮
+                    "stat_changes": {}, 
+                    "is_end": True # 核心修复：CG放完直接结束当前事件闭环
+                }
                 res_text = json.dumps(parsed, ensure_ascii=False)
             else:
                 res_text = self.llm.generate_response(system_prompt=sys_prm, user_input=user_prm, temperature=tmp, top_p=top_p, max_tokens=max_t, presence_penalty=pres_p, frequency_penalty=freq_p)
                 parsed = self.parse_and_repair_json(res_text)
 
-            # 🌟 防御 2：安全提取数值变动
+            # 防御 2：安全提取数值变动
             stats_data = parsed.get("stat_changes", {})
             if not isinstance(stats_data, dict): stats_data = {} # 防御字符串
             
@@ -155,7 +161,7 @@ class GameEngine:
                         affinity[c_name] = max(0, min(100, affinity[c_name] + c_aff))
                         aff_sign = f" (好感 {c_aff})" if c_aff < 0 else f" (好感 +{c_aff})"
                     else: aff_sign = ""
-                    display_text += f"\n\n> 👁️ **[暗场动态] {c_name}**: {c_act}{aff_sign}"
+                    display_text += f"\n\n> **[暗场动态] {c_name}**: {c_act}{aff_sign}"
 
             is_end = True if turn >= 3 else parsed.get("is_end", False)
             if not getattr(next_evt, 'is_cg', False) and action_text and "（时间推移..." not in action_text:
