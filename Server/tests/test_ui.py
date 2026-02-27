@@ -11,66 +11,56 @@ try:
 except Exception as e:
     print(f"提示：请确保已手动运行过 build_knowledge.py 注入语料。({e})")
 
-# 引入核心游戏引擎与微信白名单管理器
 from src.core.game_engine import GameEngine
 from src.core.wechat_system import WeChatSystem
 
-# 初始化全局唯一游戏引擎实例
 engine = GameEngine()
-
-def ui_process_wechat(player_msg, current_chat_name, wechat_data_dict, current_evt_id, turn, api_key_val, base_url_val, model_val, tmp, top_p, affinity, selected_chars):
-    if not wechat_data_dict.get(current_chat_name):
-        return gr.update(value=""), wechat_data_dict[current_chat_name], wechat_data_dict, affinity, gr.update(value="⚠️ 对方未发消息，你无法主动发起聊天！", visible=True)
-    if not player_msg.strip():
-        return gr.update(value=""), wechat_data_dict[current_chat_name], wechat_data_dict, affinity, gr.update()
-
-    wechat_data_dict[current_chat_name].append((player_msg, "⏳ 对方正在输入中..."))
-    yield gr.update(value=""), wechat_data_dict[current_chat_name], wechat_data_dict, affinity, gr.update()
-
-    # 调用 MVC 的 Controller 层 (GameEngine)
-    ws = WeChatSystem(selected_chars)
-    reply_text, new_affinity, err = engine.play_wechat_turn(player_msg, current_chat_name, wechat_data_dict, ws, current_evt_id, turn, api_key_val, base_url_val, model_val, tmp, top_p, affinity)
-    
-    wechat_data_dict[current_chat_name][-1] = (player_msg, reply_text)
-    
-    yield gr.update(), wechat_data_dict[current_chat_name], wechat_data_dict, new_affinity, gr.update(visible=False)
-
 
 def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition, api_key_val, base_url_val, model_val, tmp, top_p, max_tokens, pres_pen, freq_pen, hist, turn, san, money, gpa, arg_count, chapter, affinity, wechat_data_dict):
     if not is_transition and current_evt_id != "" and not player_choice:
-        yield gr.update(), gr.update(), hist + [("（未作选择）", "⚠️ 请选择一项行为！")], turn, gr.update(), gr.update(), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, gr.update(), gr.update(), affinity, gr.update(), wechat_data_dict, gr.update()
+        yield gr.update(), gr.update(), hist + [("（未作选择）", "⚠️ 请选择一项行为！")], turn, gr.update(), gr.update(), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, gr.update(), gr.update(), affinity, gr.update(), wechat_data_dict
         return
 
-    # 1. 动态生成/同步微信白名单
+    # 动态生成/同步微信白名单
     ws = WeChatSystem(selected_chars)
     for ch in ws.channels.keys():
         if ch not in wechat_data_dict: wechat_data_dict[ch] = []
 
     action_text = player_choice if (not is_transition and current_evt_id != "") else "（时间推移...）"
-    yield gr.update(), gr.update(visible=False), hist + [(action_text, "⏳ *局势推演中...*")], turn, gr.update(), gr.update(value="⏳ 推演中...", interactive=False), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, gr.update(), gr.update(), affinity, gr.update(), wechat_data_dict, gr.update()
+    yield gr.update(), gr.update(visible=False), hist + [(action_text, "⏳ *局势推演中...*")], turn, gr.update(), gr.update(value="⏳ 推演中...", interactive=False), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, gr.update(), gr.update(), affinity, gr.update(), wechat_data_dict
 
-    # 2. 调用核心引擎推演局势
     res = engine.play_main_turn(action_text, selected_chars, current_evt_id, is_transition, api_key_val, base_url_val, model_val, tmp, top_p, max_tokens, pres_pen, freq_pen, san, money, gpa, arg_count, chapter, turn, affinity, wechat_data_dict)
     
     if "error" in res:
-        yield f"系统错误: {res['error']}", gr.update(visible=True), hist + [(action_text, f"❌ 系统错误: {res['error']}")], turn, "错误", gr.update(value="重试", interactive=True), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, f"**SAN**: {san}", gr.update(), affinity, gr.update(), wechat_data_dict, gr.update()
+        yield f"系统错误: {res['error']}", gr.update(visible=True), hist + [(action_text, f"❌ 系统错误: {res['error']}")], turn, "错误", gr.update(value="重试", interactive=True), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, f"**SAN**: {san}", gr.update(), affinity, gr.update(), wechat_data_dict
         return
         
     if res.get("is_game_over"):
-        yield gr.update(), gr.update(visible=False), hist + [(action_text, res["msg"])], res["turn"], "游戏结束", gr.update(value="游戏结束", interactive=False), False, "", res["san"], res["money"], res["gpa"], res["arg_count"], res["chapter"], f"**SAN**: {res['san']}", gr.update(), res["affinity"], gr.update(), wechat_data_dict, gr.update()
+        yield gr.update(), gr.update(visible=False), hist + [(action_text, res["msg"])], res["turn"], "游戏结束", gr.update(value="游戏结束", interactive=False), False, "", res["san"], res["money"], res["gpa"], res["arg_count"], res["chapter"], f"**SAN**: {res['san']}", gr.update(), res["affinity"], gr.update(), wechat_data_dict
         return
 
     hist.append((action_text, res["display_text"]))
     
     new_chats_ui_update = gr.update()
+    
+    # 🌟 核心：将玩家与NPC的微信消息分类渲染到手机屏幕上
     if res["wechat_notifications"]:
         notif_msg = "\n\n🔔 **【手机震动】您收到新的微信消息！**\n"
         for w in res["wechat_notifications"]:
-            c_name, sender, msg = w.get("chat_name", ""), w.get("sender", "神秘人"), w.get("message", "")
-            wechat_data_dict[c_name].append((None, f"**{sender}**: {msg}"))
+            c_name = w.get("chat_name", "")
+            sender = w.get("sender", "神秘人")
+            msg = w.get("message", "")
+            
+            # 区分玩家发言和 NPC 发言在 Gradio 里的左右侧显示
+            if sender == "陆陈安然":
+                wechat_data_dict[c_name].append((msg, None)) # 玩家在右
+            else:
+                wechat_data_dict[c_name].append((None, f"**{sender}**: {msg}")) # NPC在左
+                
             notif_msg += f"- *来自 {c_name}*: {msg[:10]}...\n"
+            
         hist[-1] = (hist[-1][0], hist[-1][1] + notif_msg) 
-        new_chats_ui_update = gr.update(choices=list(ws.channels.keys()), value=res["wechat_notifications"][-1].get("chat_name"))
+        new_chats_ui_update = gr.update(choices=list(wechat_data_dict.keys()), value=res["wechat_notifications"][-1].get("chat_name"))
 
     stats_md_text = f"**SAN值**: {res['san']}/100 &nbsp;|&nbsp; **生活费**: ¥{res['money']} &nbsp;|&nbsp; **当前GPA**: {res['gpa']:.2f} &nbsp;|&nbsp; **本章争吵**: {res['arg_count']}次"
     btn_text = "继续下一步" if res["is_end"] else "确认行动"
@@ -82,7 +72,7 @@ def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition
         aff = res["affinity"].get(name, 50)
         char_md += f"**{name}** {role_status} | {aff}/100\n"
 
-    yield res["res_text"], options_ui, hist, res["turn"], f"第 {res['chapter']} 章 - 回合 {res['turn']}", gr.update(value=btn_text, interactive=True), res["is_end"], res["current_evt_id"], res["san"], res["money"], res["gpa"], res["arg_count"], res["chapter"], stats_md_text, char_md, res["affinity"], new_chats_ui_update, wechat_data_dict, gr.update(visible=False)
+    yield res["res_text"], options_ui, hist, res["turn"], f"第 {res['chapter']} 章 - 回合 {res['turn']}", gr.update(value=btn_text, interactive=True), res["is_end"], res["current_evt_id"], res["san"], res["money"], res["gpa"], res["arg_count"], res["chapter"], stats_md_text, char_md, res["affinity"], new_chats_ui_update, wechat_data_dict
 
 def switch_chat_channel(selected_channel, wechat_data_dict):
     if selected_channel not in wechat_data_dict: wechat_data_dict[selected_channel] = []
@@ -96,9 +86,6 @@ def fetch_all_memories():
         return pd.DataFrame(rows)
     except Exception as e: return pd.DataFrame(columns=["ID", f"读取出错: {e}", "类型", "重要度", "时间戳"])
 
-# ==========================================
-# 🖥️ 构建 Gradio 网页 UI
-# ==========================================
 custom_css = ".status-card { background-color: #fafafa; padding: 15px; border-radius: 8px; border: 1px solid #eaeaea; margin-bottom: 10px; } .phone-panel { border-left: 2px dashed #ccc; padding-left: 15px; background: #fdfdfd; }"
 
 with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Monochrome(), css=custom_css) as demo:
@@ -135,12 +122,9 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
                         max_tokens_slider = gr.Slider(minimum=100, maximum=2000, value=800, label="Max Tokens")
 
                 with gr.Column(scale=4, visible=False, elem_classes="phone-panel") as phone_panel:
-                    gr.Markdown("### 📱 微信通讯录")
-                    wechat_alert = gr.Markdown("⚠️ 对方未发消息，无法主动发起聊天！", visible=False)
+                    gr.Markdown("### 📱 微信屏幕视窗 (只读)")
                     chat_selector = gr.Dropdown(choices=["【404 仙女下凡大群】"], value="【404 仙女下凡大群】", label="当前聊天窗口", interactive=True)
-                    wechat_chatbot = gr.Chatbot(label="微信聊天记录", height=420, avatar_images=(None, "https://cdn-icons-png.flaticon.com/512/1053/1053244.png"))
-                    wechat_input = gr.Textbox(label="在此输入内容...", placeholder="回复消息...")
-                    wechat_send_btn = gr.Button("发送 (Send)", variant="primary")
+                    wechat_chatbot = gr.Chatbot(label="微信聊天记录", height=480, avatar_images=(None, "https://cdn-icons-png.flaticon.com/512/1053/1053244.png"))
 
             def toggle_phone(is_open):
                 new_state = not is_open
@@ -153,13 +137,7 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
             action_btn.click(
                 fn=ui_process_main,
                 inputs=[char_checkboxes, state_current_event_id, dynamic_options, state_is_transition, api_key_input, base_url_input, model_input, temp_slider, top_p_slider, max_tokens_slider, pres_pen_slider, freq_pen_slider, chatbot, state_turn, state_san, state_money, state_gpa, state_args, state_chapter, state_affinity, state_wechat_data],
-                outputs=[output_json, dynamic_options, chatbot, state_turn, status_text, action_btn, state_is_transition, state_current_event_id, state_san, state_money, state_gpa, state_args, state_chapter, stats_panel, char_info_panel, state_affinity, chat_selector, state_wechat_data, wechat_alert]
-            )
-
-            wechat_send_btn.click(
-                fn=ui_process_wechat,
-                inputs=[wechat_input, chat_selector, state_wechat_data, state_current_event_id, state_turn, api_key_input, base_url_input, model_input, temp_slider, top_p_slider, state_affinity, char_checkboxes],
-                outputs=[wechat_input, wechat_chatbot, state_wechat_data, state_affinity, wechat_alert]
+                outputs=[output_json, dynamic_options, chatbot, state_turn, status_text, action_btn, state_is_transition, state_current_event_id, state_san, state_money, state_gpa, state_args, state_chapter, stats_panel, char_info_panel, state_affinity, chat_selector, state_wechat_data]
             )
 
         with gr.TabItem("后台数据库 (RAG)"):

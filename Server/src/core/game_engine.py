@@ -21,7 +21,6 @@ class GameEngine:
                 
         self.llm = LLMService()
         
-        # 动态定位项目根目录下的 data 文件夹
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         data_dir = os.path.join(base_dir, "data")
         os.makedirs(data_dir, exist_ok=True)
@@ -31,70 +30,42 @@ class GameEngine:
         self.pm = PromptManager()
 
     def parse_and_repair_json(self, raw_text):
-        """统一的 JSON 容错解析流水线"""
+        """强化版 JSON 容错解析器"""
+        # 1. 剥离大模型经常附带的 markdown 标记
+        raw_text = re.sub(r'```json\s*', '', raw_text)
+        raw_text = re.sub(r'```\s*', '', raw_text)
+        
         match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         raw_json = match.group(0) if match else raw_text
-        raw_json = raw_json.replace("“", '"').replace("”", '"').replace("‘", "'").replace("’", "'").replace("：", ":")
-        return json.loads(repair_json(raw_json))
-
-    def play_wechat_turn(self, player_msg, current_chat_name, wechat_sys, current_evt_id, turn, api_key, base_url, model, tmp, top_p, affinity):
-        """处理微信通讯逻辑"""
-        self.llm.update_config(api_key=api_key, base_url=base_url, model=model)
         
-        members = wechat_sys.channels.get(current_chat_name, [])
+        # ⚠️ 致命修复：绝对不要把中文引号替换为英文双引号！
+        # 只修复常犯的全角冒号问题
+        raw_json = raw_json.replace("：", ":")
         
-        # 1. 确定现实局势
-        event_context = "【当前现实局势】: 日常阶段。"
-        if current_evt_id in EVENT_DATABASE:
-            evt = EVENT_DATABASE[current_evt_id]
-            event_context = f"【当前现实局势】: 现实中正在发生事件“{evt.name}”。"
-
-        # 2. 组装微信上下文
-        wechat_context = {
-            "chapter": turn, 
-            "active_chars": members 
-        }
-        
-        # 3. 生成 Prompt
-        system_prm = f"{self.pm.get_wechat_prompt(current_chat_name, members, wechat_context)}\n\n{event_context}"
-        user_prm = f"玩家（陆陈安然）发送了：{player_msg}"
-
         try:
-            res_text = self.llm.generate_response(system_prompt=system_prm, user_input=user_prm, temperature=tmp, top_p=top_p)
-            parsed = self.parse_and_repair_json(res_text)
-            
-            for char_name, change_val in parsed.get("affinity_changes", {}).items():
-                if char_name in affinity:
-                    affinity[char_name] = max(0, min(100, affinity[char_name] + change_val))
-                    
-            chat_lines = []
-            for t in parsed.get("chat_history", []):
-                snd = t.get("sender", "神秘人")
-                if snd not in members and snd != "陆陈安然": snd = members[0] if members else "神秘人"
-                
-                msg = t.get("message", "")
-                if not msg: msg = max([str(v) for k, v in t.items() if k != 'sender'], key=len, default="")
-                chat_lines.append(f"**{snd}**: {msg}")
-                
-            reply_text = "\n\n".join(chat_lines) if chat_lines else "（对方已读不回）"
-                
-            clean_ai_reply = reply_text.replace("\n\n", " ") 
-            self.mm.save_interaction(user_input=f"[在微信 {current_chat_name} 中说] {player_msg}", ai_response=clean_ai_reply, user_name="陆陈安然")
-                
-            return reply_text, affinity, None
+            return json.loads(repair_json(raw_json))
         except Exception as e:
-            return f"❌ 网络错误: {e}", affinity, str(e)
+            print(f"❌ JSON 彻底解析失败: {e}\n原文: {raw_json}")
+            # 终极兜底：如果解析彻底失败，返回一个安全结构，防止游戏直接卡死崩溃
+            return {
+                "narrator_transition": "（系统受到了一阵未知的干扰，局势变得有些混乱...）",
+                "dialogue_sequence": [],
+                "npc_background_actions": [],
+                "wechat_notifications": [],
+                "next_options": ["【深呼吸】", "【继续观察】", "【试图理清现状】", "【转移视线】", "【沉默】"],
+                "stat_changes": {},
+                "is_end": False
+            }
 
     def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, arg_count, chapter, turn, affinity, wechat_data_dict):
-        """处理现实主线逻辑"""
         self.llm.update_config(api_key=api_key, base_url=base_url, model=model)
-        mock_player_stats = {"hygiene": 50, "affinity_xueba": 5} 
+        
+        player_stats = {"money": money, "san": san, "hygiene": 100}
         settlement_msg = ""
         
-        # 1. 剧本推进与事件抽取
         if is_transition or current_evt_id == "":
             if turn == 0: self.mm.clear_game_history()
-            next_evt = self.director.get_next_event(mock_player_stats, selected_chars)
+            next_evt = self.director.get_next_event(player_stats, selected_chars)
             if not next_evt: return {"is_game_over": True, "msg": "🏁 游戏通关！", "san": san, "money": money, "gpa": gpa, "arg_count": arg_count, "chapter": chapter, "turn": turn, "affinity": affinity, "current_evt_id": ""}
             
             if next_evt.chapter > chapter:
@@ -108,26 +79,25 @@ class GameEngine:
             next_evt = EVENT_DATABASE[current_evt_id]
             turn += 1
             pacing = "【节奏：结局】明确收尾，is_end 置为 true。" if turn >= 3 else "【节奏：激化】冲突升级。"
-            event_context = f"【事件】: {next_evt.name}\n【回合】: {turn}/3\n{pacing}\n【玩家选择意图】: {action_text}\n⚠️先写玩家的行动/台词，再写室友反应。"
+            event_context = f"【事件】: {next_evt.name}\n【回合】: {turn}/3\n{pacing}\n【玩家选择意图】: {action_text}\n⚠️请根据意图生成玩家台词（若涉及微信请放在 wechat_notifications 中），以及室友反应。"
 
-        # 2. RAG 检索专属语料 (必须先检索，才能塞入 game_context)
         try:
             relevant_docs = self.mm.vector_store.search(f"{next_evt.name} {action_text}", n_results=3)
             lore_str = "\n".join([d['content'] for d in relevant_docs if "语录" in d.get('content', '')])
         except: 
             lore_str = ""
 
-        # 3. 提取微信动态总结
         wechat_summary = "【近期微信动态】\n"
         has_recent_wechat = False
         for chat_name, messages in wechat_data_dict.items():
             if messages:
-                wechat_summary += f"- 在 {chat_name} 中，玩家刚刚说了：“{messages[-1][0]}”。\n"
+                # 记录最后一条消息的内容
+                last_msg = messages[-1]
+                msg_content = last_msg[0] if last_msg[0] else last_msg[1].replace("**", "")
+                wechat_summary += f"- 在 {chat_name} 中，最后消息：“{msg_content}”。\n"
                 has_recent_wechat = True
-        if not has_recent_wechat: 
-            wechat_summary += "无\n"
+        if not has_recent_wechat: wechat_summary += "无\n"
 
-        # 4. 组装游戏状态 Context
         game_context = {
             "chapter": chapter,
             "turn": turn,
@@ -137,11 +107,9 @@ class GameEngine:
             "rag_lore": lore_str
         }
 
-        # 5. 调用 PromptManager 彻底生成纯净的指令
         sys_prm = self.pm.get_main_system_prompt(game_context)
         user_prm = f"{event_context}\n\n【现有微信通讯录】: {', '.join(wechat_data_dict.keys())}\n{wechat_summary}\n[状态] SAN:{san}, 资金:{money}。\n\n{self.pm.get_main_author_note()}"
 
-        # 6. 开始大模型通讯
         try:
             if getattr(next_evt, 'is_cg', False):
                 parsed = {"narrator_transition": f"[演出] {next_evt.name}", "dialogue_sequence": getattr(next_evt, 'fixed_dialogue', []), "next_options": ["继续"], "stat_changes": {}, "is_end": True if not is_transition else False}
@@ -150,7 +118,6 @@ class GameEngine:
                 res_text = self.llm.generate_response(system_prompt=sys_prm, user_input=user_prm, temperature=tmp, top_p=top_p, max_tokens=max_t, presence_penalty=pres_p, frequency_penalty=freq_p)
                 parsed = self.parse_and_repair_json(res_text)
 
-            # 数值结算
             stats_data = parsed.get("stat_changes", {})
             san = max(0, min(100, san + stats_data.get("san_delta", 0)))
             money += stats_data.get("money_delta", 0)
@@ -180,16 +147,37 @@ class GameEngine:
             if not getattr(next_evt, 'is_cg', False) and action_text and "（时间推移..." not in action_text:
                 self.mm.save_interaction(user_input=action_text, ai_response=" ".join(dialogue_lines), user_name="陆陈安然")
             
+            # 这里提取所有的微信通知并过滤合法群聊
+            # 这里提取所有的微信通知并过滤合法群聊
             valid_notifs = []
             for w in parsed.get("wechat_notifications", []):
                 c_name = w.get("chat_name", "")
-                if c_name in wechat_data_dict: valid_notifs.append(w)
+                if not c_name: continue
+                # 动态建群
+                if c_name not in wechat_data_dict:
+                    wechat_data_dict[c_name] = []
+                valid_notifs.append(w)
 
+            # 🌟 修复：必须在 return 字典之前，先把选项提取和兜底逻辑算好
+            extracted_options = parsed.get("next_options", [])
+            if not extracted_options: # 如果 AI 犯病忘记生成选项，强行补上
+                extracted_options = ["【深呼吸】", "【继续观察】", "【转移话题】", "【沉默】", "【叹气】"]
+
+            # 最后统一返回干净的字典
             return {
-                "is_game_over": False, "res_text": res_text, "display_text": display_text,
-                "san": san, "money": money, "gpa": gpa, "arg_count": arg_count, "chapter": chapter, 
-                "turn": turn, "affinity": affinity, "current_evt_id": next_evt.id,
-                "is_end": is_end, "next_options": parsed.get("next_options", []),
+                "is_game_over": False, 
+                "res_text": res_text, 
+                "display_text": display_text,
+                "san": san, 
+                "money": money, 
+                "gpa": gpa, 
+                "arg_count": arg_count, 
+                "chapter": chapter, 
+                "turn": turn, 
+                "affinity": affinity, 
+                "current_evt_id": next_evt.id,
+                "is_end": is_end, 
+                "next_options": extracted_options, # 使用兜底选项
                 "wechat_notifications": valid_notifs
             }
         except Exception as e:
