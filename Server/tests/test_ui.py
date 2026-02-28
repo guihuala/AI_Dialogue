@@ -120,7 +120,6 @@ def create_new_event_file(filename):
         return gr.update(choices=get_event_files(), value=filename), df, gr.update(value=f"✅ 创建成功！", visible=True)
     except Exception as e: return gr.update(), pd.DataFrame(), gr.update(value=f"❌ 创建失败: {e}", visible=True)
 
-# 🌟 新增：读取和保存 timeline.json 逻辑
 def load_timeline_config():
     timeline_path = os.path.join(EVENTS_DIR, "timeline.json")
     if not os.path.exists(timeline_path): engine.director.reload_timeline()
@@ -128,7 +127,8 @@ def load_timeline_config():
 
 def save_timeline_config(content):
     try:
-        json.loads(content) # 校验 JSON 合法性
+        data = json.loads(content)
+        if not isinstance(data, dict): return gr.update(value="❌ 保存失败：必须是字典对象！")
         with open(os.path.join(EVENTS_DIR, "timeline.json"), 'w', encoding='utf-8') as f: f.write(content)
         engine.director.reload_timeline()
         return gr.update(value="✅ 时间轴保存成功并已热重载生效！")
@@ -137,50 +137,66 @@ def save_timeline_config(content):
 # ==========================================
 # 🎮 主线推演逻辑
 # ==========================================
-def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition, api_key_val, base_url_val, model_val, tmp, top_p, max_tokens, pres_pen, freq_pen, hist, turn, san, money, gpa, arg_count, chapter, affinity, wechat_data_dict):
+def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition, api_key_val, base_url_val, model_val, tmp, top_p, max_tokens, pres_pen, freq_pen, hist, turn, san, money, gpa, arg_count, chapter, affinity, wechat_data_dict, current_chat_name):
     if not is_transition and current_evt_id != "" and not player_choice:
-        yield gr.update(), gr.update(), hist + [("（未作选择）", "⚠️ 请选择一项行为！")], turn, gr.update(), gr.update(), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, gr.update(), gr.update(), affinity, gr.update(), wechat_data_dict
+        # 补齐了 19 个输出节点！
+        yield gr.update(), gr.update(), hist + [("（未作选择）", "⚠️ 请选择一项行为！")], turn, gr.update(), gr.update(), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, gr.update(), gr.update(), affinity, gr.update(), wechat_data_dict, gr.update()
         return
 
     ws = WeChatSystem(selected_chars)
     for ch in ws.channels.keys():
         if ch not in wechat_data_dict: wechat_data_dict[ch] = []
 
-    action_text = player_choice if (not is_transition and current_evt_id != "") else "（时间推移...）"
-    yield gr.update(), gr.update(visible=False), hist + [(action_text, "⏳ *局势推演中...*")], turn, gr.update(), gr.update(value="⏳ 推演中...", interactive=False), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, gr.update(), gr.update(), affinity, gr.update(), wechat_data_dict
+    action_text = player_choice if player_choice else "（时间推移...）"
+    yield gr.update(), gr.update(visible=False), hist + [(action_text, "⏳ *局势推演中...*")], turn, gr.update(), gr.update(value="⏳ 推演中...", interactive=False), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, gr.update(), gr.update(), affinity, gr.update(), wechat_data_dict, gr.update()
 
     res = engine.play_main_turn(action_text, selected_chars, current_evt_id, is_transition, api_key_val, base_url_val, model_val, tmp, top_p, max_tokens, pres_pen, freq_pen, san, money, gpa, arg_count, chapter, turn, affinity, wechat_data_dict)
     
     if "error" in res:
-        yield f"系统错误: {res['error']}", gr.update(visible=True), hist + [(action_text, f"❌ 系统错误: {res['error']}")], turn, "错误", gr.update(value="重试", interactive=True), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, f"**SAN**: {san}", gr.update(), affinity, gr.update(), wechat_data_dict
+        yield f"系统错误: {res['error']}", gr.update(visible=True), hist + [(action_text, f"❌ 系统错误: {res['error']}")], turn, "错误", gr.update(value="重试", interactive=True), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, f"SAN: {san}", gr.update(), affinity, gr.update(), wechat_data_dict, gr.update()
         return
         
     if res.get("is_game_over"):
-        yield gr.update(), gr.update(visible=False), hist + [(action_text, res["msg"])], res["turn"], "游戏结束", gr.update(value="游戏结束", interactive=False), False, "", res["san"], res["money"], res["gpa"], res["arg_count"], res["chapter"], f"**SAN**: {res['san']}", gr.update(), res["affinity"], gr.update(), wechat_data_dict
+        yield gr.update(), gr.update(visible=False), hist + [(action_text, res["msg"])], res["turn"], "游戏结束", gr.update(value="游戏结束", interactive=False), False, "", res["san"], res["money"], res["gpa"], res["arg_count"], res["chapter"], f"SAN: {res['san']}", gr.update(), res["affinity"], gr.update(), wechat_data_dict, gr.update()
         return
 
     hist.append((action_text, res["display_text"]))
     
     new_chats_ui_update = gr.update()
+    wechat_chatbot_update = gr.update() # 🌟 新增：专门用于刷新微信聊天记录组件
+    
     if res["wechat_notifications"]:
         notif_msg = "\n\n🔔 **【手机震动】您收到新的微信消息！**\n"
+        latest_chat = current_chat_name
+        
         for w in res["wechat_notifications"]:
             c_name = w.get("chat_name", "")
             sender = w.get("sender", "神秘人")
-            msg = w.get("message", "")
+            # 🌟 修复：双重提取兜底，防止大模型把 message 写成 content
+            msg = w.get("message", w.get("content", "（发来一条未知消息）"))
             
             if sender == "陆陈安然":
                 wechat_data_dict[c_name].append((msg, None)) 
             else:
                 wechat_data_dict[c_name].append((None, f"**{sender}**: {msg}")) 
                 notif_msg += f"- *来自 {c_name}*: {msg[:10]}...\n"
+                
+            latest_chat = c_name # 记录最后发消息的群名
             
         hist[-1] = (hist[-1][0], hist[-1][1] + notif_msg) 
-        new_chats_ui_update = gr.update(choices=list(wechat_data_dict.keys()), value=res["wechat_notifications"][-1].get("chat_name"))
+        # 🌟 核心：将 UI 的下拉框和屏幕内容，强制切换并刷新到最新收到消息的群
+        new_chats_ui_update = gr.update(choices=list(wechat_data_dict.keys()), value=latest_chat)
+        wechat_chatbot_update = wechat_data_dict[latest_chat]
+    else:
+        # 如果没有新消息，保持当前选择的群聊数据刷新即可
+        if current_chat_name in wechat_data_dict:
+            wechat_chatbot_update = wechat_data_dict[current_chat_name]
 
     stats_md_text = f"**SAN值**: {res['san']}/100 &nbsp;|&nbsp; **生活费**: ¥{res['money']} &nbsp;|&nbsp; **当前GPA**: {res['gpa']:.2f} &nbsp;|&nbsp; **本章争吵**: {res['arg_count']}次"
-    btn_text = "继续下一步" if res["is_end"] else "确认行动"
-    options_ui = gr.update(choices=[], visible=False, value=None) if res["is_end"] else gr.update(choices=res["next_options"], visible=True, value=None)
+    
+    btn_text = "确认并进入下一阶段" if res["is_end"] else "确认行动"
+    has_options = bool(res.get("next_options", []))
+    options_ui = gr.update(choices=res.get("next_options", []), visible=has_options, value=None)
     
     char_md = "### 室友档案与关系监控\n---\n"
     for name, p in engine.candidate_pool.items():
@@ -188,7 +204,8 @@ def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition
         aff = res["affinity"].get(name, 50)
         char_md += f"**{name}** {role_status} | {aff}/100\n"
 
-    yield res["res_text"], options_ui, hist, res["turn"], f"第 {res['chapter']} 章 - 回合 {res['turn']}", gr.update(value=btn_text, interactive=True), res["is_end"], res["current_evt_id"], res["san"], res["money"], res["gpa"], res["arg_count"], res["chapter"], stats_md_text, char_md, res["affinity"], new_chats_ui_update, wechat_data_dict
+    # 完美匹配 19 个 outputs！
+    yield res["res_text"], options_ui, hist, res["turn"], f"第 {res['chapter']} 章 - 回合 {res['turn']}", gr.update(value=btn_text, interactive=True), res["is_end"], res["current_evt_id"], res["san"], res["money"], res["gpa"], res["arg_count"], res["chapter"], stats_md_text, char_md, res["affinity"], new_chats_ui_update, wechat_data_dict, wechat_chatbot_update
 
 def switch_chat_channel(selected_channel, wechat_data_dict):
     if selected_channel not in wechat_data_dict: wechat_data_dict[selected_channel] = []
@@ -255,8 +272,10 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
 
             action_btn.click(
                 fn=ui_process_main,
-                inputs=[char_checkboxes, state_current_event_id, dynamic_options, state_is_transition, api_key_input, base_url_input, model_input, temp_slider, top_p_slider, max_tokens_slider, pres_pen_slider, freq_pen_slider, chatbot, state_turn, state_san, state_money, state_gpa, state_args, state_chapter, state_affinity, state_wechat_data],
-                outputs=[output_json, dynamic_options, chatbot, state_turn, status_text, action_btn, state_is_transition, state_current_event_id, state_san, state_money, state_gpa, state_args, state_chapter, stats_panel, char_info_panel, state_affinity, chat_selector, state_wechat_data]
+                # 🌟 注意这里：我们在 inputs 末尾加上了 chat_selector，以便引擎知道你现在停在哪个群
+                inputs=[char_checkboxes, state_current_event_id, dynamic_options, state_is_transition, api_key_input, base_url_input, model_input, temp_slider, top_p_slider, max_tokens_slider, pres_pen_slider, freq_pen_slider, chatbot, state_turn, state_san, state_money, state_gpa, state_args, state_chapter, state_affinity, state_wechat_data, chat_selector],
+                # 🌟 注意这里：我们在 outputs 末尾加上了 wechat_chatbot，这样数据更新后手机屏幕才会自动刷新！
+                outputs=[output_json, dynamic_options, chatbot, state_turn, status_text, action_btn, state_is_transition, state_current_event_id, state_san, state_money, state_gpa, state_args, state_chapter, stats_panel, char_info_panel, state_affinity, chat_selector, state_wechat_data, wechat_chatbot]
             )
 
         # ==========================================
@@ -294,24 +313,23 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
             
             with gr.Accordion("📅 章节时间轴配置 (timeline.json)", open=True):
                 gr.Markdown("> 编写 **JSON 数组** 来严格定义每一章触发哪些事件卡池。可用关键词：`CG`, `条件`, `专属`, `通用`, `随机或专属`, `Boss`。")
-                # 初始加载时自动获取 JSON 字符串
                 timeline_editor = gr.Code(language="json", label="时间轴配置", value=load_timeline_config(), lines=8, interactive=True)
                 save_timeline_btn = gr.Button("💾 保存时间轴并重载", variant="secondary")
                 timeline_status = gr.Markdown("")
                 save_timeline_btn.click(fn=save_timeline_config, inputs=[timeline_editor], outputs=[timeline_status])
 
             gr.Markdown("---")
-            gr.Markdown("### 剧本数据表热更新后台\n> 双击单元格直接修改。CG剧情请将类型填为`CG过场`并在【预设剧本】中写`人名:台词|人名:台词`。")
+            gr.Markdown("### 📅 剧本数据表热更新后台\n> 双击单元格直接修改。CG剧情请将类型填为`CG过场`并在【预设剧本】中写`人名:台词|人名:台词`。")
             
             with gr.Row():
                 with gr.Column(scale=2):
-                    event_file_selector = gr.Dropdown(choices=get_event_files(), label="现有剧本表 (CSV)", interactive=True)
+                    event_file_selector = gr.Dropdown(choices=get_event_files(), label="📄 现有剧本表 (CSV)", interactive=True)
                     
                     with gr.Accordion("➕ 新建空剧本表", open=False):
                         new_event_input = gr.Textbox(label="文件名 (如: chapter2.csv)", placeholder="输入名称...")
-                        create_event_btn = gr.Button("新建表单", variant="secondary")
+                        create_event_btn = gr.Button("✨ 新建表单", variant="secondary")
                         
-                    refresh_events_btn = gr.Button("重新扫描目录", size="sm")
+                    refresh_events_btn = gr.Button("🔄 重新扫描目录", size="sm")
                     
                 with gr.Column(scale=10):
                     event_editor = gr.Dataframe(
@@ -320,7 +338,7 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
                         interactive=True, 
                         height=400
                     )
-                    save_event_btn = gr.Button("保存表格数据并强制热重载", variant="primary")
+                    save_event_btn = gr.Button("💾 保存表格数据并强制热重载", variant="primary")
                     save_event_status = gr.Markdown("")
 
             event_file_selector.change(fn=load_event_csv, inputs=[event_file_selector], outputs=[event_editor])

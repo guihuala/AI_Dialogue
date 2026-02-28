@@ -21,38 +21,47 @@ def load_all_events(events_dir: str) -> dict:
 
         with open(file_path, mode='r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
+            headers = reader.fieldnames or []
+            script_key = next((k for k in headers if k and "预设剧本" in k), "预设剧本")
+            
             for row in reader:
                 try:
-                    evt_id = row.get("Event_ID", "").strip()
+                    # 清洗 key 防止空格干扰
+                    clean_row = {str(k).strip(): str(v).strip() for k, v in row.items() if k is not None}
+                    evt_id = clean_row.get("Event_ID", "").strip()
                     if not evt_id: continue 
                     
-                    options_dict = {k.strip(): v.strip() for opt in row.get("玩家交互", "").split("|") if ":" in opt.replace("：", ":") for k, v in [opt.replace("：", ":").split(":", 1)]}
-                    outcomes_dict = {k.strip(): v.strip() for out in row.get("结果", "").split("|") if ":" in out.replace("：", ":") for k, v in [out.replace("：", ":").split(":", 1)]}
+                    options_dict = {k.strip(): v.strip() for opt in clean_row.get("玩家交互", "").split("|") if ":" in opt.replace("：", ":") for k, v in [opt.replace("：", ":").split(":", 1)]}
+                    outcomes_dict = {k.strip(): v.strip() for out in clean_row.get("结果", "").split("|") if ":" in out.replace("：", ":") for k, v in [out.replace("：", ":").split(":", 1)]}
                     
-                    is_boss_str = str(row.get("是否Boss", "FALSE")).strip().upper()
+                    is_boss_str = str(clean_row.get("是否Boss", "FALSE")).strip().upper()
                     
-                    # 🌟 核心修复：强制将所有中文冒号转为英文冒号，完美防错！
-                    raw_fixed_dialogue = row.get("预设剧本", "").strip()
+                    # 🌟 核心防御：提取剧本，并抢救因为逗号错位被挤到表格外的列！
+                    raw_fixed_dialogue = clean_row.get(script_key, "").strip()
+                    leftover = row.get(None, []) # 获取被挤出表格的数据
+                    if leftover:
+                        raw_fixed_dialogue += "|" + "|".join(str(x) for x in leftover if x)
+                        
                     fixed_dialogue = []
                     if raw_fixed_dialogue:
                         for line in raw_fixed_dialogue.split("|"):
-                            line = line.replace("：", ":")
+                            line = line.replace("：", ":") # 兼容中文冒号
                             if ":" in line:
                                 spk, cont = line.split(":", 1)
                                 fixed_dialogue.append({"speaker": spk.strip(), "content": cont.strip(), "mood": "neutral"})
                     
-                    is_cg = (len(fixed_dialogue) > 0 or default_type == "CG过场")
+                    is_cg = (len(fixed_dialogue) > 0 or "CG" in str(clean_row.get("事件类型", default_type)).upper())
 
                     event = ScriptedEvent(
                         id=evt_id,
-                        name=row.get("事件标题", "未命名").strip(),
-                        chapter=int(row.get("所属章节", 1) or 1),
-                        event_type=row.get("事件类型", default_type).strip(),
-                        trigger_conditions=row.get("触发条件", "").strip(),
-                        exclusive_char=row.get("专属角色", "").strip(),
+                        name=clean_row.get("事件标题", "未命名").strip(),
+                        chapter=int(clean_row.get("所属章节", 1) or 1),
+                        event_type=clean_row.get("事件类型", default_type).strip(),
+                        trigger_conditions=clean_row.get("触发条件", "").strip(),
+                        exclusive_char=clean_row.get("专属角色", "").strip(),
                         is_boss=(is_boss_str in ["TRUE", "1", "Y"]),
-                        description=row.get("场景与冲突描述", row.get("描述", "")).strip(),
-                        potential_conflicts=[c.strip() for c in row.get("潜在冲突点", "").split("|") if c.strip()],
+                        description=clean_row.get("场景与冲突描述", clean_row.get("描述", "")).strip(),
+                        potential_conflicts=[c.strip() for c in clean_row.get("潜在冲突点", "").split("|") if c.strip()],
                         options=options_dict,
                         outcomes=outcomes_dict,
                         is_cg=is_cg,
