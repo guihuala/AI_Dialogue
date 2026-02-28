@@ -321,7 +321,7 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
 
                 # --- 🌟 新增：子 Tab 3: 角色专属语料库 ---
                 with gr.TabItem("🗣️ 角色专属语料库 (Lore)"):
-                    gr.Markdown("### 🗣️ 分角色金句与语录管理\n> 你可以为每个角色单独配置她们的口头禅和经典经历。**保存后会自动重构 ChromaDB 向量库，AI 下一句话就能回忆起来！**")
+                    gr.Markdown("### 🗣️ 分角色金句与语录管理\n> 为每个角色单独配置她们的口头禅和经典经历。**保存后会自动重构 ChromaDB 向量库。**")
                     
                     os.makedirs(LORES_DIR, exist_ok=True)
 
