@@ -23,6 +23,7 @@ engine = GameEngine()
 # ==========================================
 PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "prompts")
 EVENTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "events")
+LORES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "lores")
 
 DIR_MAPPING = {
     "root": "🏠 核心基座 (底层 Prompt)",
@@ -139,7 +140,6 @@ def save_timeline_config(content):
 # ==========================================
 def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition, api_key_val, base_url_val, model_val, tmp, top_p, max_tokens, pres_pen, freq_pen, hist, turn, san, money, gpa, arg_count, chapter, affinity, wechat_data_dict, current_chat_name):
     if not is_transition and current_evt_id != "" and not player_choice:
-        # 补齐了 19 个输出节点！
         yield gr.update(), gr.update(), hist + [("（未作选择）", "⚠️ 请选择一项行为！")], turn, gr.update(), gr.update(), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, gr.update(), gr.update(), affinity, gr.update(), wechat_data_dict, gr.update()
         return
 
@@ -163,7 +163,7 @@ def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition
     hist.append((action_text, res["display_text"]))
     
     new_chats_ui_update = gr.update()
-    wechat_chatbot_update = gr.update() # 🌟 新增：专门用于刷新微信聊天记录组件
+    wechat_chatbot_update = gr.update() 
     
     if res["wechat_notifications"]:
         notif_msg = "\n\n🔔 **【手机震动】您收到新的微信消息！**\n"
@@ -172,7 +172,6 @@ def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition
         for w in res["wechat_notifications"]:
             c_name = w.get("chat_name", "")
             sender = w.get("sender", "神秘人")
-            # 🌟 修复：双重提取兜底，防止大模型把 message 写成 content
             msg = w.get("message", w.get("content", "（发来一条未知消息）"))
             
             if sender == "陆陈安然":
@@ -181,14 +180,12 @@ def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition
                 wechat_data_dict[c_name].append((None, f"**{sender}**: {msg}")) 
                 notif_msg += f"- *来自 {c_name}*: {msg[:10]}...\n"
                 
-            latest_chat = c_name # 记录最后发消息的群名
+            latest_chat = c_name 
             
         hist[-1] = (hist[-1][0], hist[-1][1] + notif_msg) 
-        # 🌟 核心：将 UI 的下拉框和屏幕内容，强制切换并刷新到最新收到消息的群
         new_chats_ui_update = gr.update(choices=list(wechat_data_dict.keys()), value=latest_chat)
         wechat_chatbot_update = wechat_data_dict[latest_chat]
     else:
-        # 如果没有新消息，保持当前选择的群聊数据刷新即可
         if current_chat_name in wechat_data_dict:
             wechat_chatbot_update = wechat_data_dict[current_chat_name]
 
@@ -204,20 +201,11 @@ def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition
         aff = res["affinity"].get(name, 50)
         char_md += f"**{name}** {role_status} | {aff}/100\n"
 
-    # 完美匹配 19 个 outputs！
     yield res["res_text"], options_ui, hist, res["turn"], f"第 {res['chapter']} 章 - 回合 {res['turn']}", gr.update(value=btn_text, interactive=True), res["is_end"], res["current_evt_id"], res["san"], res["money"], res["gpa"], res["arg_count"], res["chapter"], stats_md_text, char_md, res["affinity"], new_chats_ui_update, wechat_data_dict, wechat_chatbot_update
 
 def switch_chat_channel(selected_channel, wechat_data_dict):
     if selected_channel not in wechat_data_dict: wechat_data_dict[selected_channel] = []
     return wechat_data_dict[selected_channel]
-
-def fetch_all_memories():
-    try:
-        data = engine.mm.vector_store.collection.get()
-        if not data or not data['ids']: return pd.DataFrame(columns=["ID", "内容", "类型", "重要度", "时间戳"])
-        rows = [{"ID": data['ids'][i], "内容": data['documents'][i], "类型": (data['metadatas'][i] if data['metadatas'] else {}).get("type", "unknown"), "重要度": (data['metadatas'][i] if data['metadatas'] else {}).get("importance", 5), "时间戳": (data['metadatas'][i] if data['metadatas'] else {}).get("timestamp", "")} for i in range(len(data['ids']))]
-        return pd.DataFrame(rows)
-    except Exception as e: return pd.DataFrame(columns=["ID", f"读取出错: {e}", "类型", "重要度", "时间戳"])
 
 custom_css = ".status-card { background-color: #fafafa; padding: 15px; border-radius: 8px; border: 1px solid #eaeaea; margin-bottom: 10px; } .phone-panel { border-left: 2px dashed #ccc; padding-left: 15px; background: #fdfdfd; }"
 
@@ -272,45 +260,120 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
 
             action_btn.click(
                 fn=ui_process_main,
-                # 🌟 注意这里：我们在 inputs 末尾加上了 chat_selector，以便引擎知道你现在停在哪个群
                 inputs=[char_checkboxes, state_current_event_id, dynamic_options, state_is_transition, api_key_input, base_url_input, model_input, temp_slider, top_p_slider, max_tokens_slider, pres_pen_slider, freq_pen_slider, chatbot, state_turn, state_san, state_money, state_gpa, state_args, state_chapter, state_affinity, state_wechat_data, chat_selector],
-                # 🌟 注意这里：我们在 outputs 末尾加上了 wechat_chatbot，这样数据更新后手机屏幕才会自动刷新！
                 outputs=[output_json, dynamic_options, chatbot, state_turn, status_text, action_btn, state_is_transition, state_current_event_id, state_san, state_money, state_gpa, state_args, state_chapter, stats_panel, char_info_panel, state_affinity, chat_selector, state_wechat_data, wechat_chatbot]
             )
 
         # ==========================================
-        # Tab 2: 提示词与设定后台
+        # Tab 2: 提示词与设定后台 (三层)
         # ==========================================
         with gr.TabItem("⚙️ 设定与提示词后台 (CMS)"):
-            gr.Markdown("### 📝 动态 Prompt 结构化管理器\n> 修改设定后点击保存，**下一回合即刻生效。**")
-            with gr.Row():
-                with gr.Column(scale=3):
-                    category_selector = gr.Dropdown(choices=get_categories(), value=DIR_MAPPING["root"], label="📂 第一级：功能模块", interactive=True)
-                    file_selector = gr.Dropdown(choices=get_files_by_category(DIR_MAPPING["root"]), label="📄 第二级：配置文件", interactive=True)
-                    with gr.Accordion("➕ 新建子目录/文件", open=False):
-                        new_file_input = gr.Textbox(label="相对路径 (如: 配角/阿姨.md)", placeholder="输入路径...", show_label=True)
-                        create_file_btn = gr.Button("✨ 新建并打开", variant="secondary")
-                    refresh_files_btn = gr.Button("🔄 重新扫描目录", size="sm")
-                with gr.Column(scale=9):
-                    prompt_editor = gr.Code(language="markdown", label="文件内容编辑器", lines=20, interactive=True)
-                    save_prompt_btn = gr.Button("💾 写入到硬盘 (立即生效)", variant="primary")
-                    save_status = gr.Markdown("")
+            with gr.Tabs():
+                # --- 子 Tab 1: 文本编辑器 ---
+                with gr.TabItem("📝 文本档案编辑器 (Markdown)"):
+                    gr.Markdown("### 📝 动态 Prompt 结构化管理器\n> 修改设定后点击保存，**下一回合即刻生效。**")
+                    with gr.Row():
+                        with gr.Column(scale=3):
+                            category_selector = gr.Dropdown(choices=get_categories(), value=DIR_MAPPING["root"], label="📂 第一级：功能模块", interactive=True)
+                            file_selector = gr.Dropdown(choices=get_files_by_category(DIR_MAPPING["root"]), label="📄 第二级：配置文件", interactive=True)
+                            with gr.Accordion("➕ 新建子目录/文件", open=False):
+                                new_file_input = gr.Textbox(label="相对路径 (如: 配角/阿姨.md)", placeholder="输入路径...", show_label=True)
+                                create_file_btn = gr.Button("✨ 新建并打开", variant="secondary")
+                            refresh_files_btn = gr.Button("🔄 重新扫描目录", size="sm")
+                        with gr.Column(scale=9):
+                            prompt_editor = gr.Code(language="markdown", label="文件内容编辑器", lines=20, interactive=True)
+                            save_prompt_btn = gr.Button("💾 写入到硬盘 (立即生效)", variant="primary")
+                            save_status = gr.Markdown("")
+        
+                    def on_category_change(cat):
+                        files = get_files_by_category(cat)
+                        first_file = files[0] if files else None
+                        return gr.update(choices=files, value=first_file), load_prompt_content_ui(cat, first_file) if first_file else ""
+                    category_selector.change(fn=on_category_change, inputs=[category_selector], outputs=[file_selector, prompt_editor])
+                    file_selector.change(fn=load_prompt_content_ui, inputs=[category_selector, file_selector], outputs=[prompt_editor])
+                    save_prompt_btn.click(fn=save_prompt_content_ui, inputs=[category_selector, file_selector, prompt_editor], outputs=[save_status])
+                    create_file_btn.click(fn=create_new_file_ui, inputs=[category_selector, new_file_input], outputs=[file_selector, prompt_editor, save_status, new_file_input])
+                    refresh_files_btn.click(fn=lambda: (gr.update(choices=get_categories(), value=DIR_MAPPING["root"]), gr.update(choices=get_files_by_category(DIR_MAPPING["root"]), value=None), ""), outputs=[category_selector, file_selector, prompt_editor])
 
-            def on_category_change(cat):
-                files = get_files_by_category(cat)
-                first_file = files[0] if files else None
-                return gr.update(choices=files, value=first_file), load_prompt_content_ui(cat, first_file) if first_file else ""
-            category_selector.change(fn=on_category_change, inputs=[category_selector], outputs=[file_selector, prompt_editor])
-            file_selector.change(fn=load_prompt_content_ui, inputs=[category_selector, file_selector], outputs=[prompt_editor])
-            save_prompt_btn.click(fn=save_prompt_content_ui, inputs=[category_selector, file_selector, prompt_editor], outputs=[save_status])
-            create_file_btn.click(fn=create_new_file_ui, inputs=[category_selector, new_file_input], outputs=[file_selector, prompt_editor, save_status, new_file_input])
-            refresh_files_btn.click(fn=lambda: (gr.update(choices=get_categories(), value=DIR_MAPPING["root"]), gr.update(choices=get_files_by_category(DIR_MAPPING["root"]), value=None), ""), outputs=[category_selector, file_selector, prompt_editor])
+                # --- 子 Tab 2: 人际偏见矩阵 ---
+                with gr.TabItem("🕸️ 角色社交网络与偏见 (CSV)"):
+                    gr.Markdown("### 🕸️ 人际关系偏见矩阵\n> 在这里配置每个角色对其他角色的【表面态度】与【内心真实评价】。")
+                    def load_rel_csv():
+                        path = os.path.join(PROMPTS_DIR, "characters", "relationship.csv")
+                        if os.path.exists(path): return pd.read_csv(path, dtype=str).fillna("")
+                        return pd.DataFrame(columns=["评价者", "被评价者", "表面态度", "内心真实评价"])
+                        
+                    def save_rel_csv(df):
+                        path = os.path.join(PROMPTS_DIR, "characters", "relationship.csv")
+                        try:
+                            if isinstance(df, str): return gr.update(value="❌ 数据格式错误。")
+                            df.to_csv(path, index=False, encoding='utf-8-sig')
+                            return gr.update(value="✅ 关系矩阵保存成功！AI 将在下一回合读取最新偏见。")
+                        except Exception as e: return gr.update(value=f"❌ 保存失败: {e}")
+                            
+                    with gr.Row():
+                        rel_editor = gr.Dataframe(value=load_rel_csv(), type="pandas", label="人物社交网络雷达图", interactive=True, height=350)
+                    with gr.Row():
+                        save_rel_btn = gr.Button("💾 保存并应用偏见设定", variant="primary")
+                        rel_status = gr.Markdown("")
+                        
+                    save_rel_btn.click(fn=save_rel_csv, inputs=[rel_editor], outputs=[rel_status])
+
+                # --- 🌟 新增：子 Tab 3: 角色专属语料库 ---
+                with gr.TabItem("🗣️ 角色专属语料库 (Lore)"):
+                    gr.Markdown("### 🗣️ 分角色金句与语录管理\n> 你可以为每个角色单独配置她们的口头禅和经典经历。**保存后会自动重构 ChromaDB 向量库，AI 下一句话就能回忆起来！**")
+                    
+                    os.makedirs(LORES_DIR, exist_ok=True)
+
+                    def get_lore_chars():
+                        chars = list(engine.candidate_pool.keys())
+                        if "陆陈安然" not in chars: chars.insert(0, "陆陈安然")
+                        return chars
+
+                    def load_lore_csv(char_name):
+                        if not char_name: return pd.DataFrame(columns=["场景标签", "经典台词"])
+                        path = os.path.join(LORES_DIR, f"{char_name}.csv")
+                        if os.path.exists(path):
+                            return pd.read_csv(path, dtype=str).fillna("")
+                        return pd.DataFrame(columns=["场景标签", "经典台词"])
+
+                    def save_lore_csv(char_name, df):
+                        if not char_name: return gr.update(value="⚠️ 请先在左侧选择一个角色！")
+                        try:
+                            if isinstance(df, str): return gr.update(value="❌ 数据格式错误。")
+                            path = os.path.join(LORES_DIR, f"{char_name}.csv")
+                            df.to_csv(path, index=False, encoding='utf-8-sig')
+                            
+                            # 🌟 核心：保存后立刻触发语料清洗与重建
+                            build_knowledge()
+                            return gr.update(value=f"✅ 【{char_name}】的语料已保存，并成功热写入 RAG 潜意识网络！")
+                        except Exception as e:
+                            return gr.update(value=f"❌ 保存失败: {e}")
+
+                    with gr.Row():
+                        with gr.Column(scale=2):
+                            lore_char_selector = gr.Dropdown(choices=get_lore_chars(), label="👥 选中角色进行编辑", value="陆陈安然", interactive=True)
+                            
+                        with gr.Column(scale=10):
+                            lore_editor = gr.Dataframe(
+                                value=load_lore_csv("陆陈安然"),
+                                type="pandas", 
+                                label="角色语录表 (双击修改，点击右下角 + 号新增)", 
+                                headers=["场景标签", "经典台词"],
+                                interactive=True, 
+                                height=400
+                            )
+                            save_lore_btn = gr.Button("💾 保存语料并重构潜意识网络", variant="primary")
+                            lore_save_status = gr.Markdown("")
+                            
+                    lore_char_selector.change(fn=load_lore_csv, inputs=[lore_char_selector], outputs=[lore_editor])
+                    save_lore_btn.click(fn=save_lore_csv, inputs=[lore_char_selector, lore_editor], outputs=[lore_save_status])
+
 
         # ==========================================
-        # Tab 3: 🌟 剧本与事件编辑器 (Excel + 时间轴)
+        # Tab 3: 剧本与事件编辑器
         # ==========================================
         with gr.TabItem("🎬 剧本数据表与时间轴"):
-            
             with gr.Accordion("📅 章节时间轴配置 (timeline.json)", open=True):
                 gr.Markdown("> 编写 **JSON 数组** 来严格定义每一章触发哪些事件卡池。可用关键词：`CG`, `条件`, `专属`, `通用`, `随机或专属`, `Boss`。")
                 timeline_editor = gr.Code(language="json", label="时间轴配置", value=load_timeline_config(), lines=8, interactive=True)
@@ -324,20 +387,12 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
             with gr.Row():
                 with gr.Column(scale=2):
                     event_file_selector = gr.Dropdown(choices=get_event_files(), label="📄 现有剧本表 (CSV)", interactive=True)
-                    
                     with gr.Accordion("➕ 新建空剧本表", open=False):
                         new_event_input = gr.Textbox(label="文件名 (如: chapter2.csv)", placeholder="输入名称...")
                         create_event_btn = gr.Button("✨ 新建表单", variant="secondary")
-                        
                     refresh_events_btn = gr.Button("🔄 重新扫描目录", size="sm")
-                    
                 with gr.Column(scale=10):
-                    event_editor = gr.Dataframe(
-                        type="pandas", 
-                        label="剧本表可视化编辑器", 
-                        interactive=True, 
-                        height=400
-                    )
+                    event_editor = gr.Dataframe(type="pandas", label="剧本表可视化编辑器", interactive=True, height=400)
                     save_event_btn = gr.Button("💾 保存表格数据并强制热重载", variant="primary")
                     save_event_status = gr.Markdown("")
 
@@ -345,19 +400,6 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
             save_event_btn.click(fn=save_event_csv, inputs=[event_file_selector, event_editor], outputs=[save_event_status])
             create_event_btn.click(fn=create_new_event_file, inputs=[new_event_input], outputs=[event_file_selector, event_editor, save_event_status])
             refresh_events_btn.click(fn=lambda: gr.update(choices=get_event_files()), outputs=[event_file_selector])
-
-        # ==========================================
-        # Tab 4: RAG 记忆后台
-        # ==========================================
-        with gr.TabItem("🧠 向量记忆数据库 (RAG)"):
-            with gr.Row():
-                refresh_btn = gr.Button("刷新数据库表单", variant="secondary")
-                clear_mem_btn = gr.Button("清除历史记录", variant="stop")
-            def clear_and_refresh(): engine.mm.clear_game_history(); return fetch_all_memories()
-            memory_dataframe = gr.Dataframe(headers=["ID", "内容", "类型", "重要度", "时间戳"], datatype=["str", "str", "str", "number", "str"], interactive=False)
-            clear_mem_btn.click(fn=clear_and_refresh, outputs=memory_dataframe)
-            refresh_btn.click(fn=fetch_all_memories, outputs=memory_dataframe)
-            demo.load(fn=fetch_all_memories, outputs=memory_dataframe)
 
 if __name__ == "__main__":
     demo.launch(server_name="127.0.0.1", server_port=7860, inbrowser=True)

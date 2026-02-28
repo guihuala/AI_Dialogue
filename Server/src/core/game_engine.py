@@ -191,7 +191,6 @@ class GameEngine:
                 for w in wechat_list:
                     if not isinstance(w, dict): continue 
                     
-                    # 🌟 核心修复 2：强行把大模型生成的群名转换为字符串，根绝后患！
                     c_name = str(w.get("chat_name", "")).strip()
                     if not c_name or c_name == "None": continue
                     
