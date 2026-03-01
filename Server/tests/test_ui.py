@@ -201,7 +201,6 @@ def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition
         aff = res["affinity"].get(name, 50)
         char_md += f"**{name}** {role_status} | {aff}/100\n"
 
-    # 🌟 核心：输出新加入的 Prompt 面板
     yield res["res_text"], res.get("sys_prompt", ""), res.get("user_prompt", ""), options_ui, hist, res["turn"], f"第 {res['chapter']} 章 - 回合 {res['turn']}", gr.update(value=btn_text, interactive=True), res["is_end"], res["current_evt_id"], res["san"], res["money"], res["gpa"], res["arg_count"], res["chapter"], stats_md_text, char_md, res["affinity"], new_chats_ui_update, wechat_data_dict, wechat_chatbot_update
 
 def switch_chat_channel(selected_channel, wechat_data_dict):
@@ -246,12 +245,11 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
                         pres_pen_slider = gr.Slider(minimum=-2.0, maximum=2.0, value=0.3, label="Pres Penalty")
                         max_tokens_slider = gr.Slider(minimum=100, maximum=2000, value=800, label="Max Tokens")
 
-                    # 🌟 新增：独立的排错与透视监控室
                     with gr.Accordion("💡 开发者排错与监控面板 (Debug)", open=False):
                         gr.Markdown("遇到 AI 发癫？点开这里查看它究竟收到了什么指令，以及它吐出了什么原格式。")
-                        output_json = gr.Code(language="json", label="1. 大模型原始 JSON 响应", interactive=False)
-                        sys_prompt_out = gr.Code(language="markdown", label="2. 本回合发送的 System Prompt (系统与人设指令)", interactive=False)
-                        user_prompt_out = gr.Code(language="markdown", label="3. 本回合发送的 User Prompt (局势与上下文)", interactive=False)
+                        output_json = gr.Code(language="json", label="1. DM(统筹系统) 最终渲染的 JSON", interactive=False)
+                        sys_prompt_out = gr.Code(language="markdown", label="2. DM 的 System Prompt (全局规则)", interactive=False)
+                        user_prompt_out = gr.Code(language="markdown", label="3. DM 的 User Prompt (含所有 NPC 的独立思考结果！)", interactive=False)
 
                 with gr.Column(scale=4, visible=False, elem_classes="phone-panel") as phone_panel:
                     gr.Markdown("### 📱 微信屏幕视窗 (只读)")

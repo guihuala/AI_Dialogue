@@ -1,6 +1,8 @@
 import os
 import json
 import re
+import csv
+import concurrent.futures
 from json_repair import repair_json 
 
 import src.core.presets as presets_module
@@ -9,8 +11,8 @@ from src.services.llm_service import LLMService
 from src.core.memory_manager import MemoryManager
 from src.core.event_director import EventDirector
 from src.core.event_script import EVENT_DATABASE
-
 from src.core.prompt_manager import PromptManager
+from src.core.agent_system import NPCAgent
 
 class GameEngine:
     def __init__(self):
@@ -30,18 +32,11 @@ class GameEngine:
         self.pm = PromptManager()
 
     def parse_and_repair_json(self, raw_text):
-        # 1. 强行剔除所有的 <think> 思考过程，防止里面的括号干扰解析
         raw_text = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL)
-        
-        # 2. 剥离 Markdown 保护壳
         raw_text = re.sub(r'```json\s*', '', raw_text)
         raw_text = re.sub(r'```\s*', '', raw_text)
-        
-        # 🌟 核心修复 3：暴力洗码！把所有错用的中文引号和冒号，强制拍碎成英文格式！
-        # （不用担心台词里的引号被替换后会报错，底层的 json_repair 神器会自动把它们转义为合法内嵌引号）
         raw_text = raw_text.replace('“', '"').replace('”', '"').replace('：', ':').replace('‘', "'").replace('’', "'")
         
-        # 4. 提取文本中最后一块完整的 JSON 结构 (防止模型在前面说废话)
         start_idx = raw_text.find('{')
         end_idx = raw_text.rfind('}')
         if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
@@ -50,14 +45,12 @@ class GameEngine:
             raw_json = raw_text
             
         try:
-            # 第一轮：尝试修复并解析
             repaired = repair_json(raw_json)
             parsed = json.loads(repaired) if isinstance(repaired, str) else repaired
             if not isinstance(parsed, dict): raise ValueError(f"返回非字典: {type(parsed)}")
             return parsed
         except Exception as e:
             try:
-                # 第二轮：暴力抢救全文本
                 repaired = repair_json(raw_text)
                 parsed = json.loads(repaired) if isinstance(repaired, str) else repaired
                 if isinstance(parsed, dict): return parsed
@@ -76,13 +69,11 @@ class GameEngine:
     def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, arg_count, chapter, turn, affinity, wechat_data_dict):
         self.llm.update_config(api_key=api_key, base_url=base_url, model=model)
         
-        # 🌟 补全玩家的所有数据，供导演系统动态读取
         player_stats = {"money": money, "san": san, "hygiene": 100, "gpa": gpa}
         settlement_msg = ""
         
         if is_transition or current_evt_id == "":
             if turn == 0: self.mm.clear_game_history()
-            # 🌟 把 affinity 传给事件导演，以便判定室友好感度
             next_evt = self.director.get_next_event(player_stats, selected_chars, affinity)
             if not next_evt: return {"is_game_over": True, "msg": "🏁 游戏通关！", "san": san, "money": money, "gpa": gpa, "arg_count": arg_count, "chapter": chapter, "turn": turn, "affinity": affinity, "current_evt_id": ""}
             
@@ -99,11 +90,17 @@ class GameEngine:
                 return {"error": "事件丢失，请重置游戏。"}
             turn += 1
             pacing = "【节奏：结局】明确收尾，is_end 置为 true。" if turn >= 3 else "【节奏：激化】冲突升级。"
-            event_context = f"【事件】: {next_evt.name}\n【回合】: {turn}/3\n{pacing}\n【玩家选择意图】: {action_text}\n⚠️请根据意图生成玩家台词（若涉及微信请放在 wechat_notifications 中），以及室友反应。"
+            event_context = f"【事件】: {next_evt.name}\n【回合】: {turn}/3\n{pacing}\n【玩家选择意图】: {action_text}"
 
         try:
-            relevant_docs = self.mm.vector_store.search(f"{next_evt.name} {action_text}", n_results=3)
-            lore_str = "\n".join([d['content'] for d in relevant_docs if "语录" in d.get('content', '')])
+            relevant_docs = self.mm.vector_store.search(f"{next_evt.name} {action_text}", n_results=6)
+            valid_lores = []
+            active_plus_player = selected_chars + ["陆陈安然"] 
+            for d in relevant_docs:
+                content = d.get('content', '')
+                if "语录" in content and any(f"[{c}" in content for c in active_plus_player):
+                    valid_lores.append(content)
+            lore_str = "\n".join(valid_lores[:3])
         except: 
             lore_str = ""
 
@@ -127,10 +124,56 @@ class GameEngine:
         }
 
         sys_prm = self.pm.get_main_system_prompt(game_context)
-        
-        # 🌟 核心修复 1：强制将字典里的 Key 转为 string 之后再 join，即便大模型塞进了数字也绝对不会崩溃！
         safe_keys = ", ".join([str(k) for k in wechat_data_dict.keys()])
-        user_prm = f"{event_context}\n\n【现有微信通讯录】: {safe_keys}\n{wechat_summary}\n[状态] SAN:{san}, 资金:{money}。\n\n{self.pm.get_main_author_note()}"
+
+        # ========================================================
+        # 🌟 多智能体(MAS) 剧场演出阶段：让室友们并发思考！
+        # ========================================================
+        npc_chars = [c for c in selected_chars if c != "陆陈安然"]
+        reactions_str = ""
+        
+        if npc_chars and not getattr(next_evt, 'is_cg', False):
+            agents = []
+            for char_name in npc_chars:
+                # 给每个演员发她独有的剧本和偏见
+                profile_text = self.pm._read_md(f"characters/{self.pm.char_file_map.get(char_name, '')}")
+                rel_text = ""
+                rel_csv_path = os.path.join(self.pm.chars_dir, "relationship.csv")
+                if os.path.exists(rel_csv_path):
+                    try:
+                        with open(rel_csv_path, 'r', encoding='utf-8-sig') as f:
+                            reader = csv.DictReader(f)
+                            for row in reader:
+                                if row.get("评价者", "").strip() == char_name and row.get("被评价者", "").strip() in selected_chars:
+                                    target = row.get("被评价者", "").strip()
+                                    surface = row.get("表面态度", "").strip()
+                                    inner = row.get("内心真实评价", "").strip()
+                                    rel_text += f"- 对待【{target}】：表面[{surface}]，内心觉得[{inner}]。\n"
+                    except: pass
+                
+                agent = NPCAgent(char_name, profile_text, rel_text, self.llm)
+                agents.append(agent)
+                
+            # 多线程并发执行，3个人同时思考只需要1次API调用的时间！
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(agents)) as executor:
+                futures = [executor.submit(agent.react, event_context, action_text) for agent in agents]
+                reactions = [f.result() for f in futures]
+                
+            reactions_str = "\n\n【🎬 演员就位：以下是在场室友刚才做出的独立反应】\n(⚠️系统警告：请你作为 DM，严格采纳以下室友的反应进行编排。禁止篡改她们的原意、动作和准备发送的微信内容！)\n"
+            for i, char_name in enumerate(npc_chars):
+                r = reactions[i]
+                mood = r.get("mood", "平静")
+                action = r.get("action", "")
+                dia = r.get("dialogue", "")
+                wec = r.get("wechat_message", "")
+                reactions_str += f"- {char_name}: [情绪]:{mood} | [动作]:{action}\n"
+                if dia: reactions_str += f"  嘴上说：“{dia}”\n"
+                if wec: reactions_str += f"  准备在微信发：“{wec}”\n"
+
+        # ========================================================
+        # 🌟 DM (系统) 统筹并结算阶段
+        # ========================================================
+        user_prm = f"{event_context}\n\n【玩家意图】: {action_text}{reactions_str}\n\n【现有微信通讯录】: {safe_keys}\n{wechat_summary}\n[状态] SAN:{san}, 资金:{money}。\n\n{self.pm.get_main_author_note()}"
 
         try:
             if getattr(next_evt, 'is_cg', False):
@@ -211,11 +254,25 @@ class GameEngine:
                     c_name = str(w.get("chat_name", "")).strip()
                     if not c_name or c_name == "None": continue
                     
-                    # 动态建群
-                    if c_name not in wechat_data_dict: 
-                        wechat_data_dict[c_name] = []
+                    def simplify_name(name):
+                        return re.sub(r'[【】\[\]()（）{}<>\s]', '', name)
                     
-                    w["chat_name"] = c_name # 写回修正后的字符串
+                    simplified_c_name = simplify_name(c_name)
+                    matched_key = None
+                    
+                    for existing_key in wechat_data_dict.keys():
+                        simplified_existing = simplify_name(existing_key)
+                        if simplified_existing == simplified_c_name or simplified_c_name in simplified_existing:
+                            matched_key = existing_key
+                            break
+                            
+                    if matched_key:
+                        c_name = matched_key 
+                    else:
+                        if c_name not in wechat_data_dict: 
+                            wechat_data_dict[c_name] = []
+                    
+                    w["chat_name"] = c_name 
                     valid_notifs.append(w)
 
             extracted_options = parsed.get("next_options", [])
