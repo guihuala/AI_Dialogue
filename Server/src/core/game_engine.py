@@ -30,19 +30,34 @@ class GameEngine:
         self.pm = PromptManager()
 
     def parse_and_repair_json(self, raw_text):
-        """🌟 终极容错 JSON 解析器，防模型发癫"""
+        # 1. 强行剔除所有的 <think> 思考过程，防止里面的括号干扰解析
+        raw_text = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL)
+        
+        # 2. 剥离 Markdown 保护壳
         raw_text = re.sub(r'```json\s*', '', raw_text)
         raw_text = re.sub(r'```\s*', '', raw_text)
-        match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-        raw_json = match.group(0) if match else raw_text
         
+        # 🌟 核心修复 3：暴力洗码！把所有错用的中文引号和冒号，强制拍碎成英文格式！
+        # （不用担心台词里的引号被替换后会报错，底层的 json_repair 神器会自动把它们转义为合法内嵌引号）
+        raw_text = raw_text.replace('“', '"').replace('”', '"').replace('：', ':').replace('‘', "'").replace('’', "'")
+        
+        # 4. 提取文本中最后一块完整的 JSON 结构 (防止模型在前面说废话)
+        start_idx = raw_text.find('{')
+        end_idx = raw_text.rfind('}')
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            raw_json = raw_text[start_idx:end_idx+1]
+        else:
+            raw_json = raw_text
+            
         try:
+            # 第一轮：尝试修复并解析
             repaired = repair_json(raw_json)
             parsed = json.loads(repaired) if isinstance(repaired, str) else repaired
             if not isinstance(parsed, dict): raise ValueError(f"返回非字典: {type(parsed)}")
             return parsed
         except Exception as e:
             try:
+                # 第二轮：暴力抢救全文本
                 repaired = repair_json(raw_text)
                 parsed = json.loads(repaired) if isinstance(repaired, str) else repaired
                 if isinstance(parsed, dict): return parsed
@@ -50,10 +65,10 @@ class GameEngine:
             
             return {
                 "narrator_transition": "（系统受到干扰，尝试理清思绪...）",
-                "dialogue_sequence": [{"speaker": "系统提示", "content": "（由于未知干扰，部分对话解析失败，但世界仍在运转。）", "mood": "neutral"}],
+                "dialogue_sequence": [{"speaker": "系统提示", "content": "（由于未知干扰，当前对话解析失败，请检查参数面板中的“原始输出”查明原因。）", "mood": "neutral"}],
                 "npc_background_actions": [],
                 "wechat_notifications": [],
-                "next_options": ["【深呼吸】", "【继续观察】", "【沉默】"],
+                "next_options": ["【深呼吸】", "【重试】", "【继续观察】"],
                 "stat_changes": {},
                 "is_end": False
             }
@@ -61,12 +76,14 @@ class GameEngine:
     def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, arg_count, chapter, turn, affinity, wechat_data_dict):
         self.llm.update_config(api_key=api_key, base_url=base_url, model=model)
         
-        player_stats = {"money": money, "san": san, "hygiene": 100}
+        # 🌟 补全玩家的所有数据，供导演系统动态读取
+        player_stats = {"money": money, "san": san, "hygiene": 100, "gpa": gpa}
         settlement_msg = ""
         
         if is_transition or current_evt_id == "":
             if turn == 0: self.mm.clear_game_history()
-            next_evt = self.director.get_next_event(player_stats, selected_chars)
+            # 🌟 把 affinity 传给事件导演，以便判定室友好感度
+            next_evt = self.director.get_next_event(player_stats, selected_chars, affinity)
             if not next_evt: return {"is_game_over": True, "msg": "🏁 游戏通关！", "san": san, "money": money, "gpa": gpa, "arg_count": arg_count, "chapter": chapter, "turn": turn, "affinity": affinity, "current_evt_id": ""}
             
             if next_evt.chapter > chapter:
@@ -225,7 +242,13 @@ class GameEngine:
                 "current_evt_id": next_evt.id,
                 "is_end": is_end, 
                 "next_options": extracted_options, 
-                "wechat_notifications": valid_notifs
+                "wechat_notifications": valid_notifs,
+                "sys_prompt": sys_prm,
+                "user_prompt": user_prm
             }
         except Exception as e:
-            return {"error": str(e)}
+            return {
+                "error": str(e),
+                "sys_prompt": sys_prm if 'sys_prm' in locals() else "",
+                "user_prompt": user_prm if 'user_prm' in locals() else ""
+            }

@@ -76,7 +76,10 @@ class PromptManager:
                 for row in reader:
                     source = row.get("评价者", "").strip()
                     target = row.get("被评价者", "").strip()
-                    if source in active_chars:
+                    
+                    # 🌟 核心修复：必须“评价者”和“被评价者”同时在场，才触发关系！
+                    # 否则会引发不在场角色的名字污染大模型，导致幽灵室友出现
+                    if source in active_chars and target in active_chars:
                         surface = row.get("表面态度", "").strip()
                         inner = row.get("内心真实评价", "").strip()
                         relations.append(f"- 【{source}】对待【{target}】：表面上展现出[{surface}]，内心实际上觉得[{inner}]。")
@@ -86,7 +89,7 @@ class PromptManager:
         if relations:
             return "🕸️【人物社交网络与底层偏见】（请根据以下关系，精准把控在场角色的语言温度、暗场动作及阴阳怪气程度）：\n" + "\n".join(relations)
         return ""
-
+        
     def get_main_system_prompt(self, context: dict) -> str:
         base_prompt = self._read_md("main_system.md")
         active_skills = []

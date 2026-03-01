@@ -4,21 +4,33 @@ import csv
 import uuid
 import pandas as pd
 
+# 🌟 核心修复：动态寻找真正的项目根目录 (包含 src 的那层)，确保所有路径绝对统一！
+current_dir = os.path.abspath(os.path.dirname(__file__))
+while current_dir != os.path.dirname(current_dir):
+    if os.path.exists(os.path.join(current_dir, "src", "core")):
+        PROJECT_ROOT = current_dir
+        break
+    current_dir = os.path.dirname(current_dir)
+else:
+    PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
+
 # 确保能找到 src 目录
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+    
 from src.core.memory_manager import MemoryManager
 from src.services.llm_service import LLMService
 from src.models.schema import MemoryItem
 
 def build_knowledge():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(base_dir, "data")
+    # 🌟 强制将 data_dir 指向真正的项目 data 目录，与 test_ui 和引擎保持绝对一致！
+    data_dir = os.path.join(PROJECT_ROOT, "data")
     lores_dir = os.path.join(data_dir, "lores")
     old_lore_path = os.path.join(data_dir, "lore.csv")
     
     os.makedirs(lores_dir, exist_ok=True)
     
-    # 🌟 自动迁移旧数据：如果发现旧的 lore.csv，自动将它按角色拆分成独立文件！
+    # 自动迁移旧数据：如果发现旧的 lore.csv，自动将它按角色拆分成独立文件
     if os.path.exists(old_lore_path):
         try:
             df = pd.read_csv(old_lore_path)
@@ -35,7 +47,7 @@ def build_knowledge():
             
             # 将旧文件重命名为备份，防止下次重复迁移
             os.rename(old_lore_path, old_lore_path + ".bak")
-            print("✅ 旧版 lore.csv 已成功按角色拆分并迁移至 data/lores/ 目录！")
+            print(f"✅ 旧版 lore.csv 已成功按角色拆分并迁移至 {lores_dir} 目录！")
         except Exception as e:
             print(f"⚠️ 旧版语料迁移失败: {e}")
 
@@ -91,7 +103,7 @@ def build_knowledge():
         mm.vector_store.add_memories(memories_to_add)
         print(f"✅ 成功从 {lores_dir} 注入 {len(memories_to_add)} 条专属语料！")
     else:
-        print("⚠️ 未发现任何有效语料，请在后台系统或 data/lores/ 文件夹中添加！")
+        print(f"⚠️ 未发现任何有效语料，请在后台系统或 {lores_dir} 文件夹中添加！")
 
 if __name__ == "__main__":
     build_knowledge()

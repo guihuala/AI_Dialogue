@@ -140,7 +140,7 @@ def save_timeline_config(content):
 # ==========================================
 def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition, api_key_val, base_url_val, model_val, tmp, top_p, max_tokens, pres_pen, freq_pen, hist, turn, san, money, gpa, arg_count, chapter, affinity, wechat_data_dict, current_chat_name):
     if not is_transition and current_evt_id != "" and not player_choice:
-        yield gr.update(), gr.update(), hist + [("（未作选择）", "⚠️ 请选择一项行为！")], turn, gr.update(), gr.update(), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, gr.update(), gr.update(), affinity, gr.update(), wechat_data_dict, gr.update()
+        yield gr.update(), gr.update(), gr.update(), gr.update(), hist + [("（未作选择）", "⚠️ 请选择一项行为！")], turn, gr.update(), gr.update(), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, gr.update(), gr.update(), affinity, gr.update(), wechat_data_dict, gr.update()
         return
 
     ws = WeChatSystem(selected_chars)
@@ -148,16 +148,16 @@ def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition
         if ch not in wechat_data_dict: wechat_data_dict[ch] = []
 
     action_text = player_choice if player_choice else "（时间推移...）"
-    yield gr.update(), gr.update(visible=False), hist + [(action_text, "⏳ *局势推演中...*")], turn, gr.update(), gr.update(value="⏳ 推演中...", interactive=False), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, gr.update(), gr.update(), affinity, gr.update(), wechat_data_dict, gr.update()
+    yield gr.update(), gr.update(), gr.update(), gr.update(visible=False), hist + [(action_text, "⏳ *局势推演中...*")], turn, gr.update(), gr.update(value="⏳ 推演中...", interactive=False), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, gr.update(), gr.update(), affinity, gr.update(), wechat_data_dict, gr.update()
 
     res = engine.play_main_turn(action_text, selected_chars, current_evt_id, is_transition, api_key_val, base_url_val, model_val, tmp, top_p, max_tokens, pres_pen, freq_pen, san, money, gpa, arg_count, chapter, turn, affinity, wechat_data_dict)
     
     if "error" in res:
-        yield f"系统错误: {res['error']}", gr.update(visible=True), hist + [(action_text, f"❌ 系统错误: {res['error']}")], turn, "错误", gr.update(value="重试", interactive=True), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, f"SAN: {san}", gr.update(), affinity, gr.update(), wechat_data_dict, gr.update()
+        yield f"系统错误: {res['error']}", res.get("sys_prompt", ""), res.get("user_prompt", ""), gr.update(visible=True), hist + [(action_text, f"❌ 系统错误: {res['error']}")], turn, "错误", gr.update(value="重试", interactive=True), is_transition, current_evt_id, san, money, gpa, arg_count, chapter, f"SAN: {san}", gr.update(), affinity, gr.update(), wechat_data_dict, gr.update()
         return
         
     if res.get("is_game_over"):
-        yield gr.update(), gr.update(visible=False), hist + [(action_text, res["msg"])], res["turn"], "游戏结束", gr.update(value="游戏结束", interactive=False), False, "", res["san"], res["money"], res["gpa"], res["arg_count"], res["chapter"], f"SAN: {res['san']}", gr.update(), res["affinity"], gr.update(), wechat_data_dict, gr.update()
+        yield gr.update(), gr.update(), gr.update(), gr.update(visible=False), hist + [(action_text, res["msg"])], res["turn"], "游戏结束", gr.update(value="游戏结束", interactive=False), False, "", res["san"], res["money"], res["gpa"], res["arg_count"], res["chapter"], f"SAN: {res['san']}", gr.update(), res["affinity"], gr.update(), wechat_data_dict, gr.update()
         return
 
     hist.append((action_text, res["display_text"]))
@@ -201,11 +201,13 @@ def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition
         aff = res["affinity"].get(name, 50)
         char_md += f"**{name}** {role_status} | {aff}/100\n"
 
-    yield res["res_text"], options_ui, hist, res["turn"], f"第 {res['chapter']} 章 - 回合 {res['turn']}", gr.update(value=btn_text, interactive=True), res["is_end"], res["current_evt_id"], res["san"], res["money"], res["gpa"], res["arg_count"], res["chapter"], stats_md_text, char_md, res["affinity"], new_chats_ui_update, wechat_data_dict, wechat_chatbot_update
+    # 🌟 核心：输出新加入的 Prompt 面板
+    yield res["res_text"], res.get("sys_prompt", ""), res.get("user_prompt", ""), options_ui, hist, res["turn"], f"第 {res['chapter']} 章 - 回合 {res['turn']}", gr.update(value=btn_text, interactive=True), res["is_end"], res["current_evt_id"], res["san"], res["money"], res["gpa"], res["arg_count"], res["chapter"], stats_md_text, char_md, res["affinity"], new_chats_ui_update, wechat_data_dict, wechat_chatbot_update
 
 def switch_chat_channel(selected_channel, wechat_data_dict):
     if selected_channel not in wechat_data_dict: wechat_data_dict[selected_channel] = []
     return wechat_data_dict[selected_channel]
+
 
 custom_css = ".status-card { background-color: #fafafa; padding: 15px; border-radius: 8px; border: 1px solid #eaeaea; margin-bottom: 10px; } .phone-panel { border-left: 2px dashed #ccc; padding-left: 15px; background: #fdfdfd; }"
 
@@ -235,7 +237,6 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
                         stats_panel = gr.Markdown("**SAN值**: 80/100 &nbsp;|&nbsp; **生活费**: ¥1500 &nbsp;|&nbsp; **GPA**: 3.00 &nbsp;|&nbsp; **本章争吵**: 0次")
                         char_checkboxes = gr.CheckboxGroup(choices=list(engine.candidate_pool.keys()), label="在场角色", value=list(engine.candidate_pool.keys())[:3])
                         char_info_panel = gr.Markdown("### 室友关系监控")
-                        output_json = gr.Code(language="json", label="模型交互 JSON", visible=False)
                         api_key_input = gr.Textbox(label="API Key", type="password")
                         base_url_input = gr.Textbox(label="Base URL", value="https://api.deepseek.com/v1")
                         model_input = gr.Textbox(label="Model Name", value="deepseek-chat")
@@ -244,6 +245,13 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
                         freq_pen_slider = gr.Slider(minimum=-2.0, maximum=2.0, value=0.5, label="Freq Penalty")
                         pres_pen_slider = gr.Slider(minimum=-2.0, maximum=2.0, value=0.3, label="Pres Penalty")
                         max_tokens_slider = gr.Slider(minimum=100, maximum=2000, value=800, label="Max Tokens")
+
+                    # 🌟 新增：独立的排错与透视监控室
+                    with gr.Accordion("💡 开发者排错与监控面板 (Debug)", open=False):
+                        gr.Markdown("遇到 AI 发癫？点开这里查看它究竟收到了什么指令，以及它吐出了什么原格式。")
+                        output_json = gr.Code(language="json", label="1. 大模型原始 JSON 响应", interactive=False)
+                        sys_prompt_out = gr.Code(language="markdown", label="2. 本回合发送的 System Prompt (系统与人设指令)", interactive=False)
+                        user_prompt_out = gr.Code(language="markdown", label="3. 本回合发送的 User Prompt (局势与上下文)", interactive=False)
 
                 with gr.Column(scale=4, visible=False, elem_classes="phone-panel") as phone_panel:
                     gr.Markdown("### 📱 微信屏幕视窗 (只读)")
@@ -261,7 +269,7 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
             action_btn.click(
                 fn=ui_process_main,
                 inputs=[char_checkboxes, state_current_event_id, dynamic_options, state_is_transition, api_key_input, base_url_input, model_input, temp_slider, top_p_slider, max_tokens_slider, pres_pen_slider, freq_pen_slider, chatbot, state_turn, state_san, state_money, state_gpa, state_args, state_chapter, state_affinity, state_wechat_data, chat_selector],
-                outputs=[output_json, dynamic_options, chatbot, state_turn, status_text, action_btn, state_is_transition, state_current_event_id, state_san, state_money, state_gpa, state_args, state_chapter, stats_panel, char_info_panel, state_affinity, chat_selector, state_wechat_data, wechat_chatbot]
+                outputs=[output_json, sys_prompt_out, user_prompt_out, dynamic_options, chatbot, state_turn, status_text, action_btn, state_is_transition, state_current_event_id, state_san, state_money, state_gpa, state_args, state_chapter, stats_panel, char_info_panel, state_affinity, chat_selector, state_wechat_data, wechat_chatbot]
             )
 
         # ==========================================
@@ -319,9 +327,9 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
                         
                     save_rel_btn.click(fn=save_rel_csv, inputs=[rel_editor], outputs=[rel_status])
 
-                # --- 🌟 新增：子 Tab 3: 角色专属语料库 ---
+                # --- 子 Tab 3: 角色专属语料库 ---
                 with gr.TabItem("🗣️ 角色专属语料库 (Lore)"):
-                    gr.Markdown("### 🗣️ 分角色金句与语录管理\n> 为每个角色单独配置她们的口头禅和经典经历。**保存后会自动重构 ChromaDB 向量库。**")
+                    gr.Markdown("### 🗣️ 分角色金句与语录管理\n> 你可以为每个角色单独配置她们的口头禅和经典经历。**保存后会自动重构 ChromaDB 向量库，AI 下一句话就能回忆起来！**")
                     
                     os.makedirs(LORES_DIR, exist_ok=True)
 
@@ -344,7 +352,6 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
                             path = os.path.join(LORES_DIR, f"{char_name}.csv")
                             df.to_csv(path, index=False, encoding='utf-8-sig')
                             
-                            # 🌟 核心：保存后立刻触发语料清洗与重建
                             build_knowledge()
                             return gr.update(value=f"✅ 【{char_name}】的语料已保存，并成功热写入 RAG 潜意识网络！")
                         except Exception as e:
@@ -400,6 +407,7 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
             save_event_btn.click(fn=save_event_csv, inputs=[event_file_selector, event_editor], outputs=[save_event_status])
             create_event_btn.click(fn=create_new_event_file, inputs=[new_event_input], outputs=[event_file_selector, event_editor, save_event_status])
             refresh_events_btn.click(fn=lambda: gr.update(choices=get_event_files()), outputs=[event_file_selector])
+
 
 if __name__ == "__main__":
     demo.launch(server_name="127.0.0.1", server_port=7860, inbrowser=True)
