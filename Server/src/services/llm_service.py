@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class LLMService:
-    def __init__(self, api_key: Optional[str] = None, base_url: str = "https://api.deepseek.com/v1", model: str = "deepseek-chat"):
+    def __init__(self, api_key: Optional[str] = None, base_url: str = "[https://api.deepseek.com/v1](https://api.deepseek.com/v1)", model: str = "deepseek-chat"):
         # 🌟 优先使用传入的 api_key，其次读取 DEEPSEEK_API_KEY，最后使用 dummy
         self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY") or "dummy"
         self.base_url = base_url
@@ -47,6 +47,7 @@ class LLMService:
         ]
 
         try:
+            # 🌟 核心跨越：强制要求 API 锁定 JSON 输出模式！
             completion = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
@@ -55,7 +56,9 @@ class LLMService:
                 max_tokens=max_tokens,
                 presence_penalty=presence_penalty,
                 frequency_penalty=frequency_penalty,
+                response_format={"type": "json_object"} # 👈 就是这一个神仙参数！
             )
             return completion.choices[0].message.content
         except Exception as e:
-            raise Exception(f"LLM API 报错: {str(e)}")
+            print(f"LLM API Error: {e}")
+            return '{"narrator_transition": "系统接口请求失败，请检查网络或 API Key。", "dialogue_sequence": [], "next_options": ["【重试】"], "stat_changes": {}, "is_end": false}'

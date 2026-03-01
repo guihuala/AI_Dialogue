@@ -1,67 +1,67 @@
-# AI 角色记忆系统
-
-一个支持本地部署的 AI 角色记忆系统，具备长期记忆、结构化档案管理和智能反思功能。
+# AI Roommate Survival Game (大学室友生存模拟)
 
 [English](README_EN.md) | [中文](README.md)
 
 ## 项目简介
 
-本项目旨在为游戏中的 AI 角色提供一套完整的记忆系统服务。它特别解决了记忆数据向量化时的切片问题，避免了上下文碎片化，同时完整保留了向量化的语义理解能力。
+本项目是一个结合了大语言模型（LLM）的文字冒险与生存模拟游戏。玩家将在游戏中扮演一名大学生，与具有不同性格和独特背景设定的 AI 室友进行长周期的互动。
+
+游戏内置了强大的 **AI 角色记忆系统**，支持多角色长期记忆、结构化档案管理和动态剧情生成。后端模型会根据角色性格推演剧情走向，并在每次互动中结算对玩家属性（如：SAN值、资金、GPA等）及时间流逝的影响。
 
 ## 项目结构
 
+整个项目呈前后端分离的架构，主要由 **Client (Unity 客户端)** 和 **Server (Python 接口服务)** 组成。
+
 ```
-d:\MyProj\character-memory\
-├── data/                  # 💾 运行时数据存储
-│   ├── profile.json       # 角色档案 (姓名, 性格, 日志等)
-│   └── chroma_db/         # 向量数据库 (ChromaDB) 用于语义记忆检索
-├── src/                   # 🧠 源代码
-│   ├── app.py             # Streamlit 主程序 (前端入口)
-│   ├── core/              # 核心逻辑
-│   │   └── memory_manager.py # 管理档案、检索和反思逻辑
-│   ├── models/            # 数据模型
-│   │   └── schema.py      # Pydantic 模型 (CharacterProfile, MemoryItem, DailyLogEntry)
-│   ├── services/          # 外部服务
-│   │   └── llm_service.py # LLM 集成 (OpenRouter/OpenAI)
-│   └── storage/           # 数据访问层
-│       ├── json_store.py  # 处理 profile.json 操作
-│       └── vector_store.py# 处理 ChromaDB 操作
-├── docs/                  # 文档
-└── requirements.txt       # Python 依赖
+AI_Dialogue/
+├── Client/       # Unity 客户端前端，处理游戏 UI 展现、动画及与玩家的直接交互
+├── Server/       # Python FastAPI 后端服务，处理 LLM 调用、游戏状态逻辑和记忆管理
+├── README.md     # 项目整体中文引导文档
+└── README_EN.md  # 项目整体英文引导文档
 ```
 
-## 数据存储
+### 1. 后端服务 (Server)
+包含游戏核心逻辑引擎，基于 Python FastAPI 构建：
+- **AI 动态能力**：通过 `/api/get_options` 和 `/api/perform_action` 接口，根据角色人设、口头禅与禁忌词，动态生成符合逻辑的玩家备选项及剧情发展。
+- **长期记忆检索 (RAG)**：通过 ChromaDB 本地向量数据库管理多角色的过往剧情与观察想法，解决上下文碎片化问题，在每次对话时动态引入过往内容进行参考。
+- **智能反思与记录**：角色可以进行自我反思更新心情或人际关系，形成带有时间维度的每日日志。
 
--   **档案数据 (Profile Data)**: 存储在 `data/profile.json`。包含角色的结构化状态：
-    -   基本信息 (姓名, 职业)
-    -   性格与价值观
-    -   人际关系
-    -   **每日日志 (Daily Log)** (活动和互动的记录)
-    -   状态 (健康, 财富)
+*详情请参考 [Server/README.md](Server/README.md) 用于进一步开发与深入。*
 
--   **记忆数据 (Memory Data)**: 存储在 `data/chroma_db`。这是一个本地向量数据库，存储：
-    -   对话历史 (用户输入 & AI 回复)
-    -   观察与想法
-    -   每条记忆都经过 Embedding 处理以支持语义搜索 (RAG)。
+### 2. 前端客户端 (Client)
+基于 Unity 引擎开发，构筑前端视听体验：
+- 负责 2D/UI 场景的界面视觉展现（包含 FlatKit, ProPixelizer 等视觉插件基础支持）。
+- 管理前端网络连接服务逻辑 (`NetworkService`)，主要通过 HTTP `POST` 请求向 `http://127.0.0.1:8000` 通信驱动游戏运转。
 
-## 如何运行
+## 运行与开发指南
 
-```bash
-streamlit run src/app.py
-```
+游戏跑起来需要分别启动 Server 和 Client，建议按照以下步骤进行：
 
-## 核心功能
+### 第一步：启动后端服务 (Server)
+1. 进入服务器目录并安装依赖环境：
+   ```bash
+   cd Server
+   pip install -r requirements.txt
+   # 若提示找不到 fastapi 环境，可单独再运行 pip install fastapi uvicorn
+   ```
+2. 需要将你的 LLM 服务（OpenRouter / OpenAI 等）的鉴权密钥配置在 `.env` 文件中。
+3. 运行后端服务：
+   ```bash
+   python src/app.py
+   ```
+后端服务启动成功后默认监听本地 `127.0.0.1:8000` 端口。
 
-1.  **RAG 记忆检索**: 根据当前对话检索相关的过往记忆。
-2.  **智能反思 (Agentic Reflection)**:
-    -   点击 **"🛑 End Conversation & Reflect"** 触发自我反思流程。
-    -   AI 会分析对话，更新心情/人际关系，并写入 **每日日志**。
-3.  **实时耗时显示**: 在界面上实时显示检索 (RAG) 和生成 (LLM) 的耗时。
-4.  **高级 RAG (父子索引策略)**:
-    -   **基于阈值的总结机制**:
-        -   **短对话 (<300 字符)**: 直接存储，保留细节并节省成本。
-        -   **长对话 (>300 字符)**: 由 LLM 自动总结。**总结**用于索引，**原始内容**用于上下文检索。
-    -   **每日日志集成**: 每日日志也会被向量化 (类型为 `daily_log`)，确保能检索到过往的活动记录。
+### 第二步：启动前端游戏环境 (Client)
+1. 使用 **Unity Hub** 添加并打开 `Client` 目录作为项目。
+2. 在 Unity Editor 中定位到游戏主场景，并且确保在启动游戏前，后端的 `http://127.0.0.1:8000` 确实可访问。
+3. 点击 Unity Editor 中的 **Play(播放)** 按钮，开始生存试炼。
+
+## 技术栈与依赖库
+- **后端框架**: Python, FastAPI, uvicorn
+- **大语言模型与 AI**: OpenAI SDK (支持各类兼容接口), ChromaDB (向量数据库)
+- **数据与配置管理**: Pydantic, python-dotenv
+- **游戏客户端**: Unity C# Engine
+
 ## 许可证
 
-本项目采用MIT许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+本项目采用 MIT 许可证 - 查看 [Server/LICENSE](Server/LICENSE) 文件或者各核心组件包含的开源许可了解详情。
