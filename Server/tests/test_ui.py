@@ -17,12 +17,17 @@ from src.core.game_engine import GameEngine
 from src.core.wechat_system import WeChatSystem
 from src.core.agent_system import ReflectionSystem
 
-# ==========================================
-# ⚙️ CMS 后台目录配置
-# ==========================================
 PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "prompts")
 EVENTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "events")
 LORES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "lores")
+PROVIDER_PRESETS = {
+    "DeepSeek (默认性价比之王)": {"url": "https://api.deepseek.com/v1", "model": "deepseek-chat"},
+    "OpenAI (GPT-4o 情绪感知最强)": {"url": "https://api.openai.com/v1", "model": "gpt-4o"},
+    "阿里通义千问 (Qwen-Max 中文梗王)": {"url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-max"},
+    "月之暗面 (Kimi 长记忆推理)": {"url": "https://api.moonshot.cn/v1", "model": "moonshot-v1-8k"},
+    "智谱 (GLM-4)": {"url": "https://open.bigmodel.cn/api/paas/v4", "model": "glm-4"},
+    "硅基流动 (免费羊毛 Qwen2.5)": {"url": "https://api.siliconflow.cn/v1", "model": "Qwen/Qwen2.5-72B-Instruct"}
+}
 
 engine = GameEngine()
 reflection_engine = ReflectionSystem(engine.llm, PROMPTS_DIR)
@@ -254,9 +259,16 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
                         stats_panel = gr.Markdown("**SAN值**: 80/100 &nbsp;|&nbsp; **生活费**: ¥1500 &nbsp;|&nbsp; **GPA**: 3.00 &nbsp;|&nbsp; **本章争吵**: 0次")
                         char_checkboxes = gr.CheckboxGroup(choices=list(engine.candidate_pool.keys()), label="在场角色", value=list(engine.candidate_pool.keys())[:3])
                         char_info_panel = gr.Markdown("### 室友关系监控")
-                        api_key_input = gr.Textbox(label="API Key", type="password")
+                        provider_selector = gr.Dropdown(choices=list(PROVIDER_PRESETS.keys()), value="DeepSeek (默认性价比之王)", label="🚀 一键切换大模型厂商")
+                        
+                        api_key_input = gr.Textbox(label="🔑 填入该厂商的 API Key", type="password")
                         base_url_input = gr.Textbox(label="Base URL", value="https://api.deepseek.com/v1")
                         model_input = gr.Textbox(label="Model Name", value="deepseek-chat")
+                        
+                        def auto_fill_api(preset_name):
+                            return PROVIDER_PRESETS[preset_name]["url"], PROVIDER_PRESETS[preset_name]["model"]
+                            
+                        provider_selector.change(fn=auto_fill_api, inputs=[provider_selector], outputs=[base_url_input, model_input])
                         temp_slider = gr.Slider(minimum=0.1, maximum=2.0, value=0.7, label="Temperature")
                         top_p_slider = gr.Slider(minimum=0.1, maximum=1.0, value=1.0, label="Top P")
                         freq_pen_slider = gr.Slider(minimum=-2.0, maximum=2.0, value=0.5, label="Freq Penalty")
