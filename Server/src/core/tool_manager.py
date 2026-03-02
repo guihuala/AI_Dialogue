@@ -1,0 +1,49 @@
+class ToolManager:
+    """🛠️ 系统级工具箱：负责处理 AI 的所有实体工具调用"""
+    
+    def execute(self, func_name: str, args: dict) -> dict:
+        """🌟 动态路由：自动寻找并执行对应的工具函数"""
+        # 利用反射机制，动态获取对应名字的函数
+        method = getattr(self, func_name, None)
+        
+        if method and callable(method):
+            try:
+                # 执行工具函数，并返回结果
+                return method(args)
+            except Exception as e:
+                return {"display_text": f"\n\n⚠️ **[系统异常]** 工具 '{func_name}' 执行失败: {e}\n"}
+                
+        return {"display_text": f"\n\n⚠️ **[系统警告]** AI 尝试调用了未知的系统工具: {func_name}\n"}
+
+    # ==========================================
+    # 🧰 以下是具体的工具函数实现 (新增工具只需在这里加函数即可)
+    # ==========================================
+
+    def post_to_campus_wall(self, args: dict) -> dict:
+        """工具：校园表白墙系统"""
+        author = args.get("author", "匿名")
+        content = args.get("content", "")
+        return {
+            "display_text": f"\n\n📢 **【系统工具触发：校园表白墙突发】**\n> 👤 **{author}** 发布了一条动态：\n> 「{content}」\n> *(此动态在全系引发轩然大波，你的 SAN 值受到真实暴击！)*\n",
+            "san_delta": -15  # 扣除 15 点 SAN 值
+        }
+
+    def sabotage_academic(self, args: dict) -> dict:
+        """工具：学业背刺系统"""
+        target = args.get("target", "陆陈安然")
+        method = args.get("method", "未知手段")
+        res = {
+            "display_text": f"\n\n⚠️ **【系统工具触发：学业背刺】**\n> {target} 的学业遭到了恶性破坏！\n> 破坏方式：{method}\n> *(系统已调用底层接口强行扣除目标 GPA！)*\n"
+        }
+        if target == "陆陈安然":
+            res["gpa_delta"] = -0.3  # 扣除 0.3 的绩点
+        return res
+        
+    def call_parents(self, args: dict) -> dict:
+        """工具(演示新增)：打小报告扣钱"""
+        caller = args.get("caller", "某人")
+        return {
+            "display_text": f"\n\n☎️ **【系统工具触发：跨界打小报告】**\n> {caller} 竟然直接打电话给了你的家长，添油加醋地告了一状！\n> *(你的生活费被无情扣除！)*\n",
+            "money_delta": -300,
+            "san_delta": -10
+        }

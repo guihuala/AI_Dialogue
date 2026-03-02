@@ -15,8 +15,7 @@ except Exception as e:
 
 from src.core.game_engine import GameEngine
 from src.core.wechat_system import WeChatSystem
-
-engine = GameEngine()
+from src.core.agent_system import ReflectionSystem
 
 # ==========================================
 # ⚙️ CMS 后台目录配置
@@ -24,6 +23,9 @@ engine = GameEngine()
 PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "prompts")
 EVENTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "events")
 LORES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "lores")
+
+engine = GameEngine()
+reflection_engine = ReflectionSystem(engine.llm, PROMPTS_DIR)
 
 DIR_MAPPING = {
     "root": "🏠 核心基座 (底层 Prompt)",
@@ -203,6 +205,21 @@ def ui_process_main(selected_chars, current_evt_id, player_choice, is_transition
 
     yield res["res_text"], res.get("sys_prompt", ""), res.get("user_prompt", ""), options_ui, hist, res["turn"], f"第 {res['chapter']} 章 - 回合 {res['turn']}", gr.update(value=btn_text, interactive=True), res["is_end"], res["current_evt_id"], res["san"], res["money"], res["gpa"], res["arg_count"], res["chapter"], stats_md_text, char_md, res["affinity"], new_chats_ui_update, wechat_data_dict, wechat_chatbot_update
 
+def trigger_reflection(hist, chapter, active_chars):
+    if not hist:
+        yield hist + [("系统", "⚠️ 暂无剧情历史，无法进行反思。")]
+        return
+        
+    yield hist + [("系统", "🌙 *夜幕降临，室友们躺在床上，回想今天的遭遇... (AI 深度反思中)*")]
+    
+    # 把最近的 10 条对话记录提取出来作为反思材料
+    recent_history = "\n".join([f"事件: {h[0]}\n结果: {h[1]}" for h in hist[-10:]])
+    
+    # 呼叫反思引擎
+    logs = reflection_engine.trigger_night_reflection(chapter, recent_history, active_chars)
+    
+    yield hist + [("系统", logs)]
+    
 def switch_chat_channel(selected_channel, wechat_data_dict):
     if selected_channel not in wechat_data_dict: wechat_data_dict[selected_channel] = []
     return wechat_data_dict[selected_channel]
@@ -230,7 +247,8 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
                     dynamic_options = gr.Radio(choices=[], label="玩家意图轮盘", visible=False)
                     with gr.Row():
                         action_btn = gr.Button("启动模拟流", variant="primary", scale=3)
-                        toggle_phone_btn = gr.Button("📱 掏出手机", variant="secondary", scale=1)
+                        reflect_btn = gr.Button("深夜结算", variant="secondary", scale=2)
+                        toggle_phone_btn = gr.Button("掏出手机", variant="secondary", scale=1)
                     
                     with gr.Accordion("角色与生成参数控制台", open=False):
                         stats_panel = gr.Markdown("**SAN值**: 80/100 &nbsp;|&nbsp; **生活费**: ¥1500 &nbsp;|&nbsp; **GPA**: 3.00 &nbsp;|&nbsp; **本章争吵**: 0次")
@@ -261,6 +279,7 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
                 return gr.update(visible=new_state), "⬇️ 收起手机" if new_state else "📱 掏出手机", new_state
             
             phone_state = gr.State(False)
+            reflect_btn.click(fn=trigger_reflection,inputs=[chatbot, state_chapter, char_checkboxes],outputs=[chatbot])
             toggle_phone_btn.click(fn=toggle_phone, inputs=phone_state, outputs=[phone_panel, toggle_phone_btn, phone_state])
             chat_selector.change(fn=switch_chat_channel, inputs=[chat_selector, state_wechat_data], outputs=[wechat_chatbot])
 

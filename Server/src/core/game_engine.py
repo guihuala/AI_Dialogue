@@ -13,6 +13,7 @@ from src.core.event_director import EventDirector
 from src.core.event_script import EVENT_DATABASE
 from src.core.prompt_manager import PromptManager
 from src.core.agent_system import NPCAgent
+from src.core.tool_manager import ToolManager
 
 class GameEngine:
     def __init__(self):
@@ -30,6 +31,7 @@ class GameEngine:
         self.mm = MemoryManager(os.path.join(data_dir, "profile.json"), os.path.join(data_dir, "chroma_db"), self.llm)
         self.director = EventDirector()
         self.pm = PromptManager()
+        self.tm = ToolManager()
 
     def parse_and_repair_json(self, raw_text):
         raw_text = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL)
@@ -237,8 +239,29 @@ class GameEngine:
                         affinity[c_name] = max(0, min(100, affinity[c_name] + c_aff))
                         aff_sign = f" (好感 {c_aff})" if c_aff < 0 else f" (好感 +{c_aff})"
                     else: aff_sign = ""
-                    if c_act: display_text += f"\n\n> 👁️ **[暗场动态] {c_name}**: {c_act}{aff_sign}"
-
+                    if c_act: display_text += f"\n\n> **[暗场动态] {c_name}**: {c_act}{aff_sign}"
+            
+            # ========================================================
+            # 🛠️ 真实工具调用执行层 (Function Calling / Tool Use)
+            # ========================================================
+            tool_calls = parsed.get("tool_calls", [])
+            if isinstance(tool_calls, dict): tool_calls = [tool_calls]
+            if isinstance(tool_calls, list):
+                for tool in tool_calls:
+                    if not isinstance(tool, dict): continue
+                    func_name = tool.get("name", "")
+                    args = tool.get("args", {})
+                    
+                    # 🌟 核心跨越：一行代码消灭所有 if-else！动态派发执行！
+                    tool_res = self.tm.execute(func_name, args)
+                    
+                    # 动态应用工具带来的数值变化和文本渲染
+                    if "display_text" in tool_res: display_text += tool_res["display_text"]
+                    if "san_delta" in tool_res: san = max(0, min(100, san + tool_res["san_delta"]))
+                    if "gpa_delta" in tool_res: gpa = max(0.0, min(4.0, gpa + tool_res["gpa_delta"]))
+                    if "money_delta" in tool_res: money += tool_res["money_delta"]
+            # ========================================================
+            
             is_end = True if getattr(next_evt, 'is_cg', False) or turn >= 3 else parsed.get("is_end", False)
             
             if not getattr(next_evt, 'is_cg', False) and action_text and "（时间推移..." not in action_text:
