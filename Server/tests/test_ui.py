@@ -424,6 +424,101 @@ with gr.Blocks(title="大学档案 | 沉浸式模拟系统", theme=gr.themes.Mon
             save_event_btn.click(fn=save_event_csv, inputs=[event_file_selector, event_editor], outputs=[save_event_status])
             create_event_btn.click(fn=create_new_event_file, inputs=[new_event_input], outputs=[event_file_selector, event_editor, save_event_status])
             refresh_events_btn.click(fn=lambda: gr.update(choices=get_event_files()), outputs=[event_file_selector])
+        
+        # ==========================================
+        # Tab 4: 独立智能体测试沙盒 (Agent Playground)
+        # ==========================================
+        with gr.TabItem("🤖 独立智能体测试沙盒"):
+            gr.Markdown("### 🤖 独立智能体调优与测试 (Agent Playground)\n> 在这里你可以脱离主线剧情，直接唤醒单个室友的底层 Agent 进行 1V1 对话。测试她的人设是否鲜活、对你的偏见是否生效。")
+            with gr.Row():
+                with gr.Column(scale=3):
+                    agent_selector = gr.Dropdown(choices=list(engine.candidate_pool.keys()), label="👥 选择要唤醒的智能体", value=list(engine.candidate_pool.keys())[0], interactive=True)
+                    agent_sys_prompt_display = gr.Code(language="markdown", label="该智能体当前加载的潜意识设定", interactive=False, lines=20)
+                with gr.Column(scale=9):
+                    agent_chatbot = gr.Chatbot(label="与智能体的独立对话 (她会以游戏中的 JSON 格式思考并渲染输出)", height=450)
+                    with gr.Row():
+                        agent_input = gr.Textbox(label="你的发言 (扮演 陆陈安然)", placeholder="输入你想对她说的话，按回车发送...", scale=8)
+                        agent_send_btn = gr.Button("🚀 发送", variant="primary", scale=1)
+                    agent_clear_btn = gr.Button("🗑️ 清空当前智能体的短期记忆", size="sm")
+            
+            def get_agent_memory(char_name):
+                # 动态抓取该角色的人设和偏见网络
+                profile_text = engine.pm._read_md(f"characters/{engine.pm.char_file_map.get(char_name, '')}")
+                rel_text = ""
+                rel_csv_path = os.path.join(engine.pm.chars_dir, "relationship.csv")
+                import csv
+                if os.path.exists(rel_csv_path):
+                    try:
+                        with open(rel_csv_path, 'r', encoding='utf-8-sig') as f:
+                            reader = csv.DictReader(f)
+                            for row in reader:
+                                if row.get("评价者", "").strip() == char_name:
+                                    target = row.get("被评价者", "").strip()
+                                    surface = row.get("表面态度", "").strip()
+                                    inner = row.get("内心真实评价", "").strip()
+                                    rel_text += f"- 面对【{target}】：表面展现[{surface}]，内心实际上觉得[{inner}]。\n"
+                    except: pass
+                return f"【人物核心档案】:\n{profile_text}\n\n【当前人际偏见网络】:\n{rel_text}"
+
+            def agent_chat_fn(char_name, user_input, history):
+                if not user_input: return "", history
+                history.append((user_input, "⏳ *智能体正在思考并生成动作...*"))
+                yield "", history
+                
+                # 组装纯净的 Agent 设定 Prompt
+                sys_prompt = f"""你是{char_name}。
+{get_agent_memory(char_name)}
+
+[演出任务]
+陆陈安然(玩家)正在和你单独对话。请根据你的性格给出最真实的本能反应。
+你必须输出合法的 JSON 格式。
+输出模板：
+{{
+    "dialogue": "（你的台词。如果不说话则留空）",
+    "mood": "（你当前的情绪，如：不耐烦/开心/假笑）",
+    "action": "（你的暗场动作，如：翻白眼/低头看手机/敷衍地点头）"
+}}"""
+                
+                # 拼接历史上下文
+                context = "【之前的对话记录】\n"
+                for h in history[:-1]:
+                    context += f"陆陈安然: {h[0]}\n{char_name}: {h[1]}\n"
+                    
+                user_prompt = f"{context}\n\n陆陈安然对你说: {user_input}\n请给出你的独立反应(JSON)："
+
+                # 呼叫底层 LLM
+                res_text = engine.llm.generate_response(system_prompt=sys_prompt, user_input=user_prompt, temperature=0.75, max_tokens=200)
+
+                try:
+                    import re, json
+                    # 暴力洗码，确保 JSON 可用
+                    clean_text = re.sub(r'```json\s*', '', res_text)
+                    clean_text = re.sub(r'```\s*', '', clean_text)
+                    clean_text = clean_text.replace('“', '"').replace('”', '"')
+                    parsed = json.loads(clean_text)
+                    
+                    action = parsed.get("action", "")
+                    dia = parsed.get("dialogue", "")
+                    mood = parsed.get("mood", "平静")
+                    
+                    # 渲染为游戏内的演出格式
+                    reply = ""
+                    if action: reply += f"> 👁️ *(【{mood}】 {action})* \n\n"
+                    if dia: reply += f"**{char_name}**: “{dia}”"
+                    if not reply.strip(): reply = "*(没有任何反应)*"
+                    
+                except Exception as e:
+                    reply = f"⚠️ 智能体大脑解析失败 (它可能没有输出合法的 JSON): \n{res_text}"
+
+                history[-1] = (user_input, reply)
+                yield "", history
+
+            # 事件绑定
+            agent_selector.change(fn=lambda c: (get_agent_memory(c), []), inputs=[agent_selector], outputs=[agent_sys_prompt_display, agent_chatbot])
+            demo.load(fn=get_agent_memory, inputs=[agent_selector], outputs=[agent_sys_prompt_display])
+            agent_input.submit(fn=agent_chat_fn, inputs=[agent_selector, agent_input, agent_chatbot], outputs=[agent_input, agent_chatbot])
+            agent_send_btn.click(fn=agent_chat_fn, inputs=[agent_selector, agent_input, agent_chatbot], outputs=[agent_input, agent_chatbot])
+            agent_clear_btn.click(fn=lambda: [], outputs=[agent_chatbot])
 
 
 if __name__ == "__main__":
