@@ -1,132 +1,189 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
-import random
-import sys
 import os
+import sys
 
 # 把当前文件的上一级目录加入系统路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.core.presets import CANDIDATE_POOL
+from src.core.game_engine import GameEngine
 from src.models.schema import PlayerStats
-from src.services.llm_service import LLMService
+
+# 定义存档目录
+SAVE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "saves")
+if not os.path.exists(SAVE_DIR):
+    os.makedirs(SAVE_DIR)
 
 app = FastAPI(title="Roommate Survival Game API")
 
-# 初始化你封装好的 LLM 客户端
-llm_service = LLMService()
+# 初始化 GameEngine 核心引擎
+try:
+    engine = GameEngine()
+except Exception as e:
+    print(f"Warning: Failed to initialize GameEngine fully, error: {e}")
+    engine = None
 
-# --- 保持你原有的请求体定义完全不变 ---
-class GetOptionsRequest(BaseModel):
-    active_roommates: List[str]
+# --- 请求体定义 ---
+class StartGameRequest(BaseModel):
+    # 可选：如果 Unity 想指定初始室友，或者使用一套默认池
+    roommates: List[str] = []
 
-class PerformActionRequest(BaseModel):
+class GameTurnRequest(BaseModel):
     choice: str
     active_roommates: List[str]
+    current_evt_id: str
+    is_transition: bool = False
+    chapter: int = 1
+    turn: int = 0
+    san: int = 100
+    money: float = 2000.0
+    gpa: float = 4.0
+    arg_count: int = 0
+    affinity: Dict[str, float] = {}
+    wechat_data_dict: Dict[str, List[Any]] = {}
+
+class SaveGameRequest(BaseModel):
+    slot_id: str
+    game_state: Dict[str, Any]
+
+class SettingsRequest(BaseModel):
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    custom_model: Optional[str] = None
 
 # --- 路由与接口 ---
 
-@app.post("/api/get_options")
-def get_options(req: GetOptionsRequest): # 去掉 async，适配你的同步 LLMService
+@app.post("/api/game/start")
+def start_game(req: StartGameRequest):
     """
-    接入 LLM 动态生成玩家的行动选项
+    初始化游戏：分配室友，设置初始状态
     """
-    if not req.active_roommates:
-        raise HTTPException(status_code=400, detail="没有传入室友数据")
+    if not engine:
+        raise HTTPException(status_code=500, detail="GameEngine not initialized.")
         
-    active_profiles = [CANDIDATE_POOL[c_id] for c_id in req.active_roommates if c_id in CANDIDATE_POOL]
-    char_names = [p.Name for p in active_profiles]
-    
-    # 构建发给 LLM 的系统指令
-    system_prompt = f"""
-    你是一个文字冒险游戏的选项生成器。玩家正在宿舍，面对的室友有：{', '.join(char_names)}。
-    请根据当前情况，提供3个不同态度的对话选项（必须包含：附和、沉默/转移话题、阴阳怪气/质疑）。
-    
-    请严格返回 JSON 格式（不要有任何 markdown 标记），结构如下：
-    {{
-        "options": ["选项1的文本", "选项2的文本", "选项3的文本"]
-    }}
-    """
-    
+    selected_ids = req.roommates
+    if not selected_ids:
+        # 如果未指定，随便选 3 个
+        import random
+        all_ids = list(CANDIDATE_POOL.keys())
+        selected_ids = random.sample(all_ids, min(3, len(all_ids)))
+        
+    # 第一回合可以认为是一次 Transition，交给 GameEngine 生成场景和选项
     try:
-        # 调用你写好的方法
-        response_text = llm_service.generate_response(
-            system_prompt=system_prompt,
-            user_input="请为我生成本回合的三个行动选项。",
-            context="当前处于宿舍日常互动阶段。"
+        init_res = engine.play_main_turn(
+            action_text="",
+            selected_chars=selected_ids,
+            current_evt_id="",
+            is_transition=True,
+            api_key="",  # 默认使用环境变量里配置好的
+            base_url="",
+            model="",
+            tmp=0.7, top_p=1.0, max_t=800, pres_p=0.3, freq_p=0.5,
+            san=100, money=2000, gpa=4.0, arg_count=0, chapter=1, turn=0,
+            affinity={sid: 50 for sid in selected_ids},
+            wechat_data_dict={}
         )
-        
-        # 清理可能存在的 ```json 标记
-        if "```json" in response_text:
-            response_text = response_text.replace("```json", "").replace("```", "").strip()
-            
-        result = json.loads(response_text)
-        return result
+        return init_res
     except Exception as e:
-        print(f"LLM 解析选项失败: {e}")
-        # 兜底机制，防止游戏因网络波动卡死
-        return {"options": ["[附和] 确实是这样...", "[沉默] ...", "[阴阳怪气] 呵呵，你开心就好。"]}
+        print(f"Init Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.post("/api/perform_action")
-def perform_action(req: PerformActionRequest): # 去掉 async
+@app.post("/api/game/turn")
+def perform_turn(req: GameTurnRequest):
     """
-    接收玩家选择，调用 LLM 进行对话推演和数值结算
+    回合制核心：提交玩家选择及状态，返回下一事件脚本和新选项
     """
-    active_profiles = [CANDIDATE_POOL[c_id] for c_id in req.active_roommates if c_id in CANDIDATE_POOL]
-    
-    # 提取室友设定，防止 AI 发生 OOC
-    char_descriptions = ""
-    for p in active_profiles:
-        char_descriptions += f"""
-        - 姓名: {p.Name} ({p.Core_Archetype})
-        - 行为逻辑: {p.Roommate_Behavior}
-        - 说话风格: 语气{p.Speech_Pattern.Tone}，口头禅【{', '.join(p.Speech_Pattern.Catchphrases)}】。禁语：{', '.join(p.Speech_Pattern.Forbidden_Words)}。
-        """
-
-    system_prompt = f"""
-    你是一个多角色大学生存游戏的底层系统。
-    当前在宿舍的室友设定如下：
-    {char_descriptions}
-    
-    请根据室友的性格，推演接下来的对话发展（1~3句即可）。同时，评估玩家行动对自身属性（SAN值 0-100, 资金, GPA 0-4.0）的影响。
-    
-    必须严格返回以下 JSON 格式（不要有任何 markdown 标记）：
-    {{
-        "dialogue_sequence": [
-            {{"speaker": "室友姓名", "content": "说的话", "mood": "情绪"}}
-        ],
-        "player_stats": {{"san": 75, "gpa": 3.0, "money": 1500}},
-        "game_time": {{"year": "一", "month": 10, "week": 2}},
-        "current_event": "宿舍日常纷争"
-    }}
-    """
-
+    if not engine:
+        raise HTTPException(status_code=500, detail="GameEngine not initialized.")
+        
     try:
-        # 调用你写好的推演方法
-        response_text = llm_service.generate_response(
-            system_prompt=system_prompt,
-            user_input=f"我的行动/说话内容是：\"{req.choice}\"",
-            context="当前时间：大一 第一学期"
+        res = engine.play_main_turn(
+            action_text=req.choice,
+            selected_chars=req.active_roommates,
+            current_evt_id=req.current_evt_id,
+            is_transition=req.is_transition,
+            api_key="", 
+            base_url="",
+            model="",
+            tmp=0.7, top_p=1.0, max_t=800, pres_p=0.3, freq_p=0.5,
+            san=req.san,
+            money=req.money,
+            gpa=req.gpa,
+            arg_count=req.arg_count,
+            chapter=req.chapter,
+            turn=req.turn,
+            affinity=req.affinity,
+            wechat_data_dict=req.wechat_data_dict
         )
-        
-        # 清理 JSON 格式
-        if "```json" in response_text:
-            response_text = response_text.replace("```json", "").replace("```", "").strip()
-            
-        result = json.loads(response_text)
-        return result
-
+        return res
     except Exception as e:
-        print(f"LLM 推演对话失败: {e}")
-        return {
-            "dialogue_sequence": [{"speaker": "System", "content": "室友们陷入了尴尬的沉默...", "mood": "neutral"}],
-            "player_stats": {"san": 80, "gpa": 3.0, "money": 1500},
-            "game_time": {"year": "一", "month": 9, "week": 1},
-            "current_event": "系统卡顿"
+        print(f"Turn Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/game/save")
+def save_game(req: SaveGameRequest):
+    """
+    保存游戏状态到本地 JSON 文件
+    """
+    try:
+        file_path = os.path.join(SAVE_DIR, f"save_{req.slot_id}.json")
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(req.game_state, f, ensure_ascii=False, indent=4)
+        return {"status": "success", "message": f"Saved to slot {req.slot_id}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"保存失败: {str(e)}")
+
+@app.get("/api/game/load/{slot_id}")
+def load_game(slot_id: str):
+    """
+    从本地 JSON 文件读取游戏状态
+    """
+    file_path = os.path.join(SAVE_DIR, f"save_{slot_id}.json")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="存档不存在")
+        
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            game_state = json.load(f)
+        return {"status": "success", "game_state": game_state}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取存档失败: {str(e)}")
+
+@app.post("/api/game/reset")
+def reset_game():
+    """
+    重置当前后端可能缓存的状态
+    当前服务端是无状态设计，所以这只是个占位符，如果以后加入了会话隔离 (Session Memory) 则用于清空
+    """
+    # 如果还需要重置引擎内的会话信息的话
+    try:
+        if engine and hasattr(engine, 'mm'):
+            engine.mm.clear_game_history()
+        return {"status": "success", "message": "Backend memory cleared"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/system/settings")
+def update_settings(req: SettingsRequest):
+    """
+    调整后端的 LLM 生成参数 (如温度，使用模型)
+    """
+    if getattr(engine, 'llm', None):
+        if req.temperature is not None:
+            engine.llm.temperature = req.temperature
+        if req.max_tokens is not None:
+            engine.llm.max_tokens = req.max_tokens
+    
+    return {
+        "status": "success", 
+        "current_settings": {
+            "temperature": getattr(engine.llm, 'temperature', None) if getattr(engine, 'llm', None) else None,
+            "max_tokens": getattr(engine.llm, 'max_tokens', None) if getattr(engine, 'llm', None) else None,
         }
+    }
 
 if __name__ == "__main__":
     import uvicorn

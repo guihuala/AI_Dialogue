@@ -230,9 +230,10 @@ public class StageController : MonoBehaviour
             string spk = turn.speaker.ToLower();
             bool isPlayerTurn = IsPlayer(spk);
 
-            if (spk == "system" || spk == "narrator" || spk == "gm")
+            if (spk == "system" || spk == "narrator" || spk == "gm" || spk == "剧情推进" || spk == "神秘人")
             {
                 speakerNameText.text = "";
+                UpdatePortraitFocus(""); // clear focus
             }
             else
             {
@@ -256,9 +257,13 @@ public class StageController : MonoBehaviour
                 if (targetPortrait != null) targetPortrait.ChangeExpression(turn.mood);
             }
 
-            UpdatePortraitFocus(isPlayerTurn ? playerData.id.ToLower() : spk);
+            if (spk != "system" && spk != "narrator" && spk != "gm" && spk != "剧情推进" && spk != "神秘人")
+            {
+                UpdatePortraitFocus(isPlayerTurn ? playerData.id.ToLower() : spk);
+            }
 
             bool finished = false;
+            // 延长文本显示的时间（对于系统独白而言）
             if (textAnimator != null) textAnimator.ShowText(turn.content, () => finished = true);
             else finished = true;
 

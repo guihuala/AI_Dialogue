@@ -138,7 +138,12 @@ class GameEngine:
             agents = []
             for char_name in npc_chars:
                 # 给每个演员发她独有的剧本和偏见
-                profile_text = self.pm._read_md(f"characters/{self.pm.char_file_map.get(char_name, '')}")
+                char_file = self.pm.char_file_map.get(char_name, "")
+                profile_text = ""
+                if char_file:
+                    profile_text = self.pm._read_md(f"characters/{char_file}")
+                else:
+                    profile_text = f"你扮演的大型语言模型未能找到 {char_name} 的具体设定文件，请根据你的名字合理推演。"
                 rel_text = ""
                 rel_csv_path = os.path.join(self.pm.chars_dir, "relationship.csv")
                 if os.path.exists(rel_csv_path):

@@ -52,9 +52,10 @@ public class TopBarController : MonoBehaviour
             gpaText.color = stats.gpa < 2.0f ? Color.red : (stats.gpa > 3.5f ? new Color(0, 0.5f, 0) : Color.black);
         }
 
-        if (time != null)
+        if (time != null && !string.IsNullOrEmpty(time.year))
         {
-            timeText.text = $"第{time.year}年 | {time.month}月 | 第{time.week}周";
+            // Now time.year holds the chapter string like "第 1 章"
+            timeText.text = $"{time.year} | 回合 {time.week}";
             timeText.color = Color.black;
         }
 

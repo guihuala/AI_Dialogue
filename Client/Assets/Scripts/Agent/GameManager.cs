@@ -21,6 +21,14 @@ public class GameManager : Singleton<GameManager>
     [Header("Data")] [SerializeField] private string playerName = "ArtStudent_01";
     public List<string> activeRoommates = new List<string>();
 
+    private int currentSan = 100;
+    private float currentMoney = 2000f;
+    private float currentGpa = 4.0f;
+    private int argCount = 0;
+    private int currentChapter = 1;
+    private int currentTurn = 0;
+    private string currentEvtId = "";
+
     public struct ChatLog
     {
         public string speaker;
@@ -36,6 +44,7 @@ public class GameManager : Singleton<GameManager>
     public event Action<PlayerStatsData, GameTimeData, string> OnStatsRefreshed;
     public event Action<string> OnEventNotified;
     public event Action<List<DialogueTurn>, Action> OnPlayDialogueSequence;
+    public event Action<List<WeChatNotification>> OnWeChatNotified;
 
     // --- 游戏流程 ---
     private IEnumerator Start()
@@ -70,27 +79,63 @@ public class GameManager : Singleton<GameManager>
         activeRoommates = new List<string>(selectedChars);
         SetGameState(GameState.Playing);
 
+        currentSan = 100;
+        currentMoney = 2000f;
+        currentGpa = 4.0f;
+        argCount = 0;
+        currentChapter = 1;
+        currentTurn = 0;
+        currentEvtId = "";
+
         if (OnInitRoommates == null) Debug.LogWarning("[GameManager] 警告: OnInitRoommates 没有人订阅！UI可能未准备好。");
         OnInitRoommates?.Invoke(activeRoommates);
 
-        StartNewTurn();
-    }
-
-    public void StartNewTurn()
-    {
-        Debug.Log("[GameManager] 请求新回合的选项...");
-        if (currentState != GameState.Playing) return;
-
-        StartCoroutine(networkService.GetOptionsCoroutine(
+        StartCoroutine(networkService.StartGameCoroutine(
             activeRoommates,
-            (res) =>
-            {
-                Debug.Log($"[GameManager] 收到选项，数量: {res?.options?.Count}");
-                if (OnShowOptions == null) Debug.LogWarning("[GameManager] 警告: OnShowOptions 没有 UI 订阅监听！");
-                OnShowOptions?.Invoke(res.options);
-            },
+            (res) => HandleTurnResponse(res, ""),
             (err) => ShowSystemError(err)
         ));
+    }
+
+    private void HandleTurnResponse(GameTurnResponse res, string choice)
+    {
+        currentSan = res.san;
+        currentMoney = res.money;
+        currentGpa = res.gpa;
+        argCount = res.arg_count;
+        currentChapter = res.chapter;
+        currentTurn = res.turn;
+        currentEvtId = res.current_evt_id;
+        
+        PlayerStatsData stats = new PlayerStatsData { san = res.san, money = res.money, gpa = res.gpa };
+        GameTimeData timeData = new GameTimeData { year = $"第 {res.chapter} 章", month = res.chapter, week = res.turn };
+
+        OnStatsRefreshed?.Invoke(stats, timeData, res.current_evt_id);
+        OnEventNotified?.Invoke(res.current_evt_id);
+
+        if (res.wechat_notifications != null && res.wechat_notifications.Count > 0)
+        {
+            OnWeChatNotified?.Invoke(res.wechat_notifications);
+        }
+
+        if (res.is_game_over || res.san <= 0)
+        {
+            EndGame();
+        }
+
+        // 统一构建对话序列用于展示
+        List<DialogueTurn> dts = new List<DialogueTurn>();
+        dts.Add(new DialogueTurn { speaker = "剧情推进", content = res.display_text, mood = "neutral" });
+
+        if (OnPlayDialogueSequence == null)
+            Debug.LogWarning("[GameManager] 警告: OnPlayDialogueSequence 没人监听！对话不会播放！");
+
+        OnPlayDialogueSequence?.Invoke(dts, () => { 
+            if (res.next_options != null && res.next_options.Count > 0)
+            {
+                OnShowOptions?.Invoke(res.next_options);
+            }
+        });
     }
 
     public void HandlePlayerChoice(string choice)
@@ -101,25 +146,22 @@ public class GameManager : Singleton<GameManager>
         OnShowImmediateMessage?.Invoke("Player", choice, Color.cyan);
         AddChatLog("Player", choice);
 
-        StartCoroutine(networkService.PerformActionCoroutine(
-            choice,
-            activeRoommates,
-            (res) =>
-            {
-                Debug.Log("[GameManager] 收到后端返回的剧本演出，开始广播给UI...");
-                OnStatsRefreshed?.Invoke(res.player_stats, res.game_time, res.current_event);
-                OnEventNotified?.Invoke(res.current_event);
+        GameTurnRequest req = new GameTurnRequest {
+            choice = choice,
+            active_roommates = activeRoommates,
+            current_evt_id = currentEvtId,
+            is_transition = false,
+            chapter = currentChapter,
+            turn = currentTurn,
+            san = currentSan,
+            money = currentMoney,
+            gpa = currentGpa,
+            arg_count = argCount
+        };
 
-                if (res.player_stats.san <= 0)
-                {
-                    EndGame();
-                }
-
-                if (OnPlayDialogueSequence == null)
-                    Debug.LogWarning("[GameManager] 警告: OnPlayDialogueSequence 没人监听！对话不会播放！");
-
-                OnPlayDialogueSequence?.Invoke(res.dialogue_sequence, () => { StartNewTurn(); });
-            },
+        StartCoroutine(networkService.PlayTurnCoroutine(
+            req,
+            (res) => HandleTurnResponse(res, choice),
             (err) => ShowSystemError(err)
         ));
     }
