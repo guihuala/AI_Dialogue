@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 7186161644869122461}
   - component: {fileID: 1301348935869836599}
   - component: {fileID: 3815845736484361599}
+  - component: {fileID: 2057685601767635725}
   m_Layer: 0
   m_Name: -----MANAGER-----
   m_TagString: Untagged
@@ -104,6 +105,18 @@ MonoBehaviour:
   SignPrefab: {fileID: 6944888077476667840, guid: 5ec34d3113a459d4f8adbe4dd7854dd6, type: 3}
   FixedPosTextPrefab: {fileID: 6944888077476667840, guid: b29276fe14cccf040bc3320d8668b911, type: 3}
   CircleProgressPrefab: {fileID: 4911077471963055430, guid: c4565201eaffcf84d9cc33c69b5a7259, type: 3}
+--- !u!114 &2057685601767635725
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1033116973648035728}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fbe2a34bbf2174129abcdc2ffb2b7956, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &6293896897445081069
 GameObject:
   m_ObjectHideFlags: 0

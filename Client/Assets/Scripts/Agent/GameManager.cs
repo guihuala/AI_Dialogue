@@ -14,13 +14,11 @@ public class GameManager : Singleton<GameManager>
     }
 
     private GameState currentState;
-
-    [Header("Controllers")] [SerializeField]
-    private NetworkService networkService; // 网络服务可以挂在子节点或同样持久化
-
+    
     [Header("Data")] [SerializeField] private string playerName = "ArtStudent_01";
     public List<string> activeRoommates = new List<string>();
 
+    private int currentSlotId = -1;
     private int currentSan = 100;
     private float currentMoney = 2000f;
     private float currentGpa = 4.0f;
@@ -28,7 +26,7 @@ public class GameManager : Singleton<GameManager>
     private int currentChapter = 1;
     private int currentTurn = 0;
     private string currentEvtId = "";
-    private bool isAwaitingTransition = false; // Add flag for transitioning from a finished event
+    private bool isAwaitingTransition = false;
 
     [Serializable]
     public struct ChatLog
@@ -62,10 +60,14 @@ public class GameManager : Singleton<GameManager>
 
         if (PlayerPrefs.GetInt("IsContinuingGame", 0) == 1)
         {
-            // 继续游戏，清理游玩标记避免死循环
+            int slotId = PlayerPrefs.GetInt("SelectedSlotID", 1);
+            
+            // 清理标记
             PlayerPrefs.SetInt("IsContinuingGame", 0);
             PlayerPrefs.Save();
-            LoadLocalProgress();
+
+            // 调用你之前写好的读档方法
+            LoadGameFromSlot(slotId);
         }
         else
         {
@@ -86,13 +88,7 @@ public class GameManager : Singleton<GameManager>
     public void StartNewGame(List<string> selectedChars)
     {
         Debug.Log($"[GameManager] 开始新游戏，选中的室友数量: {selectedChars.Count}");
-
-        if (networkService == null)
-        {
-            Debug.LogError("[GameManager] 致命错误: networkService 未赋值！请在 Inspector 面板中拖拽对应物体。");
-            return;
-        }
-
+        
         chatHistory.Clear();
         activeRoommates = new List<string>(selectedChars);
         SetGameState(GameState.Playing);
@@ -109,7 +105,7 @@ public class GameManager : Singleton<GameManager>
         if (OnInitRoommates == null) Debug.LogWarning("[GameManager] 警告: OnInitRoommates 没有人订阅！UI可能未准备好。");
         OnInitRoommates?.Invoke(activeRoommates);
 
-        StartCoroutine(networkService.StartGameCoroutine(
+        StartCoroutine(NetworkService.Instance.StartGameCoroutine(
             activeRoommates,
             (res) => HandleTurnResponse(res, ""),
             (err) => ShowSystemError(err)
@@ -204,7 +200,7 @@ public class GameManager : Singleton<GameManager>
             wechat_data_list = WeChatApp.Instance != null ? WeChatApp.Instance.ExportChatHistory() : new List<WeChatSession>()
         };
 
-        StartCoroutine(networkService.PlayTurnCoroutine(
+        StartCoroutine(NetworkService.Instance.PlayTurnCoroutine(
             req,
             (res) => HandleTurnResponse(res, choice),
             (err) => ShowSystemError(err)
@@ -323,11 +319,10 @@ public class GameManager : Singleton<GameManager>
             money = currentMoney,
             gpa = currentGpa,
             arg_count = argCount,
-            //affinity = new AffinityDictionary(),
             wechat_data_list = WeChatApp.Instance != null ? WeChatApp.Instance.ExportChatHistory() : new List<WeChatSession>()
         };
 
-        StartCoroutine(networkService.PlayTurnCoroutine(
+        StartCoroutine(NetworkService.Instance.PlayTurnCoroutine(
             req,
             (res) => HandleTurnResponse(res, "【继续游戏】"),
             (err) => ShowSystemError(err)
@@ -340,5 +335,153 @@ public class GameManager : Singleton<GameManager>
         chatHistory.Clear();
         activeRoommates.Clear();
         UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenuScene");
+    }
+    
+    [Header("Save System")]
+    private string currentSaveId = "";
+    // ==========================================
+    // 💾 存档与读档核心业务
+    // ==========================================
+    
+    /// <summary>
+    /// 全新开局：清空内存并向后端拉取第一章
+    /// </summary>
+    public void StartNewGame()
+    {
+        currentSlotId = -1;
+        currentChapter = 1;
+        currentTurn = 0;
+        currentSan = 100;
+        currentMoney = 2000f;
+        currentGpa = 4.0f;
+        argCount = 0;
+        currentEvtId = "";
+
+        if (WeChatApp.Instance != null)
+        {
+            WeChatApp.Instance.ImportChatHistory(new List<WeChatSession>()); // 清空微信
+        }
+
+        // 可以调用网络接口告诉后端初始化，或者直接作为第1回合发过去
+        SendTurnRequest("【开始大学生活】", true); 
+    }
+
+    /// <summary>
+    /// 将当前进度保存到指定的槽位 (1, 2, 3)
+    /// </summary>
+    public void SaveGameToSlot(int slotId)
+    {
+        if (slotId < 1 || slotId > 3) return;
+
+        // 收集当前所有的核心状态
+        SaveGameRequest req = new SaveGameRequest
+        {
+            slot_id = slotId,
+            active_roommates = this.activeRoommates,
+            current_evt_id = this.currentEvtId,
+            chapter = this.currentChapter,
+            turn = this.currentTurn,
+            san = this.currentSan,
+            money = this.currentMoney,
+            gpa = this.currentGpa,
+            arg_count = this.argCount,
+            // 导出微信记录存入进度
+            wechat_data_list = WeChatApp.Instance != null ? WeChatApp.Instance.ExportChatHistory() : new List<WeChatSession>()
+        };
+        
+        StartCoroutine(NetworkService.Instance.SaveGameCoroutine(req, (res) =>
+        {
+            Debug.Log($"[Save] 槽位 {slotId} 存档成功! 后端返回: {res.message}");
+            currentSlotId = slotId;
+            
+            // 在本地留个标记，记录最后游玩的槽位，方便主界面的“继续游戏”直接读取
+            PlayerPrefs.SetInt("LastPlayedSlot", slotId);
+            PlayerPrefs.Save();
+            
+            // UI 提示
+            OnShowImmediateMessage?.Invoke("系统提示", $"游戏已成功保存至槽位 {slotId}。", Color.green);
+        }, 
+        (err) => 
+        {
+            Debug.LogError($"[Save] 存档失败: {err}");
+            ShowSystemError("存档失败: " + err);
+        }));
+    }
+
+    /// <summary>
+    /// 从指定槽位加载数据并恢复游戏状态
+    /// </summary>
+    public void LoadGameFromSlot(int slotId)
+    {
+        StartCoroutine(NetworkService.Instance.LoadGameCoroutine(slotId, (res) =>
+        {
+            Debug.Log($"[Load] 读取槽位 {slotId} 成功，正在恢复游戏状态...");
+            currentSlotId = slotId;
+            PlayerPrefs.SetInt("LastPlayedSlot", slotId);
+            
+            // 1. 恢复 GameManager 的内存状态
+            this.activeRoommates = res.data.active_roommates;
+            this.currentEvtId = res.data.current_evt_id;
+            this.currentChapter = res.data.chapter;
+            this.currentTurn = res.data.turn;
+            this.currentSan = res.data.san;
+            this.currentMoney = res.data.money;
+            this.currentGpa = res.data.gpa;
+            this.argCount = res.data.arg_count;
+
+            // 如果有微信聊天记录，推给微信管理器恢复
+            if (WeChatApp.Instance != null && res.data.wechat_data_list != null)
+            {
+                WeChatApp.Instance.ImportChatHistory(res.data.wechat_data_list);
+            }
+
+            // 2. 派发事件，强制刷新所有的 UI 面板 (顶部状态栏、人物栏等)
+            OnInitRoommates?.Invoke(activeRoommates);
+            PlayerStatsData stats = new PlayerStatsData { san = currentSan, money = currentMoney, gpa = currentGpa };
+            GameTimeData timeData = new GameTimeData { year = $"第 {currentChapter} 章", month = currentChapter, week = currentTurn };
+            OnStatsRefreshed?.Invoke(stats, timeData, currentEvtId);
+
+            // 3. 向后端发一个“空动作”以获取当前的剧情文本和选项，完成无缝续借
+            SendTurnRequest("【继续游戏】", true);
+        }, 
+        (err) => 
+        {
+            Debug.LogError($"[Load] 读取槽位 {slotId} 失败: {err}");
+            ShowSystemError("读取存档失败: " + err);
+        }));
+    }
+    
+    // ==========================================
+    // 🔄 核心回合调度辅助方法
+    // ==========================================
+
+    /// <summary>
+    /// 封装向后端发送回合请求的逻辑
+    /// (读档恢复画面、或者玩家点击选项时均可调用此方法)
+    /// </summary>
+    public void SendTurnRequest(string choiceText, bool isTransition = false)
+    {
+        GameTurnRequest req = new GameTurnRequest
+        {
+            choice = choiceText,
+            active_roommates = this.activeRoommates,
+            current_evt_id = this.currentEvtId,
+            is_transition = isTransition,
+            chapter = this.currentChapter,
+            turn = this.currentTurn,
+            san = this.currentSan,
+            money = this.currentMoney,
+            gpa = this.currentGpa,
+            arg_count = this.argCount,
+            // 同步最新的微信聊天记录给后端，供大模型参考
+            wechat_data_list = WeChatApp.Instance != null ? WeChatApp.Instance.ExportChatHistory() : new List<WeChatSession>()
+        };
+
+        // 发送网络请求 (请确保你的 NetworkService 中有 PlayTurnCoroutine 方法)
+        StartCoroutine(NetworkService.Instance.PlayTurnCoroutine(
+            req,
+            (res) => HandleTurnResponse(res, choiceText), // 处理后端返回的剧情
+            (err) => ShowSystemError("网络请求失败: " + err)
+        ));
     }
 }

@@ -33,10 +33,8 @@ public class TitleUIController : MonoBehaviour
 
     public void OnContinueButtonClicked()
     {
-        // Continue Game -> Set routing flag so GameManager loads progress
-        PlayerPrefs.SetInt("IsContinuingGame", 1);
-        PlayerPrefs.Save();
-        SceneLoader.Instance.LoadScene(GameScene.Gameplay);
+        // 打开存档选择面板
+        UIManager.Instance.OpenPanel("SaveSelectionPanel");
     }
 
     public void OnSettingsButtonClicked()

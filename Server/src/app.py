@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import json
 import os
-import sys
+import uuid
 
 # 把当前文件的上一级目录加入系统路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -11,6 +11,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.core.presets import CANDIDATE_POOL
 from src.core.game_engine import GameEngine
 from src.models.schema import PlayerStats
+from datetime import datetime
 
 # 定义存档目录
 SAVE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "saves")
@@ -28,7 +29,6 @@ except Exception as e:
 
 # --- 请求体定义 ---
 class StartGameRequest(BaseModel):
-    # 可选：如果 Unity 想指定初始室友，或者使用一套默认池
     roommates: List[str] = []
 
 class GameTurnRequest(BaseModel):
@@ -196,6 +196,57 @@ def update_settings(req: SettingsRequest):
             "max_tokens": getattr(engine.llm, 'max_tokens', None) if getattr(engine, 'llm', None) else None,
         }
     }
+
+class SaveGameRequest(BaseModel):
+    save_id: str = "" # 如果为空则是新建存档
+    active_roommates: List[str]
+    current_evt_id: str
+    chapter: int
+    turn: int
+    san: int
+    money: float
+    gpa: float
+    arg_count: int
+    wechat_data_dict: Dict[str, List[Any]] = {}
+    affinity: Dict[str, int] = {}
+
+@app.post("/api/game/save")
+def save_game(req: SaveGameRequest):
+    """
+    保存游戏状态到后端 JSON 文件
+    """
+    # 如果没有指定 save_id，生成一个唯一的 ID
+    save_id = req.save_id if req.save_id else f"save_{uuid.uuid4().hex[:8]}"
+    file_path = os.path.join(SAVE_DIR, f"{save_id}.json")
+    
+    save_data = {
+        "save_id": save_id,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "state": req.dict()
+    }
+    
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(save_data, f, ensure_ascii=False, indent=4)
+        return {"status": "success", "save_id": save_id, "message": "游戏保存成功"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"保存存档失败: {str(e)}")
+
+@app.get("/api/game/load/{save_id}")
+def load_game(save_id: str):
+    """
+    根据 save_id 读取游戏状态
+    """
+    file_path = os.path.join(SAVE_DIR, f"{save_id}.json")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="存档不存在")
+        
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            save_data = json.load(f)
+        return {"status": "success", "data": save_data["state"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取存档失败: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

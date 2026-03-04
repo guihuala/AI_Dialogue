@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
 
-public class NetworkService : MonoBehaviour
+public class NetworkService : SingletonPersistent<NetworkService>
 {
     private string baseUrl = "http://127.0.0.1:8000/api";
 
@@ -86,16 +86,19 @@ public class NetworkService : MonoBehaviour
             }
         }
     }
-
-    // ============================================
-    // 存档、读档与系统接口
-    // ============================================
     
-    public IEnumerator SaveGameCoroutine(string slotId, SaveGameState gameState, Action<SaveGameResponse> onSuccess, Action<string> onFailure)
+    // ============================================
+    // 💾 存档与读档网络请求 (Save/Load System)
+    // ============================================
+
+    /// <summary>
+    /// 请求保存游戏进度到指定槽位
+    /// </summary>
+    public IEnumerator SaveGameCoroutine(SaveGameRequest req, Action<SaveGameResponse> onSuccess, Action<string> onFailure)
     {
-        SaveGameRequest req = new SaveGameRequest { slot_id = slotId, game_state = gameState };
         string json = JsonUtility.ToJson(req);
-        
+        Debug.Log($"[NetworkService] 发送存档请求: {json}");
+
         using (UnityWebRequest request = new UnityWebRequest($"{baseUrl}/game/save", "POST"))
         {
             byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
@@ -104,35 +107,68 @@ public class NetworkService : MonoBehaviour
             request.SetRequestHeader("Content-Type", "application/json");
             yield return request.SendWebRequest();
 
-            if (request.result != UnityWebRequest.Result.Success) onFailure?.Invoke(request.error);
-            else onSuccess?.Invoke(JsonUtility.FromJson<SaveGameResponse>(request.downloadHandler.text));
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"[NetworkService] 存档请求失败: {request.error}");
+                onFailure?.Invoke(request.error);
+            }
+            else
+            {
+                string rawText = request.downloadHandler.text;
+                Debug.Log($"[NetworkService] 存档成功返回: {rawText}");
+                onSuccess?.Invoke(JsonUtility.FromJson<SaveGameResponse>(rawText));
+            }
         }
     }
 
-    public IEnumerator LoadGameCoroutine(string slotId, Action<LoadGameResponse> onSuccess, Action<string> onFailure)
+    /// <summary>
+    /// 请求从指定槽位加载游戏进度
+    /// </summary>
+    public IEnumerator LoadGameCoroutine(int slotId, Action<LoadGameResponse> onSuccess, Action<string> onFailure)
     {
-        using (UnityWebRequest request = new UnityWebRequest($"{baseUrl}/game/load/{slotId}", "GET"))
+        Debug.Log($"[NetworkService] 请求读取槽位 {slotId} 的数据...");
+
+        // GET 请求，直接在 URL 后面拼接 slotId
+        using (UnityWebRequest request = UnityWebRequest.Get($"{baseUrl}/game/load/{slotId}"))
         {
             yield return request.SendWebRequest();
 
-            if (request.result != UnityWebRequest.Result.Success) onFailure?.Invoke(request.error);
-            else onSuccess?.Invoke(JsonUtility.FromJson<LoadGameResponse>(request.downloadHandler.text));
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"[NetworkService] 读档请求失败: {request.error}");
+                onFailure?.Invoke(request.error);
+            }
+            else
+            {
+                string rawText = request.downloadHandler.text;
+                Debug.Log($"[NetworkService] 读档成功返回: {rawText}");
+                onSuccess?.Invoke(JsonUtility.FromJson<LoadGameResponse>(rawText));
+            }
         }
     }
 
-    public IEnumerator ResetGameCoroutine(Action<ResetGameResponse> onSuccess, Action<string> onFailure)
+    /// <summary>
+    /// 获取所有 3 个存档槽位的摘要信息 (用于 UI 面板展示)
+    /// </summary>
+    public IEnumerator GetSavesInfoCoroutine(Action<SavesInfoResponse> onSuccess, Action<string> onFailure)
     {
-        using (UnityWebRequest request = new UnityWebRequest($"{baseUrl}/game/reset", "POST"))
+        Debug.Log("[NetworkService] 请求获取所有存档槽位信息...");
+
+        using (UnityWebRequest request = UnityWebRequest.Get($"{baseUrl}/game/saves_info"))
         {
-            // Empty body for reset POST
-            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes("{}");
-            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
             yield return request.SendWebRequest();
 
-            if (request.result != UnityWebRequest.Result.Success) onFailure?.Invoke(request.error);
-            else onSuccess?.Invoke(JsonUtility.FromJson<ResetGameResponse>(request.downloadHandler.text));
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"[NetworkService] 获取槽位信息失败: {request.error}");
+                onFailure?.Invoke(request.error);
+            }
+            else
+            {
+                string rawText = request.downloadHandler.text;
+                Debug.Log($"[NetworkService] 槽位信息返回: {rawText}");
+                onSuccess?.Invoke(JsonUtility.FromJson<SavesInfoResponse>(rawText));
+            }
         }
     }
 

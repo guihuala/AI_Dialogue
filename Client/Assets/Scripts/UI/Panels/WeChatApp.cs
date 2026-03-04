@@ -2,10 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class WeChatApp : MonoBehaviour
+public class WeChatApp : Singleton<WeChatApp>
 {
-    public static WeChatApp Instance { get; private set; }
-
     [Header("UI Views")]
     public GameObject chatListView; // Screen showing all active chats
     public GameObject chatRoomView; // Screen showing messages of one specific chat
@@ -22,13 +20,7 @@ public class WeChatApp : MonoBehaviour
     // Internal Memory: Key = Chat Group Name
     private Dictionary<string, WeChatSession> chatMemories = new Dictionary<string, WeChatSession>();
     private string activeChatName = "";
-
-    private void Awake()
-    {
-        if (Instance == null) Instance = this;
-        else Destroy(gameObject);
-    }
-
+    
     private void Start()
     {
         // Subscribe to incoming messages
@@ -80,20 +72,7 @@ public class WeChatApp : MonoBehaviour
                 RefreshChatRoom();
         }
     }
-
-    /// <summary>
-    /// Exports the full chat history into the structure required by Python AI Context
-    /// </summary>
-    public List<WeChatSession> ExportChatHistory()
-    {
-        List<WeChatSession> list = new List<WeChatSession>();
-        foreach (var kvp in chatMemories)
-        {
-            list.Add(kvp.Value);
-        }
-        return list;
-    }
-
+    
     // --- UI Navigation ---
 
     public void ShowChatList()
@@ -168,5 +147,37 @@ public class WeChatApp : MonoBehaviour
                 bubbleText.text = $"<b>{msg.sender}</b>\n{msg.message}";
             }
         }
+    }
+    
+    // ==========================================
+    // 💾 存档系统配合方法
+    // ==========================================
+
+    /// <summary>
+    /// 导出当前所有的聊天记录，供 GameManager 存档使用
+    /// </summary>
+    public List<WeChatSession> ExportChatHistory()
+    {
+        // 直接将字典的值转换为 List 返回
+        return new List<WeChatSession>(chatMemories.Values);
+    }
+
+    /// <summary>
+    /// 读档时，导入后端的聊天记录并覆盖当前内存
+    /// </summary>
+    public void ImportChatHistory(List<WeChatSession> importedHistory)
+    {
+        chatMemories.Clear();
+        if (importedHistory != null)
+        {
+            foreach (var session in importedHistory)
+            {
+                // 假设你的 WeChatSession 里有 chat_name 字段，如果没有请替换为你实际的键名字段
+                chatMemories[session.chat_name] = session;
+            }
+        }
+
+        // 刷新 UI 界面，确保读档后玩家看到的微信也是最新的
+        ShowChatList(); 
     }
 }

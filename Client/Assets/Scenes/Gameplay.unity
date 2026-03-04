@@ -1169,7 +1169,6 @@ GameObject:
   - component: {fileID: 500088325}
   - component: {fileID: 500088324}
   - component: {fileID: 500088323}
-  - component: {fileID: 500088322}
   m_Layer: 0
   m_Name: -----GameCore-----
   m_TagString: Untagged
@@ -1177,18 +1176,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &500088322
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 500088321}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fbe2a34bbf2174129abcdc2ffb2b7956, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &500088323
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1201,7 +1188,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d30559bc90bef4ddf8b5d4420bb486e1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  networkService: {fileID: 500088322}
   playerName: ArtStudent_01
   activeRoommates: []
 --- !u!114 &500088324

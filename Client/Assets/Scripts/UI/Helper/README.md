@@ -114,17 +114,26 @@
 
 -----
 
+### 3.6 全局加载遮罩 (Loading)
+
+用于在网络请求或场景切换时阻挡玩家误触。内置**引用计数机制**，多个并发请求会自动合并，直到所有请求都调用 Hide 后才会消失。
+
+* **显示加载**：`UIHelper.Instance.ShowLoading("正在呼叫AI大模型...");`
+* **隐藏加载**：`UIHelper.Instance.HideLoading();`
+* **强制清理**：`UIHelper.Instance.ForceClearLoading();` (用于发生断网异常时强行恢复界面交互)
+
 ## 4\. Prefab 制作规范
 
 为了让脚本正常工作，请按照以下结构制作 Prefab：
 
-| Prefab 类型 | 挂载脚本 | 必须组件/子节点 | 说明 |
-| :--- | :--- | :--- | :--- |
-| **Tip (飘字)** | `UITipItem` | `ContentText` (Text) | 根节点建议设置为不可见或缩放为0，脚本会接管动画。 |
-| **Bubble (气泡)** | `UIBubbleItem` | `ContentText` (Text)<br>`KeyText` (Text)<br>`ItemNameText` (Text) | `KeyText` 用于显示 "E", "Space" 等按键提示。 |
-| **Sign (图标)** | `UISignItem` | `IconImg` (Image) | `OffsetY` 参数可在 Inspector 中调整图标的垂直偏移量。 |
-| **FixedPos (固定文本)** | `UIFixedPosTextItem` | `ContentText` (Text) | 根节点的锚点建议设为中心，脚本会根据 Type 修改位置。 |
-| **Progress (进度条)** | `UICommonProgressItem` | `ProgressBarImage` (Image) | **重要**：Image Type 必须设置为 `Filled` (Radial 360)，以便脚本控制 `fillAmount`。 |
+| Prefab 类型           | 挂载脚本                   | 必须组件/子节点                                                          | 说明 |
+|:--------------------|:-----------------------|:------------------------------------------------------------------| :--- |
+| **Tip (飘字)**        | `UITipItem`            | `ContentText` (Text)                                              | 根节点建议设置为不可见或缩放为0，脚本会接管动画。 |
+| **Bubble (气泡)**     | `UIBubbleItem`         | `ContentText` (Text)<br>`KeyText` (Text)<br>`ItemNameText` (Text) | `KeyText` 用于显示 "E", "Space" 等按键提示。 |
+| **Sign (图标)**       | `UISignItem`           | `IconImg` (Image)                                                 | `OffsetY` 参数可在 Inspector 中调整图标的垂直偏移量。 |
+| **FixedPos (固定文本)** | `UIFixedPosTextItem`   | `ContentText` (Text)                                              | 根节点的锚点建议设为中心，脚本会根据 Type 修改位置。 |
+| **Progress (进度条)**  | `UICommonProgressItem` | `ProgressBarImage` (Image)                                        | **重要**：Image Type 必须设置为 `Filled` (Radial 360)，以便脚本控制 `fillAmount`。 |
+| **Loading(加载遮罩)**   | `UILoadingItem`          | `MessageText` (Text) `Spinner` (RectTransform) |根节点请包含一个半透明黑色 Image 并勾选 Raycast Target 阻挡点击。|
 
 -----
 

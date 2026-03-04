@@ -2,10 +2,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
 
-public class PhoneManager : MonoBehaviour
+public class PhoneManager : Singleton<PhoneManager>
 {
-    public static PhoneManager Instance { get; private set; }
-
     [Header("Phone OS Views")]
     public GameObject phoneContainer; // The entire phone UI
     public GameObject homeScreen;    // The app grid
@@ -18,10 +16,9 @@ public class PhoneManager : MonoBehaviour
     public Button wechatButton;
     public Button settingsButton;
 
-    private void Awake()
+    protected override void Awake()
     {
-        if (Instance == null) Instance = this;
-        else Destroy(gameObject);
+        base.Awake();
         
         // Starts hidden
         ClosePhone();

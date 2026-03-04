@@ -105,15 +105,6 @@ public class GameTurnResponse
     public string error; // Backend Exception message
 }
 
-// Legacy options requests removed
-
-[Serializable]
-public class SaveGameRequest
-{
-    public string slot_id;
-    public SaveGameState game_state;
-}
-
 [Serializable]
 public class SaveGameState // 对应后端的 game_state 字典
 {
@@ -122,20 +113,6 @@ public class SaveGameState // 对应后端的 game_state 字典
 
     public string current_event;
     // 未来可扩充
-}
-
-[Serializable]
-public class SaveGameResponse
-{
-    public string status;
-    public string message;
-}
-
-[Serializable]
-public class LoadGameResponse
-{
-    public string status;
-    public SaveGameState game_state;
 }
 
 [Serializable]
@@ -166,4 +143,57 @@ public class SettingsResponse
 {
     public string status;
     public SettingsCurrentState current_settings;
+}
+
+// ==========================================
+// 💾 存档系统相关数据结构
+// ==========================================
+
+[Serializable]
+public class SaveSlotInfo
+{
+    public int slot_id;
+    public bool is_empty;
+    public string timestamp;
+    public string chapter_info;
+}
+
+[Serializable]
+public class SavesInfoResponse
+{
+    public string status;
+    public List<SaveSlotInfo> slots;
+}
+
+// 请求保存游戏时，把所有必要的恢复状态打平传给后端
+[Serializable]
+public class SaveGameRequest
+{
+    public int slot_id;
+    public List<string> active_roommates;
+    public string current_evt_id;
+    public int chapter;
+    public int turn;
+    public int san;
+    public float money;
+    public float gpa;
+    public int arg_count;
+    // 如果你有完整的微信系统模型 WeChatSession，加上这个
+    public List<WeChatSession> wechat_data_list; 
+}
+
+[Serializable]
+public class SaveGameResponse
+{
+    public string status;
+    public int slot_id;
+    public string message;
+}
+
+[Serializable]
+public class LoadGameResponse
+{
+    public string status;
+    // 后端读取时返回的 data 其实就是我们保存进去的 SaveGameRequest 的字段组合
+    public SaveGameRequest data; 
 }

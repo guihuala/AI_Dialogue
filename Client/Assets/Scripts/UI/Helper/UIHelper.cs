@@ -141,6 +141,13 @@ namespace SimpleUITips
         public GameObject CircleProgressPrefab;
         private readonly Dictionary<string, GameObject> _circleProgressDict = new Dictionary<string, GameObject>();
 
+        [Header("Loading Overlay")]
+        public GameObject LoadingPrefab;
+        
+        private GameObject _currentLoadingObj;
+        private UILoadingItem _currentLoadingItem;
+        private int _loadingCount = 0;
+
         #region Bubble API
 
         private void RefreshBubble()
@@ -309,6 +316,69 @@ namespace SimpleUITips
             if (!_circleProgressDict.ContainsKey(key)) return;
             if (_circleProgressDict[key] != null) Destroy(_circleProgressDict[key]);
             _circleProgressDict.Remove(key);
+        }
+
+        #endregion
+        
+        #region Loading API
+
+        /// <summary>
+        /// 显示全局加载遮罩（支持多重请求并发，内部通过引用计数管理）
+        /// </summary>
+        public void ShowLoading(string message = "加载中...")
+        {
+            _loadingCount++;
+    
+            // 如果还没生成遮罩，则实例化一个
+            if (_currentLoadingObj == null)
+            {
+                if (LoadingPrefab == null) return;
+        
+                _currentLoadingObj = Instantiate(LoadingPrefab, transform, false);
+                _currentLoadingItem = _currentLoadingObj.GetComponent<UILoadingItem>();
+        
+                // 确保遮罩在最上层
+                _currentLoadingObj.transform.SetAsLastSibling();
+            }
+    
+            if (_currentLoadingObj != null && !_currentLoadingObj.activeSelf)
+            {
+                _currentLoadingObj.SetActive(true);
+                _currentLoadingObj.transform.SetAsLastSibling();
+            }
+
+            if (_currentLoadingItem != null)
+            {
+                _currentLoadingItem.UpdateMessage(message);
+            }
+        }
+
+        /// <summary>
+        /// 隐藏全局加载遮罩
+        /// </summary>
+        public void HideLoading()
+        {
+            _loadingCount--;
+            if (_loadingCount <= 0)
+            {
+                _loadingCount = 0;
+                if (_currentLoadingObj != null)
+                {
+                    _currentLoadingObj.SetActive(false);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 强制清理加载遮罩（通常在切换场景、断线重连或发生致命异常时调用）
+        /// </summary>
+        public void ForceClearLoading()
+        {
+            _loadingCount = 0;
+            if (_currentLoadingObj != null)
+            {
+                _currentLoadingObj.SetActive(false);
+            }
         }
 
         #endregion
