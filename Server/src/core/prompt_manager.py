@@ -34,8 +34,9 @@ class PromptManager:
         }
 
     def _read_md(self, relative_path: str) -> str:
+        if not relative_path: return ""
         file_path = os.path.join(self.prompts_dir, relative_path)
-        if not os.path.exists(file_path): return ""
+        if not os.path.exists(file_path) or os.path.isdir(file_path): return ""
         with open(file_path, 'r', encoding='utf-8') as f: return f.read().strip()
 
     def _skill_slang_dict(self, context: dict) -> str:

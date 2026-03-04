@@ -17,6 +17,10 @@ class LLMService:
     def update_config(self, api_key: str, base_url: str, model: str):
         if not api_key:
             api_key = os.getenv("DEEPSEEK_API_KEY") or "dummy"
+        if not base_url:
+            base_url = "https://api.deepseek.com/v1"
+        if not model:
+            model = "deepseek-chat"
             
         if api_key != self.api_key or base_url != self.base_url:
             self.api_key = api_key
@@ -47,17 +51,21 @@ class LLMService:
             error_str = str(e).lower()
             if "response_format" in error_str or "json" in error_str or "not supported" in error_str:
                 print(f"⚠️ 当前模型 {self.model} 不支持强 JSON 模式，已自动降级为标准模式生成...")
-                completion = self.client.chat.completions.create(
-                    model=self.model, messages=messages, temperature=temperature, top_p=top_p,
-                    max_tokens=max_tokens, presence_penalty=presence_penalty, frequency_penalty=frequency_penalty
-                )
-                return completion.choices[0].message.content
+                try:
+                    completion = self.client.chat.completions.create(
+                        model=self.model, messages=messages, temperature=temperature, top_p=top_p,
+                        max_tokens=max_tokens, presence_penalty=presence_penalty, frequency_penalty=frequency_penalty
+                    )
+                    return completion.choices[0].message.content
+                except Exception as inner_e:
+                    print(f"LLM 降级生成也失败: {inner_e}")
+                    return '{"error": "AI大模型生成失败，请检查 API Key 或网络环境: ' + str(inner_e).replace('"', "'").replace("\n", " ") + '"}'
             print(f"LLM API Error: {e}")
-            return "{}"
+            return '{"error": "AI大模型请求异常: ' + str(e).replace('"', "'").replace("\n", " ") + '"}'
 
     async def async_generate(self, system_prompt: str, user_input: str, 
                              temperature: float = 0.7, max_tokens: int = 500) -> str:
-        if not self.api_key or self.api_key == "dummy": return "{}"
+        if not self.api_key or self.api_key == "dummy": return '{"error": "尚未配置 API Key"}'
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_input}
@@ -72,9 +80,13 @@ class LLMService:
         except Exception as e:
             error_str = str(e).lower()
             if "response_format" in error_str or "json" in error_str or "not supported" in error_str:
-                completion = await self.async_client.chat.completions.create(
-                    model=self.model, messages=messages, temperature=temperature, max_tokens=max_tokens
-                )
-                return completion.choices[0].message.content
+                try:
+                    completion = await self.async_client.chat.completions.create(
+                        model=self.model, messages=messages, temperature=temperature, max_tokens=max_tokens
+                    )
+                    return completion.choices[0].message.content
+                except Exception as inner_e:
+                    print(f"Async LLM 降级生成失败: {inner_e}")
+                    return '{"error": "AI异步生成失败: ' + str(inner_e).replace('"', "'").replace("\n", " ") + '"}'
             print(f"Async LLM API Error: {e}")
-            return "{}"
+            return '{"error": "AI大模型请求异常: ' + str(e).replace('"', "'").replace("\n", " ") + '"}'

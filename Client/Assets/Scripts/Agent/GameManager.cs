@@ -28,6 +28,7 @@ public class GameManager : Singleton<GameManager>
     private int currentChapter = 1;
     private int currentTurn = 0;
     private string currentEvtId = "";
+    private bool isAwaitingTransition = false; // Add flag for transitioning from a finished event
 
     public struct ChatLog
     {
@@ -86,6 +87,7 @@ public class GameManager : Singleton<GameManager>
         currentChapter = 1;
         currentTurn = 0;
         currentEvtId = "";
+        isAwaitingTransition = false;
 
         if (OnInitRoommates == null) Debug.LogWarning("[GameManager] 警告: OnInitRoommates 没有人订阅！UI可能未准备好。");
         OnInitRoommates?.Invoke(activeRoommates);
@@ -99,6 +101,12 @@ public class GameManager : Singleton<GameManager>
 
     private void HandleTurnResponse(GameTurnResponse res, string choice)
     {
+        if (!string.IsNullOrEmpty(res.error))
+        {
+            ShowSystemError($"后端大模型生成异常:\n{res.error}");
+            return;
+        }
+
         currentSan = res.san;
         currentMoney = res.money;
         currentGpa = res.gpa;
@@ -125,10 +133,29 @@ public class GameManager : Singleton<GameManager>
 
         // 统一构建对话序列用于展示
         List<DialogueTurn> dts = new List<DialogueTurn>();
-        dts.Add(new DialogueTurn { speaker = "剧情推进", content = res.display_text, mood = "neutral" });
+        
+        // 如果有旁白，先塞一句旁白
+        if (!string.IsNullOrEmpty(res.narrator_transition))
+        {
+            dts.Add(new DialogueTurn { speaker = "剧情推进", content = res.narrator_transition, mood = "neutral" });
+        }
+        
+        // 加上实际的大模型生成的角色台词
+        if (res.dialogue_sequence != null && res.dialogue_sequence.Count > 0)
+        {
+            dts.AddRange(res.dialogue_sequence);
+        }
+        else if (string.IsNullOrEmpty(res.narrator_transition))
+        {
+            // 如果连旁白和对话都没有，兜底直接扔出 display_text （处理早期的纯文本）
+            dts.Add(new DialogueTurn { speaker = "剧情推进", content = res.display_text, mood = "neutral" });
+        }
 
         if (OnPlayDialogueSequence == null)
             Debug.LogWarning("[GameManager] 警告: OnPlayDialogueSequence 没人监听！对话不会播放！");
+
+        // 决定这个回合播完之后，是否已经结束当前事件，如果结束了，下次点击按钮就进入下个事件
+        isAwaitingTransition = res.is_end;
 
         OnPlayDialogueSequence?.Invoke(dts, () => { 
             if (res.next_options != null && res.next_options.Count > 0)
@@ -150,7 +177,7 @@ public class GameManager : Singleton<GameManager>
             choice = choice,
             active_roommates = activeRoommates,
             current_evt_id = currentEvtId,
-            is_transition = false,
+            is_transition = isAwaitingTransition, // 动态使用上回合结束返回的标记
             chapter = currentChapter,
             turn = currentTurn,
             san = currentSan,

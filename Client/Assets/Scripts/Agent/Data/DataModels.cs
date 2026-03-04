@@ -25,6 +25,7 @@ public class DialogueTurn
     public string mood; // Mock接口暂时没返回，但保留没关系，会是null
 }
 
+
 // --- 新增请求/响应数据结构 ---
 
 [Serializable]
@@ -32,8 +33,6 @@ public class StartGameRequest
 {
     public List<string> roommates; // optional, can be empty
 }
-
-// Removed StartGameResponse as it is identical to GameTurnResponse
 
 // 模拟 Python 中的 Dict[str, float]
 [Serializable]
@@ -87,6 +86,9 @@ public class GameTurnResponse
     public List<string> next_options;
     
     public List<WeChatNotification> wechat_notifications;
+    public List<DialogueTurn> dialogue_sequence; // ADDED THIS BACK
+    public string narrator_transition; // ADDED THIS BACK
+    public string error; // Backend Exception message
 }
 
 // Legacy options requests removed

@@ -67,12 +67,22 @@ public class NetworkService : MonoBehaviour
                 string rawText = request.downloadHandler.text;
                 Debug.Log($"[NetworkService] 后端返回回合结算JSON: {rawText}");
                 
-                GameTurnResponse res = JsonUtility.FromJson<GameTurnResponse>(rawText);
-                if (res == null)
+                try 
                 {
-                    Debug.LogError("[NetworkService] 严重错误：回合数据解析为空！");
+                    GameTurnResponse res = JsonUtility.FromJson<GameTurnResponse>(rawText);
+                    if (res == null)
+                    {
+                        Debug.LogError("[NetworkService] 解析结果为 NULL，可能是由于 JSON 格式完全不匹配 GameTurnResponse 结构。");
+                        onFailure?.Invoke("JSON解析完全失败");
+                        yield break;
+                    }
+                    onSuccess?.Invoke(res);
                 }
-                onSuccess?.Invoke(res);
+                catch (Exception e)
+                {
+                    Debug.LogError($"[NetworkService] JSON解析异常: {e.Message}\n错误详情:\n{e.StackTrace}\n解析目标: {rawText}");
+                    onFailure?.Invoke($"解析异常: {e.Message}");
+                }
             }
         }
     }

@@ -71,6 +71,23 @@ class GameEngine:
     def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, arg_count, chapter, turn, affinity, wechat_data_dict):
         self.llm.update_config(api_key=api_key, base_url=base_url, model=model)
         
+        # 🚨 [关键修复]: C# 发来的是英语ID (tang_mengqi)，由于后端 RAG 和设定文件以及 Agent 名字都依赖中文名，所以需要转化
+        mapped_chars = []
+        for c in selected_chars:
+            if c in presets_module.CANDIDATE_POOL:
+                mapped_chars.append(presets_module.CANDIDATE_POOL[c].Name)
+            else:
+                mapped_chars.append(c)
+        selected_chars = mapped_chars
+        
+        mapped_affinity = {}
+        for k, v in affinity.items():
+            if k in presets_module.CANDIDATE_POOL:
+                mapped_affinity[presets_module.CANDIDATE_POOL[k].Name] = v
+            else:
+                mapped_affinity[k] = v
+        affinity = mapped_affinity
+
         player_stats = {"money": money, "san": san, "hygiene": 100, "gpa": gpa}
         settlement_msg = ""
         
@@ -328,6 +345,9 @@ class GameEngine:
                 "is_end": is_end, 
                 "next_options": extracted_options, 
                 "wechat_notifications": valid_notifs,
+                "narrator_transition": parsed.get("narrator_transition", ""),
+                "dialogue_sequence": seq if isinstance(seq, list) else [],
+                "error": parsed.get("error", ""),
                 "sys_prompt": sys_prm,
                 "user_prompt": user_prm
             }
