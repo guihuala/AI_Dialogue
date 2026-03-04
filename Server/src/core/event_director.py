@@ -14,6 +14,11 @@ class EventDirector:
         self.chapter_progress = 0
         self.timeline_config = self._load_timeline()
         
+    def reset(self):
+        self.used_events = []
+        self.current_chapter = 1
+        self.chapter_progress = 0
+        
     def reload_timeline(self):
         """支持热更新读取"""
         self.timeline_config = self._load_timeline()

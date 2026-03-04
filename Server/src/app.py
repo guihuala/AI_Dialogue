@@ -43,7 +43,7 @@ class GameTurnRequest(BaseModel):
     gpa: float = 4.0
     arg_count: int = 0
     affinity: Dict[str, float] = {}
-    wechat_data_dict: Dict[str, List[Any]] = {}
+    wechat_data_list: List[Dict[str, Any]] = []
 
 class SaveGameRequest(BaseModel):
     slot_id: str
@@ -64,6 +64,8 @@ def start_game(req: StartGameRequest):
     if not engine:
         raise HTTPException(status_code=500, detail="GameEngine not initialized.")
         
+    engine.reset() # 强制每次重新开始游戏都重洗抽卡池并归零剧情
+    
     selected_ids = req.roommates
     if not selected_ids:
         # 如果未指定，随便选 3 个
@@ -100,6 +102,16 @@ def perform_turn(req: GameTurnRequest):
         raise HTTPException(status_code=500, detail="GameEngine not initialized.")
         
     try:
+        wechat_dict = {}
+        if req.wechat_data_list:
+            for session in req.wechat_data_list:
+                chat_name = session.get("chat_name")
+                # Unity 发来的格式: [{"sender": "A", "message": "msg"}]
+                # GameEngine 期待格式: [["sender", "msg"], ["sender", "msg"]] 或 [("sender", "msg")]
+                messages = [[m.get("sender", ""), m.get("message", "")] for m in session.get("messages", [])]
+                if chat_name:
+                    wechat_dict[chat_name] = messages
+
         res = engine.play_main_turn(
             action_text=req.choice,
             selected_chars=req.active_roommates,
@@ -116,7 +128,7 @@ def perform_turn(req: GameTurnRequest):
             chapter=req.chapter,
             turn=req.turn,
             affinity=req.affinity,
-            wechat_data_dict=req.wechat_data_dict
+            wechat_data_dict=wechat_dict
         )
         return res
     except Exception as e:

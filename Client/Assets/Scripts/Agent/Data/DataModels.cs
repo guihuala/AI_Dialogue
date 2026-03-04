@@ -63,8 +63,22 @@ public class GameTurnRequest
     public float money;
     public float gpa;
     public int arg_count;
-    // unity 原生 JSON 工具不支持直接序列化 Dictionary, 此处由于只是发往后端，可以做点简易封装或者留空
-    // 假设后端接受为空的情况下能自行处理，我们先不传复杂的字典以防报错
+    // 适配 Unity JsonUtility 无法序列化字典的问题，改为传递 List
+    public List<WeChatSession> wechat_data_list; 
+}
+
+[Serializable]
+public class WeChatSession
+{
+    public string chat_name;
+    public List<WeChatMessageData> messages;
+}
+
+[Serializable]
+public class WeChatMessageData
+{
+    public string sender;
+    public string message;
 }
 
 [Serializable]
@@ -73,7 +87,7 @@ public class GameTurnResponse
     public bool is_game_over;
     public string msg; // game over message
     public string display_text; // The whole text to display (or dialogue lines)
-    
+
     public int san;
     public float money;
     public float gpa;
@@ -81,10 +95,10 @@ public class GameTurnResponse
     public int chapter;
     public int turn;
     public string current_evt_id;
-    
+
     public bool is_end;
     public List<string> next_options;
-    
+
     public List<WeChatNotification> wechat_notifications;
     public List<DialogueTurn> dialogue_sequence; // ADDED THIS BACK
     public string narrator_transition; // ADDED THIS BACK
@@ -105,6 +119,7 @@ public class SaveGameState // 对应后端的 game_state 字典
 {
     public PlayerStatsData player_stats;
     public GameTimeData game_time;
+
     public string current_event;
     // 未来可扩充
 }
@@ -134,6 +149,7 @@ public class ResetGameResponse
 public class SettingsRequest
 {
     public float temperature;
+
     public int max_tokens;
     // 可以添加 custom_model
 }

@@ -14,13 +14,14 @@ public class TopBarController : MonoBehaviour
     [SerializeField] private TMP_Text eventText; // 显示 "当前事件：入学报到"
 
     [Header("Settings")]
-    [SerializeField] private Button settingsButton;
-    [SerializeField] private Button helpButton;
+    [SerializeField] private Button phoneButton;
     
     private void Start()
     {
-        if(settingsButton) settingsButton.onClick.AddListener(() => { /* Open Settings */ });
-    
+        if (phoneButton) phoneButton.onClick.AddListener(() => {
+            if (PhoneManager.Instance != null) PhoneManager.Instance.TogglePhone();
+        });
+        
         // 订阅事件
         if (GameManager.Instance != null)
         {

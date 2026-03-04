@@ -15,5 +15,3 @@ MonoBehaviour:
   uiDataList:
   - uiName: CharacterSelectionPanel
     uiPath: Panel/CharacterSelectionPanel
-  - uiName: SettingPanel
-    uiPath: Panel/SettingPanel

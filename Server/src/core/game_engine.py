@@ -33,6 +33,9 @@ class GameEngine:
         self.pm = PromptManager()
         self.tm = ToolManager()
 
+    def reset(self):
+        self.director.reset()
+
     def parse_and_repair_json(self, raw_text):
         raw_text = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL)
         raw_text = re.sub(r'```json\s*', '', raw_text)

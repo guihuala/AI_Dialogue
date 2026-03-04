@@ -30,10 +30,17 @@ public class GameManager : Singleton<GameManager>
     private string currentEvtId = "";
     private bool isAwaitingTransition = false; // Add flag for transitioning from a finished event
 
+    [Serializable]
     public struct ChatLog
     {
         public string speaker;
         public string content;
+    }
+
+    [Serializable]
+    private class ChatLogWrapper
+    {
+        public List<ChatLog> logs = new List<ChatLog>();
     }
 
     private List<ChatLog> chatHistory = new List<ChatLog>();
@@ -53,17 +60,27 @@ public class GameManager : Singleton<GameManager>
         // 等待一帧，确保 StageController 等 UI 已经完成了事件订阅
         yield return null; 
 
-        // 从跨场景总线中读取选中的角色
-        List<string> charsToLoad = GameContext.SelectedRoommates;
-
-        // 默认数据防报错（用于直接在Gameplay场景测试）
-        if (charsToLoad == null || charsToLoad.Count == 0)
+        if (PlayerPrefs.GetInt("IsContinuingGame", 0) == 1)
         {
-            Debug.LogWarning("[GameManager] 未检测到选人数据，正在使用默认测试阵容！");
-            charsToLoad = new List<string> { "tang_mengqi", "li_yinuo", "chen_yuting" };
+            // 继续游戏，清理游玩标记避免死循环
+            PlayerPrefs.SetInt("IsContinuingGame", 0);
+            PlayerPrefs.Save();
+            LoadLocalProgress();
         }
+        else
+        {
+            // 从跨场景总线中读取选中的角色
+            List<string> charsToLoad = GameContext.SelectedRoommates;
 
-        StartNewGame(charsToLoad);
+            // 默认数据防报错（用于直接在Gameplay场景测试）
+            if (charsToLoad == null || charsToLoad.Count == 0)
+            {
+                Debug.LogWarning("[GameManager] 未检测到选人数据，正在使用默认测试阵容！");
+                charsToLoad = new List<string> { "tang_mengqi", "li_yinuo", "chen_yuting" };
+            }
+
+            StartNewGame(charsToLoad);
+        }
     }
     
     public void StartNewGame(List<string> selectedChars)
@@ -183,7 +200,8 @@ public class GameManager : Singleton<GameManager>
             san = currentSan,
             money = currentMoney,
             gpa = currentGpa,
-            arg_count = argCount
+            arg_count = argCount,
+            wechat_data_list = WeChatApp.Instance != null ? WeChatApp.Instance.ExportChatHistory() : new List<WeChatSession>()
         };
 
         StartCoroutine(networkService.PlayTurnCoroutine(
@@ -232,8 +250,89 @@ public class GameManager : Singleton<GameManager>
     }
 
     public void PauseGame() => SetGameState(GameState.Paused);
-    public void EndGame() => SetGameState(GameState.GameOver);
+    public void EndGame()
+    {
+        PlayerPrefs.SetInt("HasSaveData", 0); // 结束游戏清除存档标记
+        PlayerPrefs.Save();
+        SetGameState(GameState.GameOver);
+    }
     public void ResumeGame() => SetGameState(GameState.Playing);
+
+    private void SaveLocalProgress()
+    {
+        PlayerPrefs.SetInt("HasSaveData", 1);
+        PlayerPrefs.SetInt("currentSan", currentSan);
+        PlayerPrefs.SetFloat("currentMoney", currentMoney);
+        PlayerPrefs.SetFloat("currentGpa", currentGpa);
+        PlayerPrefs.SetInt("argCount", argCount);
+        PlayerPrefs.SetInt("currentChapter", currentChapter);
+        PlayerPrefs.SetInt("currentTurn", currentTurn);
+        PlayerPrefs.SetString("currentEvtId", currentEvtId);
+        PlayerPrefs.SetInt("isAwaitingTransition", isAwaitingTransition ? 1 : 0);
+        
+        PlayerPrefs.SetString("activeRoommates", string.Join(",", activeRoommates));
+        
+        ChatLogWrapper wrapper = new ChatLogWrapper { logs = chatHistory };
+        PlayerPrefs.SetString("chatHistory", JsonUtility.ToJson(wrapper));
+
+        PlayerPrefs.Save();
+        Debug.Log("[GameManager] Local progress saved.");
+    }
+
+    private void LoadLocalProgress()
+    {
+        currentSan = PlayerPrefs.GetInt("currentSan", 100);
+        currentMoney = PlayerPrefs.GetFloat("currentMoney", 2000f);
+        currentGpa = PlayerPrefs.GetFloat("currentGpa", 4.0f);
+        argCount = PlayerPrefs.GetInt("argCount", 0);
+        currentChapter = PlayerPrefs.GetInt("currentChapter", 1);
+        currentTurn = PlayerPrefs.GetInt("currentTurn", 0);
+        currentEvtId = PlayerPrefs.GetString("currentEvtId", "");
+        isAwaitingTransition = PlayerPrefs.GetInt("isAwaitingTransition", 0) == 1;
+
+        string rmStr = PlayerPrefs.GetString("activeRoommates", "");
+        if (!string.IsNullOrEmpty(rmStr)) activeRoommates = new List<string>(rmStr.Split(','));
+
+        string chatJson = PlayerPrefs.GetString("chatHistory", "");
+        if (!string.IsNullOrEmpty(chatJson))
+        {
+            ChatLogWrapper wrapper = JsonUtility.FromJson<ChatLogWrapper>(chatJson);
+            if (wrapper != null && wrapper.logs != null) chatHistory = wrapper.logs;
+        }
+
+        SetGameState(GameState.Playing);
+
+        if (OnInitRoommates == null) Debug.LogWarning("[GameManager] 警告: OnInitRoommates 没有人订阅！UI可能未准备好。");
+        OnInitRoommates?.Invoke(activeRoommates);
+
+        // Notify Stats UI
+        PlayerStatsData stats = new PlayerStatsData { san = currentSan, money = currentMoney, gpa = currentGpa };
+        GameTimeData timeData = new GameTimeData { year = $"第 {currentChapter} 章", month = currentChapter, week = currentTurn };
+        OnStatsRefreshed?.Invoke(stats, timeData, currentEvtId);
+
+        // Resume game via backend by sending an empty choice / transition
+        GameTurnRequest req = new GameTurnRequest
+        {
+            choice = "【继续游戏】",
+            active_roommates = activeRoommates,
+            current_evt_id = currentEvtId,
+            is_transition = true,
+            chapter = currentChapter,
+            turn = currentTurn,
+            san = currentSan,
+            money = currentMoney,
+            gpa = currentGpa,
+            arg_count = argCount,
+            //affinity = new AffinityDictionary(),
+            wechat_data_list = WeChatApp.Instance != null ? WeChatApp.Instance.ExportChatHistory() : new List<WeChatSession>()
+        };
+
+        StartCoroutine(networkService.PlayTurnCoroutine(
+            req,
+            (res) => HandleTurnResponse(res, "【继续游戏】"),
+            (err) => ShowSystemError(err)
+        ));
+    }
 
     public void ReturnToMainMenu()
     {

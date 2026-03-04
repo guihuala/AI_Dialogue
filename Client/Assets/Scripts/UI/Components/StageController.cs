@@ -23,18 +23,14 @@ public class StageController : MonoBehaviour
     [SerializeField] private GameObject optionsContainer;
     [SerializeField] private Button[] optionButtons;
 
-    [Header("Buttons")] 
-    [SerializeField] private Button historyButton;
-
     // 运行时数据
     private Dictionary<string, CharacterPortrait> activeCharacters = new Dictionary<string, CharacterPortrait>();
     public System.Action<string> OnOptionSelected;
 
     private void Start()
     {
-        if (historyButton) historyButton.onClick.AddListener(() => UIManager.Instance.OpenPanel("HistoryPanel"));
         if (optionsContainer) optionsContainer.SetActive(false);
-
+        
         if (GameManager.Instance != null)
         {
             GameManager.Instance.OnInitRoommates += InitializeRoommates;
