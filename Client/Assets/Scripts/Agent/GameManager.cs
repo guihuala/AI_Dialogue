@@ -33,6 +33,10 @@ public class GameManager : Singleton<GameManager>
     private int currentTurn = 0;
     private string currentEvtId = "";
     private bool isAwaitingTransition = false;
+    
+    public float CurrentMoney => currentMoney;
+    public int CurrentChapter => currentChapter;
+    public int CurrentTurn => currentTurn;
 
     // --- 游戏流程 ---
     private IEnumerator Start()
@@ -104,7 +108,14 @@ public class GameManager : Singleton<GameManager>
             ShowSystemError($"后端大模型生成异常:\n{res.error}");
             return;
         }
-
+        
+        // 计算金钱变化，如果有变化，自动记入支付宝账单
+        float moneyDelta = res.money - this.currentMoney;
+        if (Mathf.Abs(moneyDelta) > 0.01f)
+        {
+            string desc = moneyDelta > 0 ? "剧情奖励" : "剧情消费/扣除";
+            MsgCenter.SendMsg(MsgConst.ADD_TRANSACTION, moneyDelta, desc, $"第{this.currentChapter}章");
+        }
         currentSan = res.san;
         currentMoney = res.money;
         currentGpa = res.gpa;
@@ -117,16 +128,9 @@ public class GameManager : Singleton<GameManager>
         GameTimeData timeData = new GameTimeData { year = $"第 {res.chapter} 章", month = res.chapter, week = res.turn };
         
         MsgCenter.SendMsg(MsgConst.STATS_REFRESHED, stats, timeData, res.current_evt_id);
-        
         MsgCenter.SendMsg(MsgConst.EVENT_NOTIFIED, res.current_evt_id);
-        
         MsgCenter.SendMsg(MsgConst.WECHAT_NOTIFIED, res.wechat_notifications);
         
-        if (res.is_game_over || res.san <= 0)
-        {
-            
-        }
-
         // 统一构建对话序列用于展示
         List<DialogueTurn> dts = new List<DialogueTurn>();
         
@@ -155,7 +159,6 @@ public class GameManager : Singleton<GameManager>
             AutoSaveGame();
         }
         
-        // 原代码: OnPlayDialogueSequence?.Invoke(dts, () => { ... }); (注意这里有两处相同的，删掉重复的一处)
         MsgCenter.SendMsg(MsgConst.PLAY_DIALOGUE_SEQUENCE, dts, (Action)(() => { 
             if (res.next_options != null && res.next_options.Count > 0)
             {

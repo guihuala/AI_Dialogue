@@ -7,4 +7,5 @@ public class MsgConst
     public const int EVENT_NOTIFIED = 1005;         // 弹出系统事件横幅
     public const int PLAY_DIALOGUE_SEQUENCE = 1006; // 播放对话序列
     public const int WECHAT_NOTIFIED = 1007;        // 微信新消息通知
+    public const int ADD_TRANSACTION = 1008;        // 账单流水
 }

@@ -2,44 +2,61 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
 
+[System.Serializable]
+public class TransactionRecord
+{
+    public float amount;
+    public string description;
+    public string chapterInfo; // 记录是在哪一章发生的
+}
+
 public class PhoneManager : Singleton<PhoneManager>
 {
-    [Header("Phone OS Views")]
-    public GameObject phoneContainer; // 手机整个外壳
-    public GameObject homeScreen;    // 桌面网格
-    
-    [Header("Apps UI Panels")]
+    [Header("Phone OS Views")] public GameObject phoneContainer; // 手机整个外壳
+    public GameObject homeScreen; // 桌面网格
+
+    [Header("Apps UI Panels")] 
     public GameObject wechatAppPanel;
     public GameObject settingsAppPanel;
+    public GameObject alipayAppPanel;
+    public GameObject calendarAppPanel;
 
     [Header("App Icon Buttons (On Home Screen)")]
     public Button wechatButton;
     public Button settingsButton;
+    public Button alipayButton;
+    public Button calendarButton;
+
 
     // ==========================================
     // 💾 独立数据层 (Data Models)
     // ==========================================
     // 🌟 手机系统的底层数据库，App 们只管从这里读取
     public Dictionary<string, WeChatSession> ChatMemories { get; private set; } = new Dictionary<string, WeChatSession>();
+    public List<TransactionRecord> Transactions { get; private set; } = new List<TransactionRecord>();
 
     protected override void Awake()
     {
         base.Awake();
         ClosePhone();
         
-        // 🌟 将原本挂在 WeChatApp 里的事件拦截移到系统层
         MsgCenter.RegisterMsg(MsgConst.WECHAT_NOTIFIED, HandleIncomingMessages);
+        // 🌟 注册账单监听
+        MsgCenter.RegisterMsg(MsgConst.ADD_TRANSACTION, HandleNewTransaction);
     }
 
     private void OnDestroy()
     {
         MsgCenter.UnregisterMsg(MsgConst.WECHAT_NOTIFIED, HandleIncomingMessages);
+        MsgCenter.UnregisterMsg(MsgConst.ADD_TRANSACTION, HandleNewTransaction);
     }
 
     private void Start()
     {
         if (wechatButton != null) wechatButton.onClick.AddListener(OpenWeChat);
         if (settingsButton != null) settingsButton.onClick.AddListener(OpenSettings);
+        if (alipayButton != null) alipayButton.onClick.AddListener(OpenAlipay);
+        if (calendarButton != null) calendarButton.onClick.AddListener(OpenCalendar);
     }
 
     // ==========================================
@@ -74,6 +91,19 @@ public class PhoneManager : Singleton<PhoneManager>
         {
             wechatAppPanel.GetComponent<WeChatApp>()?.RefreshCurrentView();
         }
+    }
+    
+    private void HandleNewTransaction(params object[] args)
+    {
+        float amount = (float)args[0];
+        string desc = (string)args[1];
+        string chapter = (string)args[2];
+
+        Transactions.Add(new TransactionRecord { 
+            amount = amount, 
+            description = desc,
+            chapterInfo = chapter
+        });
     }
 
     public List<WeChatSession> ExportChatHistory()
@@ -123,6 +153,22 @@ public class PhoneManager : Singleton<PhoneManager>
         homeScreen.SetActive(true);
         if (wechatAppPanel != null) wechatAppPanel.SetActive(false);
         if (settingsAppPanel != null) settingsAppPanel.SetActive(false);
+        if (alipayAppPanel != null) alipayAppPanel.SetActive(false);
+        if (calendarAppPanel != null) calendarAppPanel.SetActive(false);
+    }
+
+    public void OpenAlipay()
+    {
+        GoToHome(); // 先全部关闭
+        homeScreen.SetActive(false);
+        if (alipayAppPanel != null) alipayAppPanel.SetActive(true);
+    }
+
+    public void OpenCalendar()
+    {
+        GoToHome();
+        homeScreen.SetActive(false);
+        if (calendarAppPanel != null) calendarAppPanel.SetActive(true);
     }
 
     public void OpenWeChat()
