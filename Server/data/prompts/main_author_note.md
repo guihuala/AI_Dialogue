@@ -16,6 +16,7 @@
 输出模板：
 {
     "narrator_transition": "（旁白描写现实中的动态）",
+    "current_scene": "当前所在场景（请严格从以下选其一：宿舍, 教室, 食堂, 图书馆, 操场, 商业街, 办公室, 未知）",
     "dialogue_sequence": [
         {"speaker": "李一诺", "content": "（台词）", "mood": "愤怒"}
     ],

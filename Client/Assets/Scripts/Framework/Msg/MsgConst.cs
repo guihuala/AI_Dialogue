@@ -8,4 +8,5 @@ public class MsgConst
     public const int PLAY_DIALOGUE_SEQUENCE = 1006; // 播放对话序列
     public const int WECHAT_NOTIFIED = 1007;        // 微信新消息通知
     public const int ADD_TRANSACTION = 1008;        // 账单流水
+    public const int CHANGE_SCENE = 1009;
 }

@@ -100,26 +100,10 @@ public class GameTurnResponse
     public List<string> next_options;
 
     public List<WeChatNotification> wechat_notifications;
-    public List<DialogueTurn> dialogue_sequence; // ADDED THIS BACK
-    public string narrator_transition; // ADDED THIS BACK
+    public List<DialogueTurn> dialogue_sequence;
+    public string narrator_transition;
+    public string current_scene;
     public string error; // Backend Exception message
-}
-
-[Serializable]
-public class SaveGameState // 对应后端的 game_state 字典
-{
-    public PlayerStatsData player_stats;
-    public GameTimeData game_time;
-
-    public string current_event;
-    // 未来可扩充
-}
-
-[Serializable]
-public class ResetGameResponse
-{
-    public string status;
-    public string message;
 }
 
 [Serializable]

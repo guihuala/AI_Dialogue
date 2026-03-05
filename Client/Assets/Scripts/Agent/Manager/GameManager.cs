@@ -123,6 +123,13 @@ public class GameManager : Singleton<GameManager>
 
         if (!string.IsNullOrEmpty(res.current_evt_id))
             MsgCenter.SendMsg(MsgConst.EVENT_NOTIFIED, res.current_evt_id);
+        
+        // 提取场景并广播给 UI
+        if (!string.IsNullOrEmpty(res.current_scene) && res.current_scene != Data.currentScene)
+        {
+            Data.currentScene = res.current_scene;
+            MsgCenter.SendMsg(MsgConst.CHANGE_SCENE, Data.currentScene);
+        }
 
         // 4. 对话序列播放
         var dts = res.dialogue_sequence ?? new List<DialogueTurn>();

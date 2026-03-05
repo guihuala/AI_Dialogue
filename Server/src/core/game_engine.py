@@ -63,6 +63,7 @@ class GameEngine:
             
             return {
                 "narrator_transition": "（系统受到干扰，尝试理清思绪...）",
+                "current_scene": parsed.get("current_scene", "宿舍"),
                 "dialogue_sequence": [{"speaker": "系统提示", "content": "（由于未知干扰，当前对话解析失败，请检查参数面板中的“原始输出”查明原因。）", "mood": "neutral"}],
                 "npc_background_actions": [],
                 "wechat_notifications": [],

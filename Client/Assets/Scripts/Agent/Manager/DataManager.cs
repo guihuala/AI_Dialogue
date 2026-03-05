@@ -17,6 +17,8 @@ public class DataManager
     public int currentTurn = 0;
     public string currentEvtId = "";
     public bool isAwaitingTransition = false;
+    
+    public string currentScene = "宿舍";
 
     // ==========================================
     // 🔄 数据重置与覆盖

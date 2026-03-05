@@ -1188,8 +1188,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d30559bc90bef4ddf8b5d4420bb486e1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  playerName: ArtStudent_01
-  activeRoommates: []
 --- !u!114 &500088324
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2244,6 +2242,7 @@ GameObject:
   - component: {fileID: 632821415}
   - component: {fileID: 632821417}
   - component: {fileID: 632821416}
+  - component: {fileID: 632821418}
   m_Layer: 5
   m_Name: BG
   m_TagString: Untagged
@@ -2308,6 +2307,21 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 632821414}
   m_CullTransparentMesh: 1
+--- !u!114 &632821418
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 632821414}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7ecbd4a6cac843309b1f21c43a6b05ce, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  backgroundImage: {fileID: 632821416}
+  fadeOverlay: {fileID: 632821416}
+  fadeDuration: 0.8
 --- !u!1 &652770270
 GameObject:
   m_ObjectHideFlags: 0
@@ -2461,13 +2475,24 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 68f39fde49e8c414483a6cf1cf8b307b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  tabGeneralBtn: {fileID: 0}
+  tabLLMBtn: {fileID: 0}
+  tabDeveloperBtn: {fileID: 0}
+  panelGeneral: {fileID: 0}
+  panelLLM: {fileID: 0}
+  panelDeveloper: {fileID: 0}
   textSpeedSlider: {fileID: 602768527}
   bgmVolumeSlider: {fileID: 1426984931}
   sfxVolumeSlider: {fileID: 721211303}
   fullscreenToggle: {fileID: 2011710700}
   apiKeyInput: {fileID: 1181471797}
-  saveButton: {fileID: 1165875143}
-  resetButton: {fileID: 1135283108}
+  baseUrlInput: {fileID: 0}
+  modelNameInput: {fileID: 0}
+  temperatureSlider: {fileID: 0}
+  rebuildKnowledgeBtn: {fileID: 0}
+  developerLogText: {fileID: 0}
+  saveApplyBtn: {fileID: 0}
+  resetBtn: {fileID: 0}
 --- !u!1 &721211301
 GameObject:
   m_ObjectHideFlags: 0
@@ -4342,8 +4367,12 @@ MonoBehaviour:
   homeScreen: {fileID: 1796700058}
   wechatAppPanel: {fileID: 399688218}
   settingsAppPanel: {fileID: 681187334}
+  alipayAppPanel: {fileID: 0}
+  calendarAppPanel: {fileID: 0}
   wechatButton: {fileID: 1857317017}
   settingsButton: {fileID: 1142013843}
+  alipayButton: {fileID: 0}
+  calendarButton: {fileID: 0}
 --- !u!1 &1165875141
 GameObject:
   m_ObjectHideFlags: 0
