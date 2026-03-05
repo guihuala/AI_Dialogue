@@ -171,10 +171,43 @@ public class NetworkService : SingletonPersistent<NetworkService>
             }
         }
     }
+    
+    // ============================================
+    // ⚙️ 系统与开发者设置
+    // ============================================
 
-    public IEnumerator UpdateSettingsCoroutine(float temp, int tokens, Action<SettingsResponse> onSuccess, Action<string> onFailure)
+    public IEnumerator RebuildKnowledgeCoroutine(Action<string> onSuccess, Action<string> onFailure)
     {
-        SettingsRequest req = new SettingsRequest { temperature = temp, max_tokens = tokens };
+        using (UnityWebRequest request = new UnityWebRequest($"{baseUrl}/system/rebuild_knowledge", "POST"))
+        {
+            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes("{}");
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            yield return request.SendWebRequest();
+
+            if (request.result != UnityWebRequest.Result.Success) 
+                onFailure?.Invoke(request.error);
+            else 
+            {
+                // 解析返回的 JSON (可以复用 SaveGameResponse 的结构，因为都有 status 和 message)
+                var res = JsonUtility.FromJson<SaveGameResponse>(request.downloadHandler.text);
+                if (res.status == "success") onSuccess?.Invoke(res.message);
+                else onFailure?.Invoke(res.message);
+            }
+        }
+    }
+
+    public IEnumerator UpdateSettingsCoroutine(float temp, int tokens, string apiKey, string baseUrl, string modelName, Action<SettingsResponse> onSuccess, Action<string> onFailure)
+    {
+        SettingsRequest req = new SettingsRequest 
+        { 
+            temperature = temp, 
+            max_tokens = tokens,
+            api_key = apiKey,
+            base_url = baseUrl,
+            model_name = modelName
+        };
         string json = JsonUtility.ToJson(req);
         
         using (UnityWebRequest request = new UnityWebRequest($"{baseUrl}/system/settings", "POST"))

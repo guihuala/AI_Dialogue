@@ -126,9 +126,12 @@ public class ResetGameResponse
 public class SettingsRequest
 {
     public float temperature;
-
     public int max_tokens;
-    // 可以添加 custom_model
+    
+    // 🌟 新增：大模型动态配置字段
+    public string api_key;
+    public string base_url;
+    public string model_name;
 }
 
 [Serializable]
@@ -136,6 +139,11 @@ public class SettingsCurrentState
 {
     public float temperature;
     public int max_tokens;
+    
+    // 🌟 如果你想从后端读取当前配置，也可以把这些加上
+    public string api_key;
+    public string base_url;
+    public string model_name;
 }
 
 [Serializable]
@@ -143,6 +151,7 @@ public class SettingsResponse
 {
     public string status;
     public SettingsCurrentState current_settings;
+    public string message; // 兼容我们刚刚在 Python 后端加的 message 字段
 }
 
 // ==========================================

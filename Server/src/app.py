@@ -72,6 +72,9 @@ class SettingsRequest(BaseModel):
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     custom_model: Optional[str] = None
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    model_name: Optional[str] = None
 
 # --- 路由与接口 ---
 
@@ -236,6 +239,46 @@ def update_settings(req: SettingsRequest):
             "max_tokens": getattr(engine.llm, 'max_tokens', None) if getattr(engine, 'llm', None) else None,
         }
     }
+
+# 1. 扩充 SettingsRequest 模型 (大约在 130 行附近)
+
+# 2. 覆盖原有的 /api/system/settings 接口
+@app.post("/api/system/settings")
+def update_settings(req: SettingsRequest):
+    """更新大模型底层配置"""
+    if getattr(engine, 'llm', None):
+        if req.temperature is not None: engine.llm.temperature = req.temperature
+        if req.max_tokens is not None: engine.llm.max_tokens = req.max_tokens
+        
+        # 调用 llm_service.py 中你写好的 update_config 方法
+        current_api = req.api_key if req.api_key else engine.llm.api_key
+        current_url = req.base_url if req.base_url else engine.llm.base_url
+        current_model = req.model_name if req.model_name else engine.llm.model
+        
+        engine.llm.update_config(api_key=current_api, base_url=current_url, model=current_model)
+    
+    return {"status": "success", "message": "大模型配置已更新"}
+
+# 3. 新增 CMS 热重载接口
+@app.post("/api/system/rebuild_knowledge")
+def rebuild_knowledge():
+    """游戏内触发：重建向量知识库并重载剧本"""
+    try:
+        # 1. 重建 ChromaDB 语料库
+        from build_knowledge import build_knowledge
+        build_knowledge()
+        
+        # 2. 热重载剧本事件
+        if engine and hasattr(engine, 'director'):
+            engine.director.reload_timeline()
+            
+        # 3. 热重载 Prompt
+        if engine and hasattr(engine, 'pm'):
+            engine.pm.__init__() # 重新读取 md 文件
+            
+        return {"status": "success", "message": "✅ 知识库、剧本与提示词已热重载成功！"}
+    except Exception as e:
+        return {"status": "error", "message": f"重建失败: {str(e)}"}
 
 if __name__ == "__main__":
     import uvicorn
