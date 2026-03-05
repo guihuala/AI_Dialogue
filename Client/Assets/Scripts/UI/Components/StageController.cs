@@ -31,28 +31,24 @@ public class StageController : MonoBehaviour
     {
         if (optionsContainer) optionsContainer.SetActive(false);
         
-        if (GameManager.Instance != null)
-        {
-            GameManager.Instance.OnInitRoommates += InitializeRoommates;
-            GameManager.Instance.OnShowOptions += ShowOptions;
-            GameManager.Instance.OnShowImmediateMessage += ShowImmediateMessage;
-            GameManager.Instance.OnPlayDialogueSequence += HandlePlayDialogueSequence;
-        }
+        MsgCenter.RegisterMsg(MsgConst.INIT_ROOMMATES, InitializeRoommates);
+        MsgCenter.RegisterMsg(MsgConst.SHOW_OPTIONS, ShowOptions);
+        MsgCenter.RegisterMsg(MsgConst.SHOW_IMMEDIATE_MESSAGE, ShowImmediateMessage);
+        MsgCenter.RegisterMsg(MsgConst.PLAY_DIALOGUE_SEQUENCE, HandlePlayDialogueSequence);
     }
 
     private void OnDestroy()
     {
-        if (GameManager.Instance != null)
-        {
-            GameManager.Instance.OnInitRoommates -= InitializeRoommates;
-            GameManager.Instance.OnShowOptions -= ShowOptions;
-            GameManager.Instance.OnShowImmediateMessage -= ShowImmediateMessage;
-            GameManager.Instance.OnPlayDialogueSequence -= HandlePlayDialogueSequence;
-        }
+        MsgCenter.UnregisterMsg(MsgConst.INIT_ROOMMATES, InitializeRoommates);
+        MsgCenter.UnregisterMsg(MsgConst.SHOW_OPTIONS, ShowOptions);
+        MsgCenter.UnregisterMsg(MsgConst.SHOW_IMMEDIATE_MESSAGE, ShowImmediateMessage);
+        MsgCenter.UnregisterMsg(MsgConst.PLAY_DIALOGUE_SEQUENCE, HandlePlayDialogueSequence);
     }
 
-    public void InitializeRoommates(List<string> roommateIds)
+    public void InitializeRoommates(params object[] args)
     {
+        List<string> roommateIds = args[0] as List<string>;
+        
         // 1. 清理上一局/上一个场景遗留的立绘
         foreach (var kvp in activeCharacters)
         {
@@ -136,9 +132,11 @@ public class StageController : MonoBehaviour
         return spk == "player" || spk == "我" || spk == "陆陈安然" || spk == "安然" || (playerData != null && spk == playerData.id.ToLower());
     }
 
-public void HandlePlayDialogueSequence(List<DialogueTurn> sequence, System.Action onComplete)
+    public void HandlePlayDialogueSequence(params object[] args)
     {
-        // 【新增防护】防止整个序列为 null
+        List<DialogueTurn> sequence = args[0] as List<DialogueTurn>;
+        System.Action onComplete = args.Length > 1 ? args[1] as System.Action : null;
+        
         if (sequence == null || sequence.Count == 0)
         {
             onComplete?.Invoke();
@@ -290,8 +288,12 @@ public void HandlePlayDialogueSequence(List<DialogueTurn> sequence, System.Actio
         onComplete?.Invoke();
     }
 
-    public void ShowImmediateMessage(string speaker, string content, Color color)
+    public void ShowImmediateMessage(params object[] args)
     {
+        string speaker = (string)args[0];
+        string content = (string)args[1];
+        Color color = (Color)args[2];
+        
         bool isPlayer = IsPlayer(speaker);
         speakerNameText.text = isPlayer ? "我" : speaker;
         speakerNameText.color = color;
@@ -299,8 +301,10 @@ public void HandlePlayDialogueSequence(List<DialogueTurn> sequence, System.Actio
         UpdatePortraitFocus(isPlayer ? playerData.id.ToLower() : speaker);
     }
 
-    public void ShowOptions(List<string> options)
+    public void ShowOptions(params object[] args)
     {
+        List<string> options = args[0] as List<string>;
+        
         optionsContainer.SetActive(true);
         for (int i = 0; i < optionButtons.Length; i++)
         {
@@ -339,15 +343,6 @@ public void HandlePlayDialogueSequence(List<DialogueTurn> sequence, System.Actio
         {
             if (kvp.Value.CharacterID.ToLower() == canonicalId) kvp.Value.SetFocus(true);
             else kvp.Value.SetFocus(false);
-        }
-    }
-    
-    // 专门播放固定剧本的重载方法
-    public void PlayFixedDialogue(FixedDialogueData fixedData, System.Action onComplete = null)
-    {
-        if (fixedData != null && fixedData.sequence != null)
-        {
-            HandlePlayDialogueSequence(fixedData.sequence, onComplete);
         }
     }
 }

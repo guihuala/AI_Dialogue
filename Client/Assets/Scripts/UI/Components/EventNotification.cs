@@ -21,8 +21,8 @@ public class EventNotification : MonoBehaviour
     {
         if (GameManager.Instance != null)
         {
-            GameManager.Instance.OnEventNotified += ShowEvent;
-            GameManager.Instance.OnWeChatNotified += ShowWechat;
+            MsgCenter.RegisterMsg(MsgConst.EVENT_NOTIFIED, ShowEvent);
+            MsgCenter.RegisterMsg(MsgConst.WECHAT_NOTIFIED, ShowWechat);
         }
     }
 
@@ -30,13 +30,15 @@ public class EventNotification : MonoBehaviour
     {
         if (GameManager.Instance != null)
         {
-            GameManager.Instance.OnEventNotified -= ShowEvent;
-            GameManager.Instance.OnWeChatNotified -= ShowWechat;
+            MsgCenter.UnregisterMsg(MsgConst.EVENT_NOTIFIED, ShowEvent);
+            MsgCenter.UnregisterMsg(MsgConst.WECHAT_NOTIFIED, ShowWechat);
         }
     }
 
-    public void ShowEvent(string eventName)
+    private void ShowEvent(params object[] args)
     {
+        string eventName = (string)args[0];
+        
         if (string.IsNullOrEmpty(eventName) || eventName.Contains("日常")) return;
 
         eventText.text = eventName;
@@ -48,11 +50,12 @@ public class EventNotification : MonoBehaviour
         s.Append(canvasGroup.DOFade(0, 0.5f));
     }
 
-    public void ShowWechat(List<WeChatNotification> notifications)
+    private void ShowWechat(params object[] args)
     {
+        List<WeChatNotification> notifications = args[0] as List<WeChatNotification>;
+        
         if (notifications == null || notifications.Count == 0) return;
-
-        // Just show the first/latest one for simplicity in this notification bubble
+        
         var notif = notifications[0];
         eventText.text = $"📱 微信消息\n[{notif.chat_name}] {notif.sender}: {notif.message}";
         eventText.color = new Color(0.2f, 0.8f, 0.2f); // 微信绿

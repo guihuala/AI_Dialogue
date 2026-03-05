@@ -34,15 +34,6 @@ public class GameManager : Singleton<GameManager>
     private string currentEvtId = "";
     private bool isAwaitingTransition = false;
 
-    // --- 定义UI需要监听的事件 ---
-    public event Action<List<string>> OnInitRoommates;
-    public event Action<List<string>> OnShowOptions;
-    public event Action<string, string, Color> OnShowImmediateMessage;
-    public event Action<PlayerStatsData, GameTimeData, string> OnStatsRefreshed;
-    public event Action<string> OnEventNotified;
-    public event Action<List<DialogueTurn>, Action> OnPlayDialogueSequence;
-    public event Action<List<WeChatNotification>> OnWeChatNotified;
-
     // --- 游戏流程 ---
     private IEnumerator Start()
     {
@@ -92,8 +83,7 @@ public class GameManager : Singleton<GameManager>
         currentEvtId = "";
         isAwaitingTransition = false;
 
-        if (OnInitRoommates == null) Debug.LogWarning("[GameManager] 警告: OnInitRoommates 没有人订阅！UI可能未准备好。");
-        OnInitRoommates?.Invoke(activeRoommates);
+        MsgCenter.SendMsg(MsgConst.INIT_ROOMMATES, activeRoommates);
 
         StartCoroutine(NetworkService.Instance.StartGameCoroutine(
             activeRoommates,
@@ -125,15 +115,13 @@ public class GameManager : Singleton<GameManager>
         
         PlayerStatsData stats = new PlayerStatsData { san = res.san, money = res.money, gpa = res.gpa };
         GameTimeData timeData = new GameTimeData { year = $"第 {res.chapter} 章", month = res.chapter, week = res.turn };
-
-        OnStatsRefreshed?.Invoke(stats, timeData, res.current_evt_id);
-        OnEventNotified?.Invoke(res.current_evt_id);
-
-        if (res.wechat_notifications != null && res.wechat_notifications.Count > 0)
-        {
-            OnWeChatNotified?.Invoke(res.wechat_notifications);
-        }
-
+        
+        MsgCenter.SendMsg(MsgConst.STATS_REFRESHED, stats, timeData, res.current_evt_id);
+        
+        MsgCenter.SendMsg(MsgConst.EVENT_NOTIFIED, res.current_evt_id);
+        
+        MsgCenter.SendMsg(MsgConst.WECHAT_NOTIFIED, res.wechat_notifications);
+        
         if (res.is_game_over || res.san <= 0)
         {
             
@@ -158,9 +146,6 @@ public class GameManager : Singleton<GameManager>
             // 如果连旁白和对话都没有，兜底直接扔出 display_text （处理早期的纯文本）
             dts.Add(new DialogueTurn { speaker = "剧情推进", content = res.display_text, mood = "neutral" });
         }
-
-        if (OnPlayDialogueSequence == null)
-            Debug.LogWarning("[GameManager] 警告: OnPlayDialogueSequence 没人监听！对话不会播放！");
         
         // 决定这个回合播完之后，是否已经结束当前事件
         isAwaitingTransition = res.is_end;
@@ -169,28 +154,22 @@ public class GameManager : Singleton<GameManager>
         {
             AutoSaveGame();
         }
-
-        OnPlayDialogueSequence?.Invoke(dts, () => { 
+        
+        // 原代码: OnPlayDialogueSequence?.Invoke(dts, () => { ... }); (注意这里有两处相同的，删掉重复的一处)
+        MsgCenter.SendMsg(MsgConst.PLAY_DIALOGUE_SEQUENCE, dts, (Action)(() => { 
             if (res.next_options != null && res.next_options.Count > 0)
             {
-                OnShowOptions?.Invoke(res.next_options);
+                MsgCenter.SendMsg(MsgConst.SHOW_OPTIONS, res.next_options); // 替换选项展示
             }
-        });
-
-        OnPlayDialogueSequence?.Invoke(dts, () => { 
-            if (res.next_options != null && res.next_options.Count > 0)
-            {
-                OnShowOptions?.Invoke(res.next_options);
-            }
-        });
+        }));
     }
 
     public void HandlePlayerChoice(string choice)
     {
         Debug.Log($"[GameManager] 玩家做出了选择: {choice}");
         if (currentState != GameState.Playing) return;
-
-        OnShowImmediateMessage?.Invoke("Player", choice, Color.cyan);
+        
+        MsgCenter.SendMsg(MsgConst.SHOW_IMMEDIATE_MESSAGE, "Player", choice, Color.cyan);
 
         GameTurnRequest req = new GameTurnRequest {
             choice = choice,
@@ -203,7 +182,7 @@ public class GameManager : Singleton<GameManager>
             money = currentMoney,
             gpa = currentGpa,
             arg_count = argCount,
-            wechat_data_list = WeChatApp.Instance != null ? WeChatApp.Instance.ExportChatHistory() : new List<WeChatSession>()
+            // wechat_data_list = WeChatApp.Instance != null ? WeChatApp.Instance.ExportChatHistory() : new List<WeChatSession>()
         };
 
         StartCoroutine(NetworkService.Instance.PlayTurnCoroutine(
@@ -216,7 +195,7 @@ public class GameManager : Singleton<GameManager>
     private void ShowSystemError(string error)
     {
         Debug.LogError(error);
-        OnShowImmediateMessage?.Invoke("System Error", $"<color=red>{error}</color>", Color.red);
+        MsgCenter.SendMsg(MsgConst.SHOW_IMMEDIATE_MESSAGE, "System Error", $"<color=red>{error}</color>", Color.red);
     }
 
     // --- 辅助 ---
@@ -280,7 +259,8 @@ public class GameManager : Singleton<GameManager>
             money = this.currentMoney,
             gpa = this.currentGpa,
             arg_count = this.argCount,
-            wechat_data_list = WeChatApp.Instance != null ? WeChatApp.Instance.ExportChatHistory() : new List<WeChatSession>()
+            // 修改这里：指向 PhoneManager
+            wechat_data_list = PhoneManager.Instance != null ? PhoneManager.Instance.ExportChatHistory() : new List<WeChatSession>()
         };
         
         StartCoroutine(NetworkService.Instance.SaveGameCoroutine(req, (res) =>
@@ -330,18 +310,17 @@ public class GameManager : Singleton<GameManager>
             this.currentMoney = res.data.money;
             this.currentGpa = res.data.gpa;
             this.argCount = res.data.arg_count;
-
-            // 如果有微信聊天记录，推给微信管理器恢复
-            if (WeChatApp.Instance != null && res.data.wechat_data_list != null)
+            
+            if (PhoneManager.Instance != null && res.data.wechat_data_list != null)
             {
-                WeChatApp.Instance.ImportChatHistory(res.data.wechat_data_list);
+                PhoneManager.Instance.ImportChatHistory(res.data.wechat_data_list);
             }
 
             // 2. 派发事件，强制刷新所有的 UI 面板 (顶部状态栏、人物栏等)
-            OnInitRoommates?.Invoke(activeRoommates);
+            MsgCenter.SendMsg(MsgConst.INIT_ROOMMATES, activeRoommates);
             PlayerStatsData stats = new PlayerStatsData { san = currentSan, money = currentMoney, gpa = currentGpa };
             GameTimeData timeData = new GameTimeData { year = $"第 {currentChapter} 章", month = currentChapter, week = currentTurn };
-            OnStatsRefreshed?.Invoke(stats, timeData, currentEvtId);
+            MsgCenter.SendMsg(MsgConst.STATS_REFRESHED, stats, timeData, res.data.current_evt_id);
 
             // 3. 向后端发一个“空动作”以获取当前的剧情文本和选项，完成无缝续借
             SendTurnRequest("【继续游戏】", true);
@@ -378,8 +357,7 @@ public class GameManager : Singleton<GameManager>
             money = this.currentMoney,
             gpa = this.currentGpa,
             arg_count = this.argCount,
-            // 同步最新的微信聊天记录给后端，供大模型参考
-            wechat_data_list = WeChatApp.Instance != null ? WeChatApp.Instance.ExportChatHistory() : new List<WeChatSession>()
+            wechat_data_list = PhoneManager.Instance != null ? PhoneManager.Instance.ExportChatHistory() : new List<WeChatSession>()
         };
 
         // 发送网络请求 (请确保你的 NetworkService 中有 PlayTurnCoroutine 方法)

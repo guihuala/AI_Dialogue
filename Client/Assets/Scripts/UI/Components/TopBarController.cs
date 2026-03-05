@@ -22,25 +22,21 @@ public class TopBarController : MonoBehaviour
             if (PhoneManager.Instance != null) PhoneManager.Instance.TogglePhone();
         });
         
-        // 订阅事件
-        if (GameManager.Instance != null)
-        {
-            GameManager.Instance.OnStatsRefreshed += Refresh;
-        }
+        MsgCenter.RegisterMsg(MsgConst.STATS_REFRESHED, Refresh);
     }
 
     private void OnDestroy()
     {
-        // 取消订阅防止报错
-        if (GameManager.Instance != null)
-        {
-            GameManager.Instance.OnStatsRefreshed -= Refresh;
-        }
+        MsgCenter.UnregisterMsg(MsgConst.STATS_REFRESHED, Refresh);
     }
 
     // 更新所有状态
-    public void Refresh(PlayerStatsData stats, GameTimeData time, string eventName)
+    public void Refresh(params object[] args)
     {
+        PlayerStatsData stats = args[0] as PlayerStatsData;
+        GameTimeData time = args[1] as GameTimeData;
+        string eventName = (string)args[2];
+        
         if (stats != null)
         {
             moneyText.text = $"$ {stats.money:F0}";
