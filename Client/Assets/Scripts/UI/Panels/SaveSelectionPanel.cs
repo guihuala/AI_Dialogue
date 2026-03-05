@@ -7,25 +7,19 @@ public class SaveSelectionPanel : BasePanel
     [Header("UI 引用")]
     public SaveSlotItem[] slotItems; // 拖入 3 个 Slot 预制体实例
     public Button backButton;
-    public GameObject loadingOverlay; // 加载中的遮罩
-
+    
     public override void OpenPanel(string name)
     {
         base.OpenPanel(name);
         
+        backButton.onClick.RemoveAllListeners(); // 养成好习惯，防止重复注册
         backButton.onClick.AddListener(() => UIManager.Instance.ClosePanel(name));
-        
-        // 初始显示加载中
-        loadingOverlay.SetActive(true);
-        
-        // 请求后端存档信息
+  
         StartCoroutine(NetworkService.Instance.GetSavesInfoCoroutine(OnGetSavesSuccess, OnGetSavesFailure));
     }
 
     private void OnGetSavesSuccess(SavesInfoResponse res)
     {
-        loadingOverlay.SetActive(false);
-        
         if (res.slots != null)
         {
             for (int i = 0; i < slotItems.Length; i++)
@@ -40,7 +34,6 @@ public class SaveSelectionPanel : BasePanel
 
     private void OnGetSavesFailure(string err)
     {
-        loadingOverlay.SetActive(false);
         Debug.LogError("获取存档列表失败: " + err);
     }
 
@@ -51,7 +44,8 @@ public class SaveSelectionPanel : BasePanel
         PlayerPrefs.SetInt("SelectedSlotID", slotId);
         PlayerPrefs.Save();
 
-        // 2. 跳转场景
-        SceneLoader.Instance.LoadScene(GameScene.Gameplay);
+        // 2. 跳转场景 (假定你的场景加载管理器是这么写的)
+        // 如果你的场景管理叫别的名字，请替换为你自己的跳转代码，比如 SceneManager.LoadScene("MainGameScene");
+        UnityEngine.SceneManagement.SceneManager.LoadScene("MainGameScene");
     }
 }

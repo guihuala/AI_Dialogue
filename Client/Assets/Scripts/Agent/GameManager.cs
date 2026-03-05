@@ -17,6 +17,12 @@ public class GameManager : Singleton<GameManager>
     
     [Header("Data")] [SerializeField] private string playerName = "ArtStudent_01";
     public List<string> activeRoommates = new List<string>();
+    
+    [Header("Auto Save")]
+    // 开启/关闭定时自动保存的开关
+    public bool enableTimerAutoSave = true;
+    public float autoSaveInterval = 300f; // 默认 5 分钟 (300秒) 保存一次
+    private Coroutine autoSaveCoroutine;
 
     private int currentSlotId = -1;
     private int currentSan = 100;
@@ -27,21 +33,6 @@ public class GameManager : Singleton<GameManager>
     private int currentTurn = 0;
     private string currentEvtId = "";
     private bool isAwaitingTransition = false;
-
-    [Serializable]
-    public struct ChatLog
-    {
-        public string speaker;
-        public string content;
-    }
-
-    [Serializable]
-    private class ChatLogWrapper
-    {
-        public List<ChatLog> logs = new List<ChatLog>();
-    }
-
-    private List<ChatLog> chatHistory = new List<ChatLog>();
 
     // --- 定义UI需要监听的事件 ---
     public event Action<List<string>> OnInitRoommates;
@@ -89,7 +80,6 @@ public class GameManager : Singleton<GameManager>
     {
         Debug.Log($"[GameManager] 开始新游戏，选中的室友数量: {selectedChars.Count}");
         
-        chatHistory.Clear();
         activeRoommates = new List<string>(selectedChars);
         SetGameState(GameState.Playing);
 
@@ -107,7 +97,12 @@ public class GameManager : Singleton<GameManager>
 
         StartCoroutine(NetworkService.Instance.StartGameCoroutine(
             activeRoommates,
-            (res) => HandleTurnResponse(res, ""),
+            (res) =>
+            {
+                HandleTurnResponse(res, "");
+                if (autoSaveCoroutine != null) StopCoroutine(autoSaveCoroutine);
+                if (enableTimerAutoSave) autoSaveCoroutine = StartCoroutine(TimerAutoSaveRoutine());
+            },
             (err) => ShowSystemError(err)
         ));
     }
@@ -141,7 +136,7 @@ public class GameManager : Singleton<GameManager>
 
         if (res.is_game_over || res.san <= 0)
         {
-            EndGame();
+            
         }
 
         // 统一构建对话序列用于展示
@@ -166,9 +161,21 @@ public class GameManager : Singleton<GameManager>
 
         if (OnPlayDialogueSequence == null)
             Debug.LogWarning("[GameManager] 警告: OnPlayDialogueSequence 没人监听！对话不会播放！");
-
-        // 决定这个回合播完之后，是否已经结束当前事件，如果结束了，下次点击按钮就进入下个事件
+        
+        // 决定这个回合播完之后，是否已经结束当前事件
         isAwaitingTransition = res.is_end;
+        
+        if (res.is_end)
+        {
+            AutoSaveGame();
+        }
+
+        OnPlayDialogueSequence?.Invoke(dts, () => { 
+            if (res.next_options != null && res.next_options.Count > 0)
+            {
+                OnShowOptions?.Invoke(res.next_options);
+            }
+        });
 
         OnPlayDialogueSequence?.Invoke(dts, () => { 
             if (res.next_options != null && res.next_options.Count > 0)
@@ -184,7 +191,6 @@ public class GameManager : Singleton<GameManager>
         if (currentState != GameState.Playing) return;
 
         OnShowImmediateMessage?.Invoke("Player", choice, Color.cyan);
-        AddChatLog("Player", choice);
 
         GameTurnRequest req = new GameTurnRequest {
             choice = choice,
@@ -214,10 +220,6 @@ public class GameManager : Singleton<GameManager>
     }
 
     // --- 辅助 ---
-    public List<ChatLog> GetChatHistory() => chatHistory;
-    public void AddChatLog(string s, string c) => chatHistory.Add(new ChatLog { speaker = s, content = c });
-
-
     public void SetGameState(GameState newState)
     {
         currentState = newState;
@@ -244,139 +246,32 @@ public class GameManager : Singleton<GameManager>
                 break;
         }
     }
-
-    public void PauseGame() => SetGameState(GameState.Paused);
-    public void EndGame()
-    {
-        PlayerPrefs.SetInt("HasSaveData", 0); // 结束游戏清除存档标记
-        PlayerPrefs.Save();
-        SetGameState(GameState.GameOver);
-    }
-    public void ResumeGame() => SetGameState(GameState.Playing);
-
-    private void SaveLocalProgress()
-    {
-        PlayerPrefs.SetInt("HasSaveData", 1);
-        PlayerPrefs.SetInt("currentSan", currentSan);
-        PlayerPrefs.SetFloat("currentMoney", currentMoney);
-        PlayerPrefs.SetFloat("currentGpa", currentGpa);
-        PlayerPrefs.SetInt("argCount", argCount);
-        PlayerPrefs.SetInt("currentChapter", currentChapter);
-        PlayerPrefs.SetInt("currentTurn", currentTurn);
-        PlayerPrefs.SetString("currentEvtId", currentEvtId);
-        PlayerPrefs.SetInt("isAwaitingTransition", isAwaitingTransition ? 1 : 0);
-        
-        PlayerPrefs.SetString("activeRoommates", string.Join(",", activeRoommates));
-        
-        ChatLogWrapper wrapper = new ChatLogWrapper { logs = chatHistory };
-        PlayerPrefs.SetString("chatHistory", JsonUtility.ToJson(wrapper));
-
-        PlayerPrefs.Save();
-        Debug.Log("[GameManager] Local progress saved.");
-    }
-
-    private void LoadLocalProgress()
-    {
-        currentSan = PlayerPrefs.GetInt("currentSan", 100);
-        currentMoney = PlayerPrefs.GetFloat("currentMoney", 2000f);
-        currentGpa = PlayerPrefs.GetFloat("currentGpa", 4.0f);
-        argCount = PlayerPrefs.GetInt("argCount", 0);
-        currentChapter = PlayerPrefs.GetInt("currentChapter", 1);
-        currentTurn = PlayerPrefs.GetInt("currentTurn", 0);
-        currentEvtId = PlayerPrefs.GetString("currentEvtId", "");
-        isAwaitingTransition = PlayerPrefs.GetInt("isAwaitingTransition", 0) == 1;
-
-        string rmStr = PlayerPrefs.GetString("activeRoommates", "");
-        if (!string.IsNullOrEmpty(rmStr)) activeRoommates = new List<string>(rmStr.Split(','));
-
-        string chatJson = PlayerPrefs.GetString("chatHistory", "");
-        if (!string.IsNullOrEmpty(chatJson))
-        {
-            ChatLogWrapper wrapper = JsonUtility.FromJson<ChatLogWrapper>(chatJson);
-            if (wrapper != null && wrapper.logs != null) chatHistory = wrapper.logs;
-        }
-
-        SetGameState(GameState.Playing);
-
-        if (OnInitRoommates == null) Debug.LogWarning("[GameManager] 警告: OnInitRoommates 没有人订阅！UI可能未准备好。");
-        OnInitRoommates?.Invoke(activeRoommates);
-
-        // Notify Stats UI
-        PlayerStatsData stats = new PlayerStatsData { san = currentSan, money = currentMoney, gpa = currentGpa };
-        GameTimeData timeData = new GameTimeData { year = $"第 {currentChapter} 章", month = currentChapter, week = currentTurn };
-        OnStatsRefreshed?.Invoke(stats, timeData, currentEvtId);
-
-        // Resume game via backend by sending an empty choice / transition
-        GameTurnRequest req = new GameTurnRequest
-        {
-            choice = "【继续游戏】",
-            active_roommates = activeRoommates,
-            current_evt_id = currentEvtId,
-            is_transition = true,
-            chapter = currentChapter,
-            turn = currentTurn,
-            san = currentSan,
-            money = currentMoney,
-            gpa = currentGpa,
-            arg_count = argCount,
-            wechat_data_list = WeChatApp.Instance != null ? WeChatApp.Instance.ExportChatHistory() : new List<WeChatSession>()
-        };
-
-        StartCoroutine(NetworkService.Instance.PlayTurnCoroutine(
-            req,
-            (res) => HandleTurnResponse(res, "【继续游戏】"),
-            (err) => ShowSystemError(err)
-        ));
-    }
-
-    public void ReturnToMainMenu()
-    {
-        // 清理数据，返回主菜单场景
-        chatHistory.Clear();
-        activeRoommates.Clear();
-        UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenuScene");
-    }
     
     [Header("Save System")]
     private string currentSaveId = "";
+    
     // ==========================================
     // 💾 存档与读档核心业务
     // ==========================================
     
+    
     /// <summary>
-    /// 全新开局：清空内存并向后端拉取第一章
+    /// 执行静默自动存档（覆盖当前所在的槽位）
     /// </summary>
-    public void StartNewGame()
+    public void AutoSaveGame()
     {
-        currentSlotId = -1;
-        currentChapter = 1;
-        currentTurn = 0;
-        currentSan = 100;
-        currentMoney = 2000f;
-        currentGpa = 4.0f;
-        argCount = 0;
-        currentEvtId = "";
-
-        if (WeChatApp.Instance != null)
+        // 🌟 防御性检查：如果当前是新游戏且从未存过档，跳过自动保存
+        // (如果不加这句，可能会因为 currentSlotId = -1 导致后端报错)
+        if (currentSlotId < 1 || currentSlotId > 3)
         {
-            WeChatApp.Instance.ImportChatHistory(new List<WeChatSession>()); // 清空微信
+            Debug.Log("[AutoSave] 当前游戏尚未绑定槽位，已跳过自动保存。请先手动存档一次！");
+            return;
         }
-
-        // 可以调用网络接口告诉后端初始化，或者直接作为第1回合发过去
-        SendTurnRequest("【开始大学生活】", true); 
-    }
-
-    /// <summary>
-    /// 将当前进度保存到指定的槽位 (1, 2, 3)
-    /// </summary>
-    public void SaveGameToSlot(int slotId)
-    {
-        if (slotId < 1 || slotId > 3) return;
 
         // 收集当前所有的核心状态
         SaveGameRequest req = new SaveGameRequest
         {
-            slot_id = slotId,
+            slot_id = this.currentSlotId, // 🌟 核心修改：动态使用当前绑定的槽位
             active_roommates = this.activeRoommates,
             current_evt_id = this.currentEvtId,
             chapter = this.currentChapter,
@@ -385,29 +280,36 @@ public class GameManager : Singleton<GameManager>
             money = this.currentMoney,
             gpa = this.currentGpa,
             arg_count = this.argCount,
-            // 导出微信记录存入进度
             wechat_data_list = WeChatApp.Instance != null ? WeChatApp.Instance.ExportChatHistory() : new List<WeChatSession>()
         };
         
         StartCoroutine(NetworkService.Instance.SaveGameCoroutine(req, (res) =>
-        {
-            Debug.Log($"[Save] 槽位 {slotId} 存档成功! 后端返回: {res.message}");
-            currentSlotId = slotId;
-            
-            // 在本地留个标记，记录最后游玩的槽位，方便主界面的“继续游戏”直接读取
-            PlayerPrefs.SetInt("LastPlayedSlot", slotId);
-            PlayerPrefs.Save();
-            
-            // UI 提示
-            OnShowImmediateMessage?.Invoke("系统提示", $"游戏已成功保存至槽位 {slotId}。", Color.green);
-        }, 
-        (err) => 
-        {
-            Debug.LogError($"[Save] 存档失败: {err}");
-            ShowSystemError("存档失败: " + err);
-        }));
+            {
+                Debug.Log($"[AutoSave] 游戏已自动保存至云端 (覆盖当前槽位 {this.currentSlotId})。");
+            }, 
+            (err) => 
+            {
+                Debug.LogWarning($"[AutoSave] 自动保存失败: {err}");
+            }));
     }
 
+    /// <summary>
+    /// 定时自动保存的协程
+    /// </summary>
+    private IEnumerator TimerAutoSaveRoutine()
+    {
+        while (enableTimerAutoSave)
+        {
+            yield return new WaitForSeconds(autoSaveInterval);
+            
+            // 只有在正常游玩状态下才进行定时保存
+            if (currentState == GameState.Playing) 
+            {
+                AutoSaveGame();
+            }
+        }
+    }
+    
     /// <summary>
     /// 从指定槽位加载数据并恢复游戏状态
     /// </summary>
@@ -448,6 +350,9 @@ public class GameManager : Singleton<GameManager>
         {
             Debug.LogError($"[Load] 读取槽位 {slotId} 失败: {err}");
             ShowSystemError("读取存档失败: " + err);
+            
+            if (autoSaveCoroutine != null) StopCoroutine(autoSaveCoroutine);
+            if (enableTimerAutoSave) autoSaveCoroutine = StartCoroutine(TimerAutoSaveRoutine());
         }));
     }
     

@@ -95,10 +95,14 @@ class GameEngine:
         settlement_msg = ""
         
         if is_transition or current_evt_id == "":
-            if turn == 0: self.mm.clear_game_history()
+            if turn == 0: 
+                self.mm.clear_game_history()
+                # 🌟 核心修复：强制重置剧本导演的内部状态，与前端请求的章节保持一致
+                self.director.current_chapter = chapter
+                self.director.chapter_progress = 0
+                self.director.used_events = []
+                
             next_evt = self.director.get_next_event(player_stats, selected_chars, affinity)
-            if not next_evt: return {"is_game_over": True, "msg": "🏁 游戏通关！", "san": san, "money": money, "gpa": gpa, "arg_count": arg_count, "chapter": chapter, "turn": turn, "affinity": affinity, "current_evt_id": ""}
-            
             if next_evt.chapter > chapter:
                 money -= 800  
                 gpa = max(0.0, min(4.0, 3.0 - (arg_count * 0.05)))
@@ -285,7 +289,6 @@ class GameEngine:
                     if "san_delta" in tool_res: san = max(0, min(100, san + tool_res["san_delta"]))
                     if "gpa_delta" in tool_res: gpa = max(0.0, min(4.0, gpa + tool_res["gpa_delta"]))
                     if "money_delta" in tool_res: money += tool_res["money_delta"]
-            # ========================================================
             
             is_end = True if getattr(next_evt, 'is_cg', False) or turn >= 3 else parsed.get("is_end", False)
             

@@ -107,7 +107,6 @@ public class WeChatApp : Singleton<WeChatApp>
 
             GameObject row = Instantiate(chatRowPrefab, chatListContent);
             
-            // Assuming your prefab has 2 Text components: Name and Last Message
             Text[] texts = row.GetComponentsInChildren<Text>();
             if (texts.Length > 0) texts[0].text = sessionName;
             if (texts.Length > 1 && session.messages.Count > 0) 

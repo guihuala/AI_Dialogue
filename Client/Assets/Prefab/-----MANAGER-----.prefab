@@ -105,6 +105,7 @@ MonoBehaviour:
   SignPrefab: {fileID: 6944888077476667840, guid: 5ec34d3113a459d4f8adbe4dd7854dd6, type: 3}
   FixedPosTextPrefab: {fileID: 6944888077476667840, guid: b29276fe14cccf040bc3320d8668b911, type: 3}
   CircleProgressPrefab: {fileID: 4911077471963055430, guid: c4565201eaffcf84d9cc33c69b5a7259, type: 3}
+  LoadingPrefab: {fileID: 4907769733034917610, guid: 8949e1ee5f8b64425962b36ed1c5cd46, type: 3}
 --- !u!114 &2057685601767635725
 MonoBehaviour:
   m_ObjectHideFlags: 0

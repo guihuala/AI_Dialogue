@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional
 import json
 import os
 import uuid
+import sys  # 🌟 修复点 1：补上缺少的 sys 模块引入！
 
 # 把当前文件的上一级目录加入系统路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -12,6 +13,15 @@ from src.core.presets import CANDIDATE_POOL
 from src.core.game_engine import GameEngine
 from src.models.schema import PlayerStats
 from datetime import datetime
+
+# 🌟 修复点 2：确保在启动服务器前，把 CSV 剧本数据加载进内存（避免一进游戏就通关）
+try:
+    from src.core.data_loader import load_all_events
+    from src.core.event_script import EVENT_DATABASE
+    EVENTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "events")
+    EVENT_DATABASE.update(load_all_events(EVENTS_DIR))
+except Exception as e:
+    print(f"Warning: Failed to load events data: {e}")
 
 # 定义存档目录
 SAVE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "saves")
@@ -45,9 +55,18 @@ class GameTurnRequest(BaseModel):
     affinity: Dict[str, float] = {}
     wechat_data_list: List[Dict[str, Any]] = []
 
+# 🌟 修复点 3：清理了冗余的旧版存档结构，保留完美的 3 槽位结构
 class SaveGameRequest(BaseModel):
-    slot_id: str
-    game_state: Dict[str, Any]
+    slot_id: int  # 规定只能是 1, 2, 或 3
+    active_roommates: List[str]
+    current_evt_id: str
+    chapter: int
+    turn: int
+    san: int
+    money: float
+    gpa: float
+    arg_count: int
+    wechat_data_list: List[Dict[str, Any]] = []
 
 class SettingsRequest(BaseModel):
     temperature: Optional[float] = None
@@ -58,9 +77,7 @@ class SettingsRequest(BaseModel):
 
 @app.post("/api/game/start")
 def start_game(req: StartGameRequest):
-    """
-    初始化游戏：分配室友，设置初始状态
-    """
+    """初始化游戏：分配室友，设置初始状态"""
     if not engine:
         raise HTTPException(status_code=500, detail="GameEngine not initialized.")
         
@@ -68,19 +85,17 @@ def start_game(req: StartGameRequest):
     
     selected_ids = req.roommates
     if not selected_ids:
-        # 如果未指定，随便选 3 个
         import random
         all_ids = list(CANDIDATE_POOL.keys())
         selected_ids = random.sample(all_ids, min(3, len(all_ids)))
         
-    # 第一回合可以认为是一次 Transition，交给 GameEngine 生成场景和选项
     try:
         init_res = engine.play_main_turn(
             action_text="",
             selected_chars=selected_ids,
             current_evt_id="",
             is_transition=True,
-            api_key="",  # 默认使用环境变量里配置好的
+            api_key="",  
             base_url="",
             model="",
             tmp=0.7, top_p=1.0, max_t=800, pres_p=0.3, freq_p=0.5,
@@ -95,9 +110,7 @@ def start_game(req: StartGameRequest):
 
 @app.post("/api/game/turn")
 def perform_turn(req: GameTurnRequest):
-    """
-    回合制核心：提交玩家选择及状态，返回下一事件脚本和新选项
-    """
+    """回合制核心：提交玩家选择及状态，返回下一事件脚本和新选项"""
     if not engine:
         raise HTTPException(status_code=500, detail="GameEngine not initialized.")
         
@@ -106,8 +119,6 @@ def perform_turn(req: GameTurnRequest):
         if req.wechat_data_list:
             for session in req.wechat_data_list:
                 chat_name = session.get("chat_name")
-                # Unity 发来的格式: [{"sender": "A", "message": "msg"}]
-                # GameEngine 期待格式: [["sender", "msg"], ["sender", "msg"]] 或 [("sender", "msg")]
                 messages = [[m.get("sender", ""), m.get("message", "")] for m in session.get("messages", [])]
                 if chat_name:
                     wechat_dict[chat_name] = messages
@@ -135,42 +146,74 @@ def perform_turn(req: GameTurnRequest):
         print(f"Turn Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ==========================================
+# 💾 存档与读档系统 (支持 3 槽位与 UI 摘要)
+# ==========================================
+
 @app.post("/api/game/save")
 def save_game(req: SaveGameRequest):
-    """
-    保存游戏状态到本地 JSON 文件
-    """
+    """保存游戏状态到指定的槽位 (1-3)"""
+    if req.slot_id not in [1, 2, 3]:
+    raise HTTPException(status_code=400, detail="无效的槽位ID")
+        
+    file_path = os.path.join(SAVE_DIR, f"slot_{req.slot_id}.json")
+    
+    save_data = {
+        "slot_id": req.slot_id,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "chapter_info": f"第 {req.chapter} 章 - 第 {req.turn} 回合",
+        "state": req.dict() 
+    }
+    
     try:
-        file_path = os.path.join(SAVE_DIR, f"save_{req.slot_id}.json")
         with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(req.game_state, f, ensure_ascii=False, indent=4)
-        return {"status": "success", "message": f"Saved to slot {req.slot_id}"}
+            json.dump(save_data, f, ensure_ascii=False, indent=4)
+        return {"status": "success", "slot_id": req.slot_id, "message": f"槽位 {req.slot_id} 保存成功"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"保存失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"保存存档失败: {str(e)}")
+
+@app.get("/api/game/saves_info")
+def get_saves_info():
+    """读取 3 个槽位的摘要信息，供前端选单界面展示"""
+    info_list = []
+    for i in range(1, 4):
+        file_path = os.path.join(SAVE_DIR, f"slot_{i}.json")
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    info_list.append({
+                        "slot_id": i, 
+                        "is_empty": False,
+                        "timestamp": data.get("timestamp"), 
+                        "chapter_info": data.get("chapter_info")
+                    })
+            except:
+                info_list.append({"slot_id": i, "is_empty": True, "chapter_info": "存档损坏"})
+        else:
+            info_list.append({"slot_id": i, "is_empty": True, "chapter_info": "空槽位", "timestamp": ""})
+            
+    return {"status": "success", "slots": info_list}
 
 @app.get("/api/game/load/{slot_id}")
-def load_game(slot_id: str):
-    """
-    从本地 JSON 文件读取游戏状态
-    """
-    file_path = os.path.join(SAVE_DIR, f"save_{slot_id}.json")
+def load_game(slot_id: int):
+    """根据槽位编号读取完整游戏状态"""
+    if slot_id not in [1, 2, 3]:
+        raise HTTPException(status_code=400, detail="无效的槽位ID")
+        
+    file_path = os.path.join(SAVE_DIR, f"slot_{slot_id}.json")
     if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="存档不存在")
+        raise HTTPException(status_code=404, detail="该槽位为空")
         
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
-            game_state = json.load(f)
-        return {"status": "success", "game_state": game_state}
+            save_data = json.load(f)
+        return {"status": "success", "data": save_data["state"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"读取存档失败: {str(e)}")
 
 @app.post("/api/game/reset")
 def reset_game():
-    """
-    重置当前后端可能缓存的状态
-    当前服务端是无状态设计，所以这只是个占位符，如果以后加入了会话隔离 (Session Memory) 则用于清空
-    """
-    # 如果还需要重置引擎内的会话信息的话
     try:
         if engine and hasattr(engine, 'mm'):
             engine.mm.clear_game_history()
@@ -180,9 +223,6 @@ def reset_game():
 
 @app.post("/api/system/settings")
 def update_settings(req: SettingsRequest):
-    """
-    调整后端的 LLM 生成参数 (如温度，使用模型)
-    """
     if getattr(engine, 'llm', None):
         if req.temperature is not None:
             engine.llm.temperature = req.temperature
@@ -196,57 +236,6 @@ def update_settings(req: SettingsRequest):
             "max_tokens": getattr(engine.llm, 'max_tokens', None) if getattr(engine, 'llm', None) else None,
         }
     }
-
-class SaveGameRequest(BaseModel):
-    save_id: str = "" # 如果为空则是新建存档
-    active_roommates: List[str]
-    current_evt_id: str
-    chapter: int
-    turn: int
-    san: int
-    money: float
-    gpa: float
-    arg_count: int
-    wechat_data_dict: Dict[str, List[Any]] = {}
-    affinity: Dict[str, int] = {}
-
-@app.post("/api/game/save")
-def save_game(req: SaveGameRequest):
-    """
-    保存游戏状态到后端 JSON 文件
-    """
-    # 如果没有指定 save_id，生成一个唯一的 ID
-    save_id = req.save_id if req.save_id else f"save_{uuid.uuid4().hex[:8]}"
-    file_path = os.path.join(SAVE_DIR, f"{save_id}.json")
-    
-    save_data = {
-        "save_id": save_id,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "state": req.dict()
-    }
-    
-    try:
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(save_data, f, ensure_ascii=False, indent=4)
-        return {"status": "success", "save_id": save_id, "message": "游戏保存成功"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"保存存档失败: {str(e)}")
-
-@app.get("/api/game/load/{save_id}")
-def load_game(save_id: str):
-    """
-    根据 save_id 读取游戏状态
-    """
-    file_path = os.path.join(SAVE_DIR, f"{save_id}.json")
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="存档不存在")
-        
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            save_data = json.load(f)
-        return {"status": "success", "data": save_data["state"]}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取存档失败: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
