@@ -47,42 +47,37 @@ public class NetworkService : SingletonPersistent<NetworkService>
     {
         string json = JsonUtility.ToJson(req);
         
-        Debug.Log($"[NetworkService] 发送回合推演请求: {json}");
-
         using (UnityWebRequest request = new UnityWebRequest($"{baseUrl}/game/turn", "POST"))
         {
             byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
+
+            // ⏱️ 1. 在发送请求前，掏出并启动秒表！
+            System.Diagnostics.Stopwatch stopwatch = new System.Diagnostics.Stopwatch();
+            stopwatch.Start();
+
+            // 发起请求，开始漫长等待...
             yield return request.SendWebRequest();
+
+            // ⏱️ 2. 请求返回，立刻掐表！
+            stopwatch.Stop();
+            float elapsedSeconds = stopwatch.ElapsedMilliseconds / 1000f;
+            
+            // 打印出极其醒目的测速日志
+            Debug.Log($"<color=orange><b>[性能监控] AI 思考总耗时: {elapsedSeconds:F2} 秒</b></color>");
 
             if (request.result != UnityWebRequest.Result.Success) 
             {
-                Debug.LogError($"[NetworkService] 回合推演报错: {request.error}\n详情: {request.downloadHandler.text}");
+                Debug.LogError($"[NetworkService] Turn 请求失败: {request.error}");
                 onFailure?.Invoke(request.error);
             }
             else 
             {
                 string rawText = request.downloadHandler.text;
-                Debug.Log($"[NetworkService] 后端返回回合结算JSON: {rawText}");
-                
-                try 
-                {
-                    GameTurnResponse res = JsonUtility.FromJson<GameTurnResponse>(rawText);
-                    if (res == null)
-                    {
-                        Debug.LogError("[NetworkService] 解析结果为 NULL，可能是由于 JSON 格式完全不匹配 GameTurnResponse 结构。");
-                        onFailure?.Invoke("JSON解析完全失败");
-                        yield break;
-                    }
-                    onSuccess?.Invoke(res);
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError($"[NetworkService] JSON解析异常: {e.Message}\n错误详情:\n{e.StackTrace}\n解析目标: {rawText}");
-                    onFailure?.Invoke($"解析异常: {e.Message}");
-                }
+                // Debug.Log($"[NetworkService] Turn 返回: {rawText}");
+                onSuccess?.Invoke(JsonUtility.FromJson<GameTurnResponse>(rawText));
             }
         }
     }

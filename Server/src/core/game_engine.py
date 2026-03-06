@@ -3,6 +3,8 @@ import json
 import re
 import csv
 import concurrent.futures
+import asyncio
+import time
 from json_repair import repair_json 
 
 import src.core.presets as presets_module
@@ -75,7 +77,6 @@ class GameEngine:
     def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, arg_count, chapter, turn, affinity, wechat_data_dict):
         self.llm.update_config(api_key=api_key, base_url=base_url, model=model)
         
-        # 🚨 [关键修复]: C# 发来的是英语ID (tang_mengqi)，由于后端 RAG 和设定文件以及 Agent 名字都依赖中文名，所以需要转化
         mapped_chars = []
         for c in selected_chars:
             if c in presets_module.CANDIDATE_POOL:
@@ -154,8 +155,13 @@ class GameEngine:
         safe_keys = ", ".join([str(k) for k in wechat_data_dict.keys()])
 
         # ========================================================
-        # 🌟 多智能体(MAS) 剧场演出阶段：让室友们并发思考！
+        # 多智能体剧场演出阶段
         # ========================================================
+
+        t1 = time.time()
+        reactions = asyncio.run(fetch_all_reactions())
+        print(f"🛑 [耗时监控] NPC 并发思考耗时: {time.time() - t1:.2f} 秒")
+
         npc_chars = [c for c in selected_chars if c != "陆陈安然"]
         reactions_str = ""
         
@@ -186,10 +192,21 @@ class GameEngine:
                 agent = NPCAgent(char_name, profile_text, rel_text, self.llm)
                 agents.append(agent)
                 
-            # 多线程并发执行，3个人同时思考只需要1次API调用的时间！
-            with concurrent.futures.ThreadPoolExecutor(max_workers=len(agents)) as executor:
-                futures = [executor.submit(agent.react, event_context, action_text) for agent in agents]
-                reactions = [f.result() for f in futures]
+            async def fetch_all_reactions():
+                tasks = [agent.async_react(event_context, action_text) for agent in agents]
+                return await asyncio.gather(*tasks)
+
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # 安全逃逸机制：防止在 FastAPI 已有事件循环中嵌套报错
+                    with concurrent.futures.ThreadPoolExecutor(1) as pool:
+                        reactions = pool.submit(lambda: asyncio.run(fetch_all_reactions())).result()
+                else:
+                    reactions = asyncio.run(fetch_all_reactions())
+            except Exception:
+                # 终极兜底
+                reactions = asyncio.run(fetch_all_reactions())
                 
             reactions_str = "\n\n【🎬 演员就位：以下是在场室友刚才做出的独立反应】\n(⚠️系统警告：请你作为 DM，严格采纳以下室友的反应进行编排。禁止篡改她们的原意、动作和准备发送的微信内容！)\n"
             for i, char_name in enumerate(npc_chars):
@@ -201,10 +218,14 @@ class GameEngine:
                 reactions_str += f"- {char_name}: [情绪]:{mood} | [动作]:{action}\n"
                 if dia: reactions_str += f"  嘴上说：“{dia}”\n"
                 if wec: reactions_str += f"  准备在微信发：“{wec}”\n"
+        
+        # ========================================================
+        # DM统筹并结算阶段
+        # ========================================================
+        t2 = time.time()
+        res_text = self.llm.generate_response(...)
+        print(f"🛑 [耗时监控] DM 主大脑生成 JSON 耗时: {time.time() - t2:.2f} 秒")
 
-        # ========================================================
-        # 🌟 DM (系统) 统筹并结算阶段
-        # ========================================================
         user_prm = f"{event_context}\n\n【玩家意图】: {action_text}{reactions_str}\n\n【现有微信通讯录】: {safe_keys}\n{wechat_summary}\n[状态] SAN:{san}, 资金:{money}。\n\n{self.pm.get_main_author_note()}"
 
         try:
@@ -282,7 +303,6 @@ class GameEngine:
                     func_name = tool.get("name", "")
                     args = tool.get("args", {})
                     
-                    # 🌟 核心跨越：一行代码消灭所有 if-else！动态派发执行！
                     tool_res = self.tm.execute(func_name, args)
                     
                     # 动态应用工具带来的数值变化和文本渲染

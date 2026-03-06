@@ -63,30 +63,33 @@ class LLMService:
             print(f"LLM API Error: {e}")
             return '{"error": "AI大模型请求异常: ' + str(e).replace('"', "'").replace("\n", " ") + '"}'
 
-    async def async_generate(self, system_prompt: str, user_input: str, 
-                             temperature: float = 0.7, max_tokens: int = 500) -> str:
+    # 在 llm_service.py 的 LLMService 类中新增：
+
+    async def async_generate_response(self, system_prompt: str, user_input: str, 
+                                      temperature: float = 0.7, max_tokens: int = 500,
+                                      model_override: str = None) -> str:
+        """异步生成回答，并支持临时指定使用小模型"""
+        
+        # 🌟 方案2落地：如果指定了临时模型（如小模型），就用指定的；否则用默认的
+        target_model = model_override if model_override else self.model
+        
         if not self.api_key or self.api_key == "dummy": return '{"error": "尚未配置 API Key"}'
+        
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_input}
         ]
         
         try:
+            # 🌟 方案1落地：调用 async_client 实现真正的非阻塞并发
             completion = await self.async_client.chat.completions.create(
-                model=self.model, messages=messages, temperature=temperature, max_tokens=max_tokens,
+                model=target_model, 
+                messages=messages, 
+                temperature=temperature, 
+                max_tokens=max_tokens,
                 response_format={"type": "json_object"}
             )
             return completion.choices[0].message.content
         except Exception as e:
-            error_str = str(e).lower()
-            if "response_format" in error_str or "json" in error_str or "not supported" in error_str:
-                try:
-                    completion = await self.async_client.chat.completions.create(
-                        model=self.model, messages=messages, temperature=temperature, max_tokens=max_tokens
-                    )
-                    return completion.choices[0].message.content
-                except Exception as inner_e:
-                    print(f"Async LLM 降级生成失败: {inner_e}")
-                    return '{"error": "AI异步生成失败: ' + str(inner_e).replace('"', "'").replace("\n", " ") + '"}'
             print(f"Async LLM API Error: {e}")
-            return '{"error": "AI大模型请求异常: ' + str(e).replace('"', "'").replace("\n", " ") + '"}'
+            return '{"error": "AI异步生成失败"}'
