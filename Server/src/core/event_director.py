@@ -32,14 +32,16 @@ class EventDirector:
                 print(f"❌ Timeline 读取失败: {e}")
         
         default_timeline = {
-            "1": ["CG", "随机或专属", "通用", "Boss"],
-            "2": ["CG", "通用", "随机或专属", "Boss"],
-            "3": ["CG", "条件", "通用", "Boss"],
-            "4": ["CG", "随机或专属", "通用", "Boss"]
+            "1": ["随机或专属", "通用", "Boss"],
+            "2": ["通用", "随机或专属", "Boss"],
+            "3": ["条件", "通用", "Boss"],
+            "4": ["随机或专属", "通用", "Boss"]
         }
+        
         os.makedirs(os.path.dirname(TIMELINE_PATH), exist_ok=True)
         with open(TIMELINE_PATH, 'w', encoding='utf-8') as f:
             json.dump(default_timeline, f, ensure_ascii=False, indent=4)
+            
         return default_timeline
 
     def _check_conditions(self, event, player_stats, active_chars, affinity):
@@ -113,8 +115,7 @@ class EventDirector:
         for e in available_events:
             # 匹配大类
             type_match = False
-            if "CG" in expected_type and getattr(e, 'is_cg', False): type_match = True
-            elif "Boss" in expected_type and getattr(e, 'is_boss', False): type_match = True
+            if "Boss" in expected_type and getattr(e, 'is_boss', False): type_match = True
             elif "专属" in expected_type and "专属" in e.event_type: type_match = True
             elif "条件" in expected_type and "条件" in e.event_type: type_match = True
             elif "通用" in expected_type and ("通用" in e.event_type or "随机" in e.event_type): type_match = True
@@ -123,7 +124,6 @@ class EventDirector:
             if not type_match:
                 continue
                 
-            # 🌟 二筛：使用动态条件引擎严格考核
             if self._check_conditions(e, player_stats, active_chars, affinity):
                 valid_pool.append(e)
                 

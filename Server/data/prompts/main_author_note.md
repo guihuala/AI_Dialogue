@@ -6,30 +6,31 @@
 ⚠️ 铁律4：如果玩家的行动意图是“在微信里回复”，请你务必代入玩家生成具体的回复内容，并将其放在 wechat_notifications 中，此时 sender 必须填 “陆陈安然”！
 
 [⚠️ 格式指令]
-请务必返回合法的 JSON 对象。如果玩家意图是在微信里回复，请将具体的回复内容放在 wechat_notifications 中，此时 sender 必须填 “陆陈安然”。
-
-"【严格字数限制】：你的 dialogue_sequence 中，每句话不得超过 20 个字！旁白 narrator_transition 必须简短，不得超过 30 个字！切勿废话！"
+请务必返回合法的 JSON 对象，并且必须包含以下完整的字段结构：
+{
+    "narrator_transition": "简短的剧情旁白，不超过 30 个字！",
+    "current_scene": "当前所在场景（请严格从以下选其一：宿舍, 教室, 食堂, 图书馆, 操场, 商业街, 办公室, 未知）",
+    "dialogue_sequence": [
+        {"speaker": "角色名", "content": "角色说的话，每句话不得超过 20 个字！", "mood": "情绪"}
+    ],
+    "npc_background_actions": [
+        {"character": "角色名", "action": "暗场动作", "affinity_change": 0}
+    ],
+    "wechat_notifications": [
+        {"chat_name": "群聊名或私聊名", "sender": "发送者", "message": "消息内容"}
+    ],
+    "next_options": ["【选项1】", "【选项2】", "【选项3】", "【选项4】", "【选项5】"],
+    "stat_changes": {
+        "san_delta": 0,
+        "money_delta": 0,
+        "is_argument": false,
+        "affinity_changes": {"角色名": 0}
+    },
+    "is_end": false,
+    "tool_calls": []
+}
 
 [🛠️ 工具调用权限 (Function Calling)]
 你现在拥有调用底层 Python 系统工具的权限。如果 NPC 情绪失控或发生了严重冲突，你可以随时在 `tool_calls` 数组中调用以下工具：
 1. `post_to_campus_wall`: 校园表白墙发帖工具。当某人想挂人、撕逼时调用。参数: `{"author": "匿名或某人名", "content": "挂人的具体内容"}`。
-2. `sabotage_academic`: 学业破坏工具。当某人极度记仇并在暗场摧毁别人的作业或U盘时调用。参数: `{"target": "陆陈安然或其他人", "method": "偷偷拔掉插头/删文件等"}`。
-
-输出模板：
-{
-    "narrator_transition": "（旁白描写现实中的动态）",
-    "current_scene": "当前所在场景（请严格从以下选其一：宿舍, 教室, 食堂, 图书馆, 操场, 商业街, 办公室, 未知）",
-    "dialogue_sequence": [
-        {"speaker": "李一诺", "content": "（台词）", "mood": "愤怒"}
-    ],
-    "npc_background_actions": [{"character": "唐梦琪", "action": "翻白眼", "affinity_change": -5}],
-    "wechat_notifications": [
-        {"chat_name": "【404 仙女下凡大群】", "sender": "唐梦琪", "message": "真是够了！"}
-    ],
-    "tool_calls": [
-        {"name": "post_to_campus_wall", "args": {"author": "匿名", "content": "排雷404寝室某位大姐..."}}
-    ],
-    "next_options": ["【选项A】", "【选项B】"],
-    "stat_changes": {"san_delta": 0, "money_delta": 0, "is_argument": true, "affinity_changes": {}},
-    "is_end": false
-}
+2. `sabotage_academic`: 学业背刺系统。参数: `{"target": "受害者", "method": "破坏手段"}`。

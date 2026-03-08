@@ -4,18 +4,15 @@ using UnityEngine;
 
 public class GameManager : Singleton<GameManager>
 {
+    [Header("Config")]
+    public DialogueSequence introSequenceSO;
+    
     public enum GameState { Playing, Paused, GameOver }
     public GameState CurrentState { get; private set; }
-
-    // ==========================================
-    // 🧩 子系统挂载 (Sub-Managers)
-    // ==========================================
+    
     public DataManager Data { get; private set; }
     public SaveManager Save { get; private set; }
-
-    // ==========================================
-    // 对外暴露的只读数据透传
-    // ==========================================
+    
     public float CurrentMoney => Data != null ? Data.currentMoney : 0;
     public int CurrentChapter => Data != null ? Data.currentChapter : 1;
     public int CurrentTurn => Data != null ? Data.currentTurn : 0;
@@ -31,33 +28,51 @@ public class GameManager : Singleton<GameManager>
     {
         yield return null; 
 
-        // 路由系统
         if (PlayerPrefs.GetInt("IsContinuingGame", 0) == 1)
         {
             int slotId = PlayerPrefs.GetInt("SelectedSlotID", 1);
             PlayerPrefs.SetInt("IsContinuingGame", 0);
             PlayerPrefs.Save();
-            
-            // 指挥存档系统干活
             Save.LoadGameFromSlot(slotId);
         }
         else
         {
-            StartNewGame();
+            // 🌟 如果是新游戏，进入本地播片流程
+            StartNewGameIntro();
         }
     }
-
-    public void StartNewGame()
+    
+    public void StartNewGameIntro()
     {
-        // 指挥数据系统重置
         Data.ResetForNewGame();
-        
         if (PhoneManager.Instance != null)
             PhoneManager.Instance.ImportChatHistory(new List<WeChatSession>());
-
         Data.BroadcastAllStats();
-        Save.RestartAutoSave();
-        SendTurnRequest("【开始大学生活】", true);
+
+        // 🌟 1. 从 SO 中读取预设的开场白
+        List<DialogueTurn> seq = introSequenceSO != null ? introSequenceSO.sequence : new List<DialogueTurn>();
+
+        // 🌟 2. 播完后，从 GameContext 提取名单，正式呼叫大模型！
+        MsgCenter.SendMsg(MsgConst.PLAY_DIALOGUE_SEQUENCE, seq, (System.Action)(() => {
+            StartBackendGame(GameContext.SelectedRoommates);
+        }));
+    }
+    
+    // 🌟 3. 真正联络后端
+    public void StartBackendGame(List<string> selectedRoommates)
+    {
+        Data.activeRoommates = selectedRoommates;
+
+        // 向后端发车
+        StartCoroutine(NetworkService.Instance.StartGameCoroutine(
+            selectedRoommates,
+            (res) => {
+                Save.RestartAutoSave();
+                // 收到后端回复后，正式接入 AI 剧情
+                HandleTurnResponse(res, "【推开寝室的门】");
+            },
+            (err) => ShowSystemError("网络请求失败: " + err)
+        ));
     }
 
     // ==========================================
@@ -103,6 +118,12 @@ public class GameManager : Singleton<GameManager>
         {
             string desc = moneyDelta > 0 ? "剧情变动" : "剧情消费/扣除";
             MsgCenter.SendMsg(MsgConst.ADD_TRANSACTION, moneyDelta, desc, $"第{Data.currentChapter}章");
+        }
+        
+        if (res.active_roommates != null && res.active_roommates.Count > 0)
+        {
+            Data.activeRoommates = res.active_roommates;
+            MsgCenter.SendMsg(MsgConst.INIT_ROOMMATES, Data.activeRoommates);
         }
 
         // 2. 指挥数据系统更新并广播

@@ -85,9 +85,7 @@ public class WeChatMessageData
 public class GameTurnResponse
 {
     public bool is_game_over;
-    public string msg; // game over message
-    public string display_text; // The whole text to display (or dialogue lines)
-
+    
     public int san;
     public float money;
     public float gpa;
@@ -97,6 +95,7 @@ public class GameTurnResponse
     public string current_evt_id;
 
     public bool is_end;
+    public List<string> active_roommates;
     public List<string> next_options;
 
     public List<WeChatNotification> wechat_notifications;

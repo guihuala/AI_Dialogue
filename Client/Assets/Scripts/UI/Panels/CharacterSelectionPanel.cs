@@ -81,7 +81,7 @@ public class CharacterSelectionPanel : BasePanel
         UpdateUIState();
     }
 
-    // [新增] 随机选择的核心逻辑
+    // 随机选择的核心逻辑
     void OnRandomSelectClicked()
     {
         // 如果总角色数小于需要选择的数量，则直接返回防报错
@@ -125,10 +125,18 @@ public class CharacterSelectionPanel : BasePanel
         warningText.text = $"已选择: {count} / {MAX_SELECTION}";
     }
 
-    void OnStartGameClicked()
+    private void OnStartGameClicked()
     {
+        // 防御检查：必须选满才能开局
+        if (selectedIds.Count < MAX_SELECTION) return;
+        
+        // 🌟 1. 存入跨场景中转站
         GameContext.SelectedRoommates = new List<string>(selectedIds);
-        UIManager.Instance.ClosePanel(panelName);
-        SceneLoader.Instance.LoadScene(GameScene.Gameplay);
+        
+        // 🌟 2. 标记为新游戏
+        PlayerPrefs.SetInt("IsContinuingGame", 0);
+        PlayerPrefs.Save();
+        
+        startGameButton.interactable = false;
     }
 }

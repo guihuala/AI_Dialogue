@@ -65,7 +65,7 @@ class GameEngine:
             
             return {
                 "narrator_transition": "（系统受到干扰，尝试理清思绪...）",
-                "current_scene": parsed.get("current_scene", "宿舍"),
+                "current_scene": "未知",
                 "dialogue_sequence": [{"speaker": "系统提示", "content": "（由于未知干扰，当前对话解析失败，请检查参数面板中的“原始输出”查明原因。）", "mood": "neutral"}],
                 "npc_background_actions": [],
                 "wechat_notifications": [],
@@ -99,7 +99,6 @@ class GameEngine:
         if is_transition or current_evt_id == "":
             if turn == 0: 
                 self.mm.clear_game_history()
-                # 🌟 核心修复：强制重置剧本导演的内部状态，与前端请求的章节保持一致
                 self.director.current_chapter = chapter
                 self.director.chapter_progress = 0
                 self.director.used_events = []
@@ -111,7 +110,8 @@ class GameEngine:
                 settlement_msg = f"**[大{chapter}学年结算]** 扣除生活费800。GPA：{gpa:.2f}\n\n"
                 chapter = next_evt.chapter; arg_count = 0 
             turn = 1
-            event_context = f"【过渡指令】进入第 {chapter} 章。\n【新事件】:{next_evt.name}\n【场景描述】:{next_evt.description}"
+            # 🌟 这里的指令已被修改：禁止废话开场白
+            event_context = f"【系统指令】直接开始以下事件，不要写任何开场白或过场旁白。\n【新事件】:{next_evt.name}\n【场景描述】:{next_evt.description}"
         else:
             next_evt = EVENT_DATABASE.get(current_evt_id)
             if not next_evt:
@@ -158,17 +158,12 @@ class GameEngine:
         # 多智能体剧场演出阶段
         # ========================================================
 
-        t1 = time.time()
-        reactions = asyncio.run(fetch_all_reactions())
-        print(f"🛑 [耗时监控] NPC 并发思考耗时: {time.time() - t1:.2f} 秒")
-
         npc_chars = [c for c in selected_chars if c != "陆陈安然"]
         reactions_str = ""
         
         if npc_chars and not getattr(next_evt, 'is_cg', False):
             agents = []
             for char_name in npc_chars:
-                # 给每个演员发她独有的剧本和偏见
                 char_file = self.pm.char_file_map.get(char_name, "")
                 profile_text = ""
                 if char_file:
@@ -196,17 +191,17 @@ class GameEngine:
                 tasks = [agent.async_react(event_context, action_text) for agent in agents]
                 return await asyncio.gather(*tasks)
 
+            t1 = time.time()
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    # 安全逃逸机制：防止在 FastAPI 已有事件循环中嵌套报错
                     with concurrent.futures.ThreadPoolExecutor(1) as pool:
                         reactions = pool.submit(lambda: asyncio.run(fetch_all_reactions())).result()
                 else:
                     reactions = asyncio.run(fetch_all_reactions())
             except Exception:
-                # 终极兜底
                 reactions = asyncio.run(fetch_all_reactions())
+            print(f"🛑 [耗时监控] NPC 并发思考耗时: {time.time() - t1:.2f} 秒")
                 
             reactions_str = "\n\n【🎬 演员就位：以下是在场室友刚才做出的独立反应】\n(⚠️系统警告：请你作为 DM，严格采纳以下室友的反应进行编排。禁止篡改她们的原意、动作和准备发送的微信内容！)\n"
             for i, char_name in enumerate(npc_chars):
@@ -222,10 +217,7 @@ class GameEngine:
         # ========================================================
         # DM统筹并结算阶段
         # ========================================================
-        t2 = time.time()
-        res_text = self.llm.generate_response(...)
-        print(f"🛑 [耗时监控] DM 主大脑生成 JSON 耗时: {time.time() - t2:.2f} 秒")
-
+        
         user_prm = f"{event_context}\n\n【玩家意图】: {action_text}{reactions_str}\n\n【现有微信通讯录】: {safe_keys}\n{wechat_summary}\n[状态] SAN:{san}, 资金:{money}。\n\n{self.pm.get_main_author_note()}"
 
         try:
@@ -239,6 +231,7 @@ class GameEngine:
 
                 parsed = {
                     "narrator_transition": f"🎬 **[剧情演出] {next_evt.name}**\n---", 
+                    "current_scene": "宿舍",
                     "dialogue_sequence": cg_dialogue, 
                     "next_options": cg_options,
                     "stat_changes": {}, 
@@ -248,7 +241,9 @@ class GameEngine:
                 }
                 res_text = json.dumps(parsed, ensure_ascii=False)
             else:
+                t2 = time.time()
                 res_text = self.llm.generate_response(system_prompt=sys_prm, user_input=user_prm, temperature=tmp, top_p=top_p, max_tokens=max_t, presence_penalty=pres_p, frequency_penalty=freq_p)
+                print(f"🛑 [耗时监控] DM 主大脑生成 JSON 耗时: {time.time() - t2:.2f} 秒")
                 parsed = self.parse_and_repair_json(res_text)
 
             stats_data = parsed.get("stat_changes", {})
@@ -305,7 +300,6 @@ class GameEngine:
                     
                     tool_res = self.tm.execute(func_name, args)
                     
-                    # 动态应用工具带来的数值变化和文本渲染
                     if "display_text" in tool_res: display_text += tool_res["display_text"]
                     if "san_delta" in tool_res: san = max(0, min(100, san + tool_res["san_delta"]))
                     if "gpa_delta" in tool_res: gpa = max(0.0, min(4.0, gpa + tool_res["gpa_delta"]))
@@ -368,6 +362,8 @@ class GameEngine:
                 "chapter": chapter, 
                 "turn": turn, 
                 "affinity": affinity, 
+                "active_roommates": selected_chars,
+                "current_scene": parsed.get("current_scene", "宿舍"), # 🌟 新增：安全透传当前场景！
                 "current_evt_id": next_evt.id,
                 "is_end": is_end, 
                 "next_options": extracted_options, 

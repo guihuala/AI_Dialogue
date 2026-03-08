@@ -4,7 +4,6 @@ import csv
 import uuid
 import pandas as pd
 
-# 🌟 核心修复：动态寻找真正的项目根目录 (包含 src 的那层)，确保所有路径绝对统一！
 current_dir = os.path.abspath(os.path.dirname(__file__))
 while current_dir != os.path.dirname(current_dir):
     if os.path.exists(os.path.join(current_dir, "src", "core")):
@@ -23,7 +22,6 @@ from src.services.llm_service import LLMService
 from src.models.schema import MemoryItem
 
 def build_knowledge():
-    # 🌟 强制将 data_dir 指向真正的项目 data 目录，与 test_ui 和引擎保持绝对一致！
     data_dir = os.path.join(PROJECT_ROOT, "data")
     lores_dir = os.path.join(data_dir, "lores")
     old_lore_path = os.path.join(data_dir, "lore.csv")

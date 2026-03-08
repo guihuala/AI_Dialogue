@@ -3,8 +3,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import json
 import os
-import uuid
-import sys  # 🌟 修复点 1：补上缺少的 sys 模块引入！
+import sys
 
 # 把当前文件的上一级目录加入系统路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,7 +13,7 @@ from src.core.game_engine import GameEngine
 from src.models.schema import PlayerStats
 from datetime import datetime
 
-# 🌟 修复点 2：确保在启动服务器前，把 CSV 剧本数据加载进内存（避免一进游戏就通关）
+# 确保在启动服务器前，把 CSV 剧本数据加载进内存
 try:
     from src.core.data_loader import load_all_events
     from src.core.event_script import EVENT_DATABASE
@@ -29,6 +28,9 @@ if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
 
 app = FastAPI(title="Roommate Survival Game API")
+
+# 全局监听缓存：用于给测试界面做上帝视角
+LATEST_GAME_STATE_CACHE = {}
 
 # 初始化 GameEngine 核心引擎
 try:
@@ -55,9 +57,8 @@ class GameTurnRequest(BaseModel):
     affinity: Dict[str, float] = {}
     wechat_data_list: List[Dict[str, Any]] = []
 
-# 🌟 修复点 3：清理了冗余的旧版存档结构，保留完美的 3 槽位结构
 class SaveGameRequest(BaseModel):
-    slot_id: int  # 规定只能是 1, 2, 或 3
+    slot_id: int
     active_roommates: List[str]
     current_evt_id: str
     chapter: int
@@ -75,6 +76,15 @@ class SettingsRequest(BaseModel):
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     model_name: Optional[str] = None
+
+class ReflectionRequest(BaseModel):
+    active_roommates: List[str]
+    recent_events: str
+
+class AgentChatRequest(BaseModel):
+    character: str
+    event_context: str
+    player_action: str
 
 # --- 路由与接口 ---
 
@@ -106,6 +116,11 @@ def start_game(req: StartGameRequest):
             affinity={sid: 50 for sid in selected_ids},
             wechat_data_dict={}
         )
+        
+        # 拦截并保存开局状态到缓存
+        global LATEST_GAME_STATE_CACHE
+        LATEST_GAME_STATE_CACHE = {"request": req.dict(), "response": init_res}
+        
         return init_res
     except Exception as e:
         print(f"Init Error: {e}")
@@ -144,20 +159,30 @@ def perform_turn(req: GameTurnRequest):
             affinity=req.affinity,
             wechat_data_dict=wechat_dict
         )
+        
+        # 拦截并保存每一回合的最新状态到缓存
+        global LATEST_GAME_STATE_CACHE
+        LATEST_GAME_STATE_CACHE = {"request": req.dict(), "response": res}
+        
         return res
     except Exception as e:
         print(f"Turn Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/game/monitor")
+def monitor_game():
+    """GM 上帝视角接口：获取服务器最后一次处理的实时游戏数据"""
+    return {"status": "success", "data": LATEST_GAME_STATE_CACHE}
+
 # ==========================================
-# 💾 存档与读档系统 (支持 3 槽位与 UI 摘要)
+# 存档与读档系统 (支持 3 槽位与 UI 摘要)
 # ==========================================
 
 @app.post("/api/game/save")
 def save_game(req: SaveGameRequest):
     """保存游戏状态到指定的槽位 (1-3)"""
     if req.slot_id not in [1, 2, 3]:
-    raise HTTPException(status_code=400, detail="无效的槽位ID")
+        raise HTTPException(status_code=400, detail="无效的槽位ID")
         
     file_path = os.path.join(SAVE_DIR, f"slot_{req.slot_id}.json")
     
@@ -226,31 +251,12 @@ def reset_game():
 
 @app.post("/api/system/settings")
 def update_settings(req: SettingsRequest):
-    if getattr(engine, 'llm', None):
-        if req.temperature is not None:
-            engine.llm.temperature = req.temperature
-        if req.max_tokens is not None:
-            engine.llm.max_tokens = req.max_tokens
-    
-    return {
-        "status": "success", 
-        "current_settings": {
-            "temperature": getattr(engine.llm, 'temperature', None) if getattr(engine, 'llm', None) else None,
-            "max_tokens": getattr(engine.llm, 'max_tokens', None) if getattr(engine, 'llm', None) else None,
-        }
-    }
-
-# 1. 扩充 SettingsRequest 模型 (大约在 130 行附近)
-
-# 2. 覆盖原有的 /api/system/settings 接口
-@app.post("/api/system/settings")
-def update_settings(req: SettingsRequest):
     """更新大模型底层配置"""
     if getattr(engine, 'llm', None):
         if req.temperature is not None: engine.llm.temperature = req.temperature
         if req.max_tokens is not None: engine.llm.max_tokens = req.max_tokens
         
-        # 调用 llm_service.py 中你写好的 update_config 方法
+        # 调用 llm_service.py 中的 update_config 方法
         current_api = req.api_key if req.api_key else engine.llm.api_key
         current_url = req.base_url if req.base_url else engine.llm.base_url
         current_model = req.model_name if req.model_name else engine.llm.model
@@ -259,26 +265,70 @@ def update_settings(req: SettingsRequest):
     
     return {"status": "success", "message": "大模型配置已更新"}
 
-# 3. 新增 CMS 热重载接口
+# CMS 热重载接口
 @app.post("/api/system/rebuild_knowledge")
 def rebuild_knowledge():
     """游戏内触发：重建向量知识库并重载剧本"""
     try:
-        # 1. 重建 ChromaDB 语料库
-        from build_knowledge import build_knowledge
+        from src.core.build_knowledge import build_knowledge
         build_knowledge()
         
-        # 2. 热重载剧本事件
+        # 热重载剧本事件
         if engine and hasattr(engine, 'director'):
             engine.director.reload_timeline()
             
-        # 3. 热重载 Prompt
+        # 热重载 Prompt
         if engine and hasattr(engine, 'pm'):
-            engine.pm.__init__() # 重新读取 md 文件
+            engine.pm.__init__()
             
-        return {"status": "success", "message": "✅ 知识库、剧本与提示词已热重载成功！"}
+        return {"status": "success", "message": "知识库、剧本与提示词已热重载成功！"}
     except Exception as e:
         return {"status": "error", "message": f"重建失败: {str(e)}"}
+    
+@app.post("/api/game/reflect")
+def trigger_reflection(req: ReflectionRequest):
+    """供测试/游戏调用的深夜反思接口"""
+    if not engine:
+        raise HTTPException(status_code=500, detail="Engine not initialized.")
+    try:
+        from src.core.agent_system import ReflectionSystem
+        rs = ReflectionSystem(engine.llm)
+        logs = rs.trigger_reflection(req.active_roommates, req.recent_events)
+        return {"status": "success", "logs": logs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/agent/chat")
+async def agent_chat(req: AgentChatRequest):
+    """供测试界面的独立智能体对话接口"""
+    if not engine:
+        raise HTTPException(status_code=500, detail="Engine not initialized.")
+    try:
+        from src.core.agent_system import NPCAgent
+        from src.core.prompt_manager import PromptManager
+        import csv
+        
+        pm = PromptManager()
+        char_file = pm.char_file_map.get(req.character, "")
+        profile_text = pm._read_md(f"characters/{char_file}") if char_file else ""
+        
+        rel_text = ""
+        rel_csv_path = os.path.join(pm.chars_dir, "relationship.csv")
+        if os.path.exists(rel_csv_path):
+            with open(rel_csv_path, 'r', encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row.get("评价者", "").strip() == req.character:
+                        target = row.get("被评价者", "").strip()
+                        surface = row.get("表面态度", "").strip()
+                        inner = row.get("内心真实评价", "").strip()
+                        rel_text += f"- 对待【{target}】：表面[{surface}]，内心觉得[{inner}]。\n"
+                        
+        agent = NPCAgent(req.character, profile_text, rel_text, engine.llm)
+        react_res = await agent.async_react(req.event_context, req.player_action)
+        return {"status": "success", "reaction": react_res}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

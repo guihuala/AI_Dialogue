@@ -25,10 +25,10 @@ public class TitleUIController : MonoBehaviour
     
     public void OnStartButtonClicked()
     {
-        // New Game -> Clear save flag
         PlayerPrefs.SetInt("HasSaveData", 0);
         PlayerPrefs.Save();
-        UIManager.Instance.OpenPanel("CharacterSelectionPanel");
+        
+        SceneLoader.Instance.LoadScene(GameScene.Gameplay);
     }
 
     public void OnContinueButtonClicked()
