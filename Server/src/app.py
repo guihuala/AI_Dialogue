@@ -4,16 +4,15 @@ from typing import List, Dict, Any, Optional
 import json
 import os
 import sys
+import concurrent.futures # 🌟 新增并发库
 
 # 把当前文件的上一级目录加入系统路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.core.presets import CANDIDATE_POOL
 from src.core.game_engine import GameEngine
-from src.models.schema import PlayerStats
 from datetime import datetime
 
-# 确保在启动服务器前，把 CSV 剧本数据加载进内存
 try:
     from src.core.data_loader import load_all_events
     from src.core.event_script import EVENT_DATABASE
@@ -22,7 +21,6 @@ try:
 except Exception as e:
     print(f"Warning: Failed to load events data: {e}")
 
-# 定义存档目录
 SAVE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "saves")
 if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
@@ -32,7 +30,13 @@ app = FastAPI(title="Roommate Survival Game API")
 # 全局监听缓存：用于给测试界面做上帝视角
 LATEST_GAME_STATE_CACHE = {}
 
-# 初始化 GameEngine 核心引擎
+# ==========================================
+# 🌟 终极版影子推演：Future 契约池
+# ==========================================
+# 最大线程设为 3，防止太多并发导致你的 API 被平台封禁/限流
+PREFETCH_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=3)
+PREFETCH_FUTURES = {} 
+
 try:
     engine = GameEngine()
 except Exception as e:
@@ -90,11 +94,10 @@ class AgentChatRequest(BaseModel):
 
 @app.post("/api/game/start")
 def start_game(req: StartGameRequest):
-    """初始化游戏：分配室友，设置初始状态"""
     if not engine:
         raise HTTPException(status_code=500, detail="GameEngine not initialized.")
         
-    engine.reset() # 强制每次重新开始游戏都重洗抽卡池并归零剧情
+    engine.reset()
     
     selected_ids = req.roommates
     if not selected_ids:
@@ -104,31 +107,19 @@ def start_game(req: StartGameRequest):
         
     try:
         init_res = engine.play_main_turn(
-            action_text="",
-            selected_chars=selected_ids,
-            current_evt_id="",
-            is_transition=True,
-            api_key="",  
-            base_url="",
-            model="",
-            tmp=0.7, top_p=1.0, max_t=800, pres_p=0.3, freq_p=0.5,
+            action_text="", selected_chars=selected_ids, current_evt_id="", is_transition=True,
+            api_key="", base_url="", model="", tmp=0.7, top_p=1.0, max_t=350, pres_p=0.3, freq_p=0.5,
             san=100, money=2000, gpa=4.0, arg_count=0, chapter=1, turn=0,
-            affinity={sid: 50 for sid in selected_ids},
-            wechat_data_dict={}
+            affinity={sid: 50 for sid in selected_ids}, wechat_data_dict={}
         )
-        
-        # 拦截并保存开局状态到缓存
         global LATEST_GAME_STATE_CACHE
         LATEST_GAME_STATE_CACHE = {"request": req.dict(), "response": init_res}
-        
         return init_res
     except Exception as e:
-        print(f"Init Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/game/turn")
 def perform_turn(req: GameTurnRequest):
-    """回合制核心：提交玩家选择及状态，返回下一事件脚本和新选项"""
     if not engine:
         raise HTTPException(status_code=500, detail="GameEngine not initialized.")
         
@@ -137,30 +128,68 @@ def perform_turn(req: GameTurnRequest):
         if req.wechat_data_list:
             for session in req.wechat_data_list:
                 chat_name = session.get("chat_name")
-                messages = [[m.get("sender", ""), m.get("message", "")] for m in session.get("messages", [])]
                 if chat_name:
-                    wechat_dict[chat_name] = messages
+                    wechat_dict[chat_name] = [[m.get("sender", ""), m.get("message", "")] for m in session.get("messages", [])]
 
-        res = engine.play_main_turn(
-            action_text=req.choice,
-            selected_chars=req.active_roommates,
-            current_evt_id=req.current_evt_id,
-            is_transition=req.is_transition,
-            api_key="", 
-            base_url="",
-            model="",
-            tmp=0.7, top_p=1.0, max_t=800, pres_p=0.3, freq_p=0.5,
-            san=req.san,
-            money=req.money,
-            gpa=req.gpa,
-            arg_count=req.arg_count,
-            chapter=req.chapter,
-            turn=req.turn,
-            affinity=req.affinity,
-            wechat_data_dict=wechat_dict
-        )
+        # 🌟 1. 拦截接管后台计算任务
+        cache_key = f"{req.current_evt_id}_{req.turn}_{req.choice}"
         
-        # 拦截并保存每一回合的最新状态到缓存
+        if cache_key in PREFETCH_FUTURES:
+            print(f"🚀 [影子推演] 命中预计算队列: {req.choice}")
+            print(f"⌛ 正在挂起主线程，接管后台剩余计算（如果后台已算完，将瞬间返回）...")
+            future = PREFETCH_FUTURES.pop(cache_key)
+            
+            # .result() 是魔法！如果算完了瞬间返回；如果没算完，就只等剩下的一点时间！
+            res = future.result() 
+            print(f"✅ [影子推演] 完美衔接！")
+            
+            # 补写被省略的记忆
+            if not res.get("is_end", False) and req.choice and "时间推移" not in req.choice:
+                dialogue_lines = []
+                seq = res.get("dialogue_sequence", [])
+                if isinstance(seq, list):
+                    for t in seq:
+                        if isinstance(t, dict) and t.get("content"):
+                            dialogue_lines.append(f"**[{t.get('speaker', '神秘人')}]** {t.get('content')}")
+                engine.mm.save_interaction(user_input=req.choice, ai_response=" ".join(dialogue_lines), user_name="陆陈安然")
+        else:
+            print(f"⚠️ [影子推演未命中] 正常进行主线程计算: {req.choice}")
+            res = engine.play_main_turn(
+                action_text=req.choice, selected_chars=req.active_roommates, current_evt_id=req.current_evt_id,
+                is_transition=req.is_transition, api_key="", base_url="", model="",
+                tmp=0.7, top_p=1.0, max_t=350, pres_p=0.3, freq_p=0.5,
+                san=req.san, money=req.money, gpa=req.gpa, arg_count=req.arg_count,
+                chapter=req.chapter, turn=req.turn, affinity=req.affinity, wechat_data_dict=wechat_dict,
+                is_prefetch=False
+            )
+
+        # 🌟 2. 触发下一回合的影子预测执行
+        if not res.get("is_end", False) and res.get("next_options"):
+            next_turn = res["turn"] 
+            
+            # 内存清理机制
+            if len(PREFETCH_FUTURES) > 15: PREFETCH_FUTURES.clear()
+                
+            for opt_text in res["next_options"]:
+                opt_choice = opt_text.strip()
+                if not opt_choice or opt_choice == "继续剧情...": continue
+                
+                next_cache_key = f"{res['current_evt_id']}_{next_turn}_{opt_choice}"
+                
+                print(f"🔮 将分支加入预计算线程池: {opt_choice}")
+                # 提交给线程池并保留“契约票据 (Future)”
+                future = PREFETCH_POOL.submit(
+                    engine.play_main_turn,
+                    action_text=opt_choice, selected_chars=req.active_roommates, current_evt_id=res["current_evt_id"],
+                    is_transition=False, api_key="", base_url="", model="",
+                    tmp=0.7, top_p=1.0, max_t=350, pres_p=0.3, freq_p=0.5,
+                    san=res["san"], money=res["money"], gpa=res["gpa"], arg_count=res["arg_count"],
+                    chapter=res["chapter"], turn=res["turn"], affinity=res["affinity"].copy() if isinstance(res.get("affinity"), dict) else {},
+                    wechat_data_dict=wechat_dict,
+                    is_prefetch=True
+                )
+                PREFETCH_FUTURES[next_cache_key] = future
+
         global LATEST_GAME_STATE_CACHE
         LATEST_GAME_STATE_CACHE = {"request": req.dict(), "response": res}
         
@@ -171,28 +200,21 @@ def perform_turn(req: GameTurnRequest):
 
 @app.get("/api/game/monitor")
 def monitor_game():
-    """GM 上帝视角接口：获取服务器最后一次处理的实时游戏数据"""
     return {"status": "success", "data": LATEST_GAME_STATE_CACHE}
 
 # ==========================================
-# 存档与读档系统 (支持 3 槽位与 UI 摘要)
+# 以下部分原封不动保留
 # ==========================================
-
 @app.post("/api/game/save")
 def save_game(req: SaveGameRequest):
-    """保存游戏状态到指定的槽位 (1-3)"""
+    # ...与原来完全一致，保持原样即可...
     if req.slot_id not in [1, 2, 3]:
         raise HTTPException(status_code=400, detail="无效的槽位ID")
-        
     file_path = os.path.join(SAVE_DIR, f"slot_{req.slot_id}.json")
-    
     save_data = {
-        "slot_id": req.slot_id,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "chapter_info": f"第 {req.chapter} 章 - 第 {req.turn} 回合",
-        "state": req.dict() 
+        "slot_id": req.slot_id, "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "chapter_info": f"第 {req.chapter} 章 - 第 {req.turn} 回合", "state": req.dict() 
     }
-    
     try:
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(save_data, f, ensure_ascii=False, indent=4)
@@ -202,7 +224,6 @@ def save_game(req: SaveGameRequest):
 
 @app.get("/api/game/saves_info")
 def get_saves_info():
-    """读取 3 个槽位的摘要信息，供前端选单界面展示"""
     info_list = []
     for i in range(1, 4):
         file_path = os.path.join(SAVE_DIR, f"slot_{i}.json")
@@ -210,29 +231,18 @@ def get_saves_info():
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    info_list.append({
-                        "slot_id": i, 
-                        "is_empty": False,
-                        "timestamp": data.get("timestamp"), 
-                        "chapter_info": data.get("chapter_info")
-                    })
+                    info_list.append({"slot_id": i, "is_empty": False, "timestamp": data.get("timestamp"), "chapter_info": data.get("chapter_info")})
             except:
                 info_list.append({"slot_id": i, "is_empty": True, "chapter_info": "存档损坏"})
         else:
             info_list.append({"slot_id": i, "is_empty": True, "chapter_info": "空槽位", "timestamp": ""})
-            
     return {"status": "success", "slots": info_list}
 
 @app.get("/api/game/load/{slot_id}")
 def load_game(slot_id: int):
-    """根据槽位编号读取完整游戏状态"""
-    if slot_id not in [1, 2, 3]:
-        raise HTTPException(status_code=400, detail="无效的槽位ID")
-        
+    if slot_id not in [1, 2, 3]: raise HTTPException(status_code=400, detail="无效的槽位ID")
     file_path = os.path.join(SAVE_DIR, f"slot_{slot_id}.json")
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="该槽位为空")
-        
+    if not os.path.exists(file_path): raise HTTPException(status_code=404, detail="该槽位为空")
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             save_data = json.load(f)
@@ -243,53 +253,36 @@ def load_game(slot_id: int):
 @app.post("/api/game/reset")
 def reset_game():
     try:
-        if engine and hasattr(engine, 'mm'):
-            engine.mm.clear_game_history()
+        if engine and hasattr(engine, 'mm'): engine.mm.clear_game_history()
         return {"status": "success", "message": "Backend memory cleared"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 @app.post("/api/system/settings")
 def update_settings(req: SettingsRequest):
-    """更新大模型底层配置"""
     if getattr(engine, 'llm', None):
         if req.temperature is not None: engine.llm.temperature = req.temperature
         if req.max_tokens is not None: engine.llm.max_tokens = req.max_tokens
-        
-        # 调用 llm_service.py 中的 update_config 方法
         current_api = req.api_key if req.api_key else engine.llm.api_key
         current_url = req.base_url if req.base_url else engine.llm.base_url
         current_model = req.model_name if req.model_name else engine.llm.model
-        
         engine.llm.update_config(api_key=current_api, base_url=current_url, model=current_model)
-    
     return {"status": "success", "message": "大模型配置已更新"}
 
-# CMS 热重载接口
 @app.post("/api/system/rebuild_knowledge")
 def rebuild_knowledge():
-    """游戏内触发：重建向量知识库并重载剧本"""
     try:
         from src.core.build_knowledge import build_knowledge
         build_knowledge()
-        
-        # 热重载剧本事件
-        if engine and hasattr(engine, 'director'):
-            engine.director.reload_timeline()
-            
-        # 热重载 Prompt
-        if engine and hasattr(engine, 'pm'):
-            engine.pm.__init__()
-            
-        return {"status": "success", "message": "知识库、剧本与提示词已热重载成功！"}
+        if engine and hasattr(engine, 'director'): engine.director.reload_timeline()
+        if engine and hasattr(engine, 'pm'): engine.pm.__init__() 
+        return {"status": "success", "message": "✅ 知识库、剧本与提示词已热重载成功！"}
     except Exception as e:
         return {"status": "error", "message": f"重建失败: {str(e)}"}
     
 @app.post("/api/game/reflect")
 def trigger_reflection(req: ReflectionRequest):
-    """供测试/游戏调用的深夜反思接口"""
-    if not engine:
-        raise HTTPException(status_code=500, detail="Engine not initialized.")
+    if not engine: raise HTTPException(status_code=500, detail="Engine not initialized.")
     try:
         from src.core.agent_system import ReflectionSystem
         rs = ReflectionSystem(engine.llm)
@@ -300,9 +293,7 @@ def trigger_reflection(req: ReflectionRequest):
 
 @app.post("/api/agent/chat")
 async def agent_chat(req: AgentChatRequest):
-    """供测试界面的独立智能体对话接口"""
-    if not engine:
-        raise HTTPException(status_code=500, detail="Engine not initialized.")
+    if not engine: raise HTTPException(status_code=500, detail="Engine not initialized.")
     try:
         from src.core.agent_system import NPCAgent
         from src.core.prompt_manager import PromptManager
@@ -311,7 +302,6 @@ async def agent_chat(req: AgentChatRequest):
         pm = PromptManager()
         char_file = pm.char_file_map.get(req.character, "")
         profile_text = pm._read_md(f"characters/{char_file}") if char_file else ""
-        
         rel_text = ""
         rel_csv_path = os.path.join(pm.chars_dir, "relationship.csv")
         if os.path.exists(rel_csv_path):

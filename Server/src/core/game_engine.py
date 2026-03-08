@@ -74,7 +74,7 @@ class GameEngine:
                 "is_end": False
             }
 
-    def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, arg_count, chapter, turn, affinity, wechat_data_dict):
+    def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, arg_count, chapter, turn, affinity, wechat_data_dict, is_prefetch=False):
         self.llm.update_config(api_key=api_key, base_url=base_url, model=model)
         
         mapped_chars = []
@@ -110,7 +110,6 @@ class GameEngine:
                 settlement_msg = f"**[大{chapter}学年结算]** 扣除生活费800。GPA：{gpa:.2f}\n\n"
                 chapter = next_evt.chapter; arg_count = 0 
             turn = 1
-            # 🌟 这里的指令已被修改：禁止废话开场白
             event_context = f"【系统指令】直接开始以下事件，不要写任何开场白或过场旁白。\n【新事件】:{next_evt.name}\n【场景描述】:{next_evt.description}"
         else:
             next_evt = EVENT_DATABASE.get(current_evt_id)
@@ -307,9 +306,9 @@ class GameEngine:
             
             is_end = True if getattr(next_evt, 'is_cg', False) or turn >= 3 else parsed.get("is_end", False)
             
-            if not getattr(next_evt, 'is_cg', False) and action_text and "（时间推移..." not in action_text:
+            if not getattr(next_evt, 'is_cg', False) and action_text and "（时间推移..." not in action_text and not is_prefetch:
                 self.mm.save_interaction(user_input=action_text, ai_response=" ".join(dialogue_lines), user_name="陆陈安然")
-            
+
             valid_notifs = []
             wechat_list = parsed.get("wechat_notifications", [])
             if isinstance(wechat_list, dict): wechat_list = [wechat_list]

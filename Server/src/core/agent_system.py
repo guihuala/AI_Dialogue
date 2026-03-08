@@ -37,7 +37,7 @@ class NPCAgent:
             system_prompt=sys_prompt, 
             user_input=user_prompt, 
             temperature=0.75, 
-            max_tokens=200
+            max_tokens=80
         )
         
         try:
