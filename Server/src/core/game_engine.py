@@ -280,11 +280,23 @@ class GameEngine:
                 for act in acts:
                     if not isinstance(act, dict): continue
                     c_name, c_act, c_aff = act.get("character", "神秘人"), act.get("action", ""), act.get("affinity_change", 0)
+                    
                     if c_name in affinity and isinstance(c_aff, (int, float)) and c_aff != 0:
                         affinity[c_name] = max(0, min(100, affinity[c_name] + c_aff))
                         aff_sign = f" (好感 {c_aff})" if c_aff < 0 else f" (好感 +{c_aff})"
-                    else: aff_sign = ""
-                    if c_act: display_text += f"\n\n> **[暗场动态] {c_name}**: {c_act}{aff_sign}"
+                    else: 
+                        aff_sign = ""
+                        
+                    if c_act: 
+                        display_text += f"\n\n> **[暗场动态] {c_name}**: {c_act}{aff_sign}"
+                        
+                        if isinstance(seq, list):
+                            # 将动作加上括号
+                            seq.append({
+                                "speaker": "system",
+                                "content": f"（{c_name}{c_act}）",
+                                "mood": "平静"
+                            })
             
             # ========================================================
             # 🛠️ 真实工具调用执行层 (Function Calling / Tool Use)
@@ -362,7 +374,7 @@ class GameEngine:
                 "turn": turn, 
                 "affinity": affinity, 
                 "active_roommates": selected_chars,
-                "current_scene": parsed.get("current_scene", "宿舍"), # 🌟 新增：安全透传当前场景！
+                "current_scene": parsed.get("current_scene", "宿舍"),
                 "current_evt_id": next_evt.id,
                 "is_end": is_end, 
                 "next_options": extracted_options, 
