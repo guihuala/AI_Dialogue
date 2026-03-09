@@ -29,9 +29,8 @@ public class PhoneManager : Singleton<PhoneManager>
 
 
     // ==========================================
-    // 💾 独立数据层 (Data Models)
+    // 独立数据层
     // ==========================================
-    // 🌟 手机系统的底层数据库，App 们只管从这里读取
     public Dictionary<string, WeChatSession> ChatMemories { get; private set; } = new Dictionary<string, WeChatSession>();
     public List<TransactionRecord> Transactions { get; private set; } = new List<TransactionRecord>();
 
@@ -41,7 +40,6 @@ public class PhoneManager : Singleton<PhoneManager>
         ClosePhone();
         
         MsgCenter.RegisterMsg(MsgConst.WECHAT_NOTIFIED, HandleIncomingMessages);
-        // 🌟 注册账单监听
         MsgCenter.RegisterMsg(MsgConst.ADD_TRANSACTION, HandleNewTransaction);
     }
 
@@ -60,7 +58,7 @@ public class PhoneManager : Singleton<PhoneManager>
     }
 
     // ==========================================
-    // 💬 数据处理与存档对接
+    // 数据处理与存档对接
     // ==========================================
     private void HandleIncomingMessages(params object[] args)
     {
@@ -129,7 +127,7 @@ public class PhoneManager : Singleton<PhoneManager>
     }
 
     // ==========================================
-    // 📱 系统 UI 导航逻辑
+    // 系统 UI 导航逻辑
     // ==========================================
     public void TogglePhone()
     {

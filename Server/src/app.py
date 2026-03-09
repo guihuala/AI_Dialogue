@@ -4,7 +4,8 @@ from typing import List, Dict, Any, Optional
 import json
 import os
 import sys
-import concurrent.futures # 🌟 新增并发库
+import concurrent.futures
+from fastapi.responses import HTMLResponse
 
 # 把当前文件的上一级目录加入系统路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -30,9 +31,6 @@ app = FastAPI(title="Roommate Survival Game API")
 # 全局监听缓存：用于给测试界面做上帝视角
 LATEST_GAME_STATE_CACHE = {}
 
-# ==========================================
-# 🌟 终极版影子推演：Future 契约池
-# ==========================================
 # 最大线程设为 3，防止太多并发导致你的 API 被平台封禁/限流
 PREFETCH_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=3)
 PREFETCH_FUTURES = {} 
@@ -163,7 +161,7 @@ def perform_turn(req: GameTurnRequest):
                 is_prefetch=False
             )
 
-        # 🌟 2. 触发下一回合的影子预测执行
+        #  2. 触发下一回合的影子预测执行
         if not res.get("is_end", False) and res.get("next_options"):
             next_turn = res["turn"] 
             
@@ -207,7 +205,6 @@ def monitor_game():
 # ==========================================
 @app.post("/api/game/save")
 def save_game(req: SaveGameRequest):
-    # ...与原来完全一致，保持原样即可...
     if req.slot_id not in [1, 2, 3]:
         raise HTTPException(status_code=400, detail="无效的槽位ID")
     file_path = os.path.join(SAVE_DIR, f"slot_{req.slot_id}.json")
@@ -253,30 +250,104 @@ def load_game(slot_id: int):
 @app.post("/api/game/reset")
 def reset_game():
     try:
-        if engine and hasattr(engine, 'mm'): engine.mm.clear_game_history()
+        if engine and hasattr(engine, 'mm'):
+            engine.mm.clear_game_history()
         return {"status": "success", "message": "Backend memory cleared"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# ==========================================
+# ⚙️ 系统设置接口 (获取与更新)
+# ==========================================
+
+@app.get("/api/system/settings")
+def get_settings():
+    """读取大模型的当前运行配置"""
+    if engine and hasattr(engine, 'llm'):
+        return {
+            "status": "success",
+            "data": {
+                "api_key": engine.llm.api_key or "",
+                "base_url": engine.llm.base_url or "",
+                "model_name": engine.llm.model or "",
+                "temperature": getattr(engine.llm, 'temperature', 0.7),
+                "max_tokens": getattr(engine.llm, 'max_tokens', 800)
+            }
+        }
+    return {"status": "error", "message": "Engine not ready"}
+
 @app.post("/api/system/settings")
 def update_settings(req: SettingsRequest):
+    """更新大模型底层配置"""
     if getattr(engine, 'llm', None):
         if req.temperature is not None: engine.llm.temperature = req.temperature
         if req.max_tokens is not None: engine.llm.max_tokens = req.max_tokens
+        
         current_api = req.api_key if req.api_key else engine.llm.api_key
         current_url = req.base_url if req.base_url else engine.llm.base_url
         current_model = req.model_name if req.model_name else engine.llm.model
+        
         engine.llm.update_config(api_key=current_api, base_url=current_url, model=current_model)
+    
     return {"status": "success", "message": "大模型配置已更新"}
 
+# ==========================================
+# 🌟 现代化 Web 管理后台专属接口
+# ==========================================
+class AdminFileSaveReq(BaseModel):
+    type: str
+    name: str
+    content: str
+
+PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "prompts")
+EVENTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "events")
+
+@app.get("/api/admin/files")
+def get_admin_files():
+    """获取所有剧情配置文件列表"""
+    md_files = []
+    if os.path.exists(PROMPTS_DIR):
+        for root, dirs, files in os.walk(PROMPTS_DIR):
+            for file in files:
+                if file.endswith(".md"):
+                    # 统一路径分隔符，方便前端解析
+                    md_files.append(os.path.relpath(os.path.join(root, file), PROMPTS_DIR).replace("\\", "/"))
+    
+    csv_files = [f for f in os.listdir(EVENTS_DIR) if f.endswith(".csv")] if os.path.exists(EVENTS_DIR) else []
+    return {"status": "success", "md": sorted(md_files), "csv": sorted(csv_files)}
+
+@app.get("/api/admin/file")
+def read_admin_file(type: str, name: str):
+    """读取单个文件内容"""
+    base_dir = PROMPTS_DIR if type == "md" else EVENTS_DIR
+    file_path = os.path.join(base_dir, name)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    with open(file_path, "r", encoding="utf-8") as f:
+        return {"status": "success", "content": f.read()}
+
+@app.post("/api/admin/file")
+def save_admin_file(req: AdminFileSaveReq):
+    """保存单个文件内容"""
+    base_dir = PROMPTS_DIR if req.type == "md" else EVENTS_DIR
+    file_path = os.path.join(base_dir, req.name)
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(req.content)
+        return {"status": "success", "message": f"{req.name} 保存成功"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# CMS 热重载接口
 @app.post("/api/system/rebuild_knowledge")
 def rebuild_knowledge():
+    """游戏内触发：重建向量知识库并重载剧本"""
     try:
         from src.core.build_knowledge import build_knowledge
         build_knowledge()
         if engine and hasattr(engine, 'director'): engine.director.reload_timeline()
         if engine and hasattr(engine, 'pm'): engine.pm.__init__() 
-        return {"status": "success", "message": "✅ 知识库、剧本与提示词已热重载成功！"}
+        return {"status": "success", "message": "知识库、剧本与提示词已热重载成功！"}
     except Exception as e:
         return {"status": "error", "message": f"重建失败: {str(e)}"}
     
@@ -319,6 +390,16 @@ async def agent_chat(req: AgentChatRequest):
         return {"status": "success", "reaction": react_res}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+from fastapi.responses import HTMLResponse
+@app.get("/admin", response_class=HTMLResponse)
+def serve_admin_ui():
+    """ 将 Vue 前端页面直接发给浏览器"""
+    ui_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin.html")
+    if not os.path.exists(ui_path):
+        return "<h1>⚠️ 找不到 admin.html，请确保将它放在 src 目录下！</h1>"
+    with open(ui_path, "r", encoding="utf-8") as f:
+        return f.read()
 
 if __name__ == "__main__":
     import uvicorn

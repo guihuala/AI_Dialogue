@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roommate Survival - GM Console</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+    <style>
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        [v-cloak] {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex selection:bg-blue-200">
+
+    <div
+        class="hidden bg-slate-900 bg-teal-950 bg-indigo-950 bg-stone-900 bg-blue-600 hover:bg-blue-700 text-blue-600 border-blue-600 bg-emerald-600 hover:bg-emerald-700 text-emerald-600 border-emerald-600 bg-violet-600 hover:bg-violet-700 text-violet-600 border-violet-600 bg-orange-600 hover:bg-orange-700 text-orange-600 border-orange-600">
+    </div>
+
+    <div id="app" class="flex w-full" v-cloak>
+
+        <aside :class="['w-64 flex flex-col transition-colors duration-500 shadow-xl z-20', t.sidebar]">
+            <div class="h-16 flex items-center px-6 border-b border-white/10">
+                <span class="text-xl font-bold text-white tracking-wider">GM Console</span>
+            </div>
+            <nav class="flex-1 py-4">
+                <ul class="space-y-1">
+                    <li>
+                        <button @click="currentTab = 'monitor'"
+                            :class="['w-full flex items-center px-6 py-3 transition-colors', currentTab === 'monitor' ? t.primary + ' text-white shadow-lg' : 'text-slate-300 hover:bg-white/10 hover:text-white']">
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z">
+                                </path>
+                            </svg>
+                            雷达监视器
+                        </button>
+                    </li>
+                    <li>
+                        <button @click="currentTab = 'cms'"
+                            :class="['w-full flex items-center px-6 py-3 transition-colors', currentTab === 'cms' ? t.primary + ' text-white shadow-lg' : 'text-slate-300 hover:bg-white/10 hover:text-white']">
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
+                                </path>
+                            </svg>
+                            剧本与设定库
+                        </button>
+                    </li>
+                    <li>
+                        <button @click="currentTab = 'settings'"
+                            :class="['w-full flex items-center px-6 py-3 transition-colors', currentTab === 'settings' ? t.primary + ' text-white shadow-lg' : 'text-slate-300 hover:bg-white/10 hover:text-white']">
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
+                                </path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            模型参数配置
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        </aside>
+
+        <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+
+            <header
+                class="h-16 flex items-center justify-between px-8 bg-white border-b border-slate-200 shrink-0 z-10 shadow-sm">
+                <h2 class="text-xl font-semibold text-slate-700">{{ tabTitle }}</h2>
+
+                <div class="flex items-center space-x-6">
+                    <div class="flex space-x-2 bg-slate-100 p-1.5 rounded-full border border-slate-200">
+                        <button @click="activeTheme = 'blue'"
+                            class="w-6 h-6 rounded-full bg-blue-600 shadow-inner hover:scale-110 transition-transform"
+                            title="暗夜蓝"></button>
+                        <button @click="activeTheme = 'emerald'"
+                            class="w-6 h-6 rounded-full bg-emerald-600 shadow-inner hover:scale-110 transition-transform"
+                            title="翡翠绿"></button>
+                        <button @click="activeTheme = 'violet'"
+                            class="w-6 h-6 rounded-full bg-violet-600 shadow-inner hover:scale-110 transition-transform"
+                            title="赛博紫"></button>
+                        <button @click="activeTheme = 'orange'"
+                            class="w-6 h-6 rounded-full bg-orange-500 shadow-inner hover:scale-110 transition-transform"
+                            title="日落橙"></button>
+                    </div>
+
+                    <button v-if="currentTab === 'monitor'" @click="fetchMonitorData"
+                        :class="['flex items-center text-white px-5 py-2 rounded-lg font-medium transition-all shadow-sm', t.primary]">
+                        <svg class="w-4 h-4 mr-2 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                        强制抓取状态
+                    </button>
+                    <button v-if="currentTab === 'cms'" @click="triggerRebuild"
+                        :class="['flex items-center text-white px-5 py-2 rounded-lg font-medium transition-all shadow-sm', t.primary]">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                            </path>
+                        </svg>
+                        热重载服务器
+                    </button>
+                </div>
+            </header>
+
+            <div class="flex-1 overflow-auto p-8 bg-slate-50 relative">
+                <transition name="fade">
+                    <div v-if="toastMsg"
+                        class="absolute top-4 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl flex items-center z-50">
+                        <span class="mr-2">{{ toastMsg }}</span>
+                    </div>
+                </transition>
+
+                <div v-show="currentTab === 'monitor'" class="grid grid-cols-12 gap-6 h-full">
+                    <div class="col-span-4 flex flex-col space-y-6">
+                        <div class="glass-panel p-6 rounded-2xl border border-slate-200">
+                            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">实时数值 (Stats)</h3>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                                    <div class="text-xs text-slate-500 mb-1">SAN值</div>
+                                    <div :class="['text-2xl font-bold', t.text]">{{ monitor.san }}</div>
+                                </div>
+                                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                                    <div class="text-xs text-slate-500 mb-1">资金 (Money)</div>
+                                    <div :class="['text-2xl font-bold', t.text]">¥{{ monitor.money }}</div>
+                                </div>
+                                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                                    <div class="text-xs text-slate-500 mb-1">学分 (GPA)</div>
+                                    <div :class="['text-2xl font-bold', t.text]">{{ monitor.gpa }}</div>
+                                </div>
+                                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                                    <div class="text-xs text-slate-500 mb-1">章节进度</div>
+                                    <div class="text-xl font-bold text-slate-700">Ch.{{ monitor.chapter }} | T-{{
+                                        monitor.turn }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="glass-panel p-6 rounded-2xl border border-slate-200 flex-1 flex flex-col">
+                            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">底层快照 (Snapshot)
+                            </h3>
+                            <div class="space-y-3 overflow-auto flex-1 text-sm text-slate-600">
+                                <div><strong>事件ID:</strong> <span
+                                        class="bg-slate-100 px-2 py-1 rounded border border-slate-200">{{ monitor.evt_id
+                                        || '无' }}</span></div>
+                                <div><strong>玩家意图:</strong> <span :class="['font-semibold', t.text]">{{
+                                        monitor.last_action }}</span></div>
+                                <div class="mt-4"><strong>好感矩阵:</strong></div>
+                                <pre
+                                    class="bg-slate-800 text-emerald-400 p-4 rounded-xl text-xs overflow-x-auto shadow-inner">{{ monitor.affinity }}</pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-span-8 glass-panel p-6 rounded-2xl border border-slate-200 flex flex-col h-full">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex justify-between">
+                            <span>事件推演结果 (Result)</span>
+                            <button @click="showPrompt = !showPrompt"
+                                :class="['text-xs font-normal px-3 py-1 rounded border transition-colors', showPrompt ? t.primary + ' text-white' : 'border-slate-300 text-slate-500 hover:bg-slate-100']">
+                                {{ showPrompt ? '返回看剧情' : '透视 Prompt' }}
+                            </button>
+                        </h3>
+
+                        <div v-show="!showPrompt"
+                            class="flex-1 overflow-y-auto bg-white rounded-xl border border-slate-100 p-8 whitespace-pre-wrap font-medium text-slate-700 leading-relaxed text-lg shadow-sm">
+                            {{ monitor.display_text || '正在等待引擎推演...' }}
+                        </div>
+
+                        <div v-show="showPrompt" class="flex-1 flex flex-col space-y-4">
+                            <div class="flex-1 flex flex-col">
+                                <label class="text-xs text-slate-500 mb-1 font-semibold">System Prompt (系统指令)</label>
+                                <textarea readonly :value="monitor.sys_prompt"
+                                    class="flex-1 p-4 text-xs font-mono bg-slate-900 text-slate-300 rounded-xl outline-none resize-none shadow-inner leading-relaxed"></textarea>
+                            </div>
+                            <div class="h-40 flex flex-col shrink-0">
+                                <label class="text-xs text-slate-500 mb-1 font-semibold">User Prompt (实时上下文)</label>
+                                <textarea readonly :value="monitor.user_prompt"
+                                    class="flex-1 p-4 text-xs font-mono bg-slate-900 text-blue-300 rounded-xl outline-none resize-none shadow-inner leading-relaxed"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-show="currentTab === 'cms'" class="h-full flex flex-col">
+                    <div class="flex space-x-6 h-full pb-6">
+                        <div
+                            class="w-72 glass-panel rounded-2xl border border-slate-200 flex flex-col shrink-0 overflow-hidden shadow-sm">
+                            <div class="flex items-center border-b border-slate-200 bg-white">
+                                <button @click="changeCmsType('md')"
+                                    :class="['flex-1 py-4 text-sm font-bold text-center transition', cmsType === 'md' ? t.text + ' border-b-2 ' + t.border : 'text-slate-400 hover:bg-slate-50']">设定库
+                                    (MD)</button>
+                                <button @click="changeCmsType('csv')"
+                                    :class="['flex-1 py-4 text-sm font-bold text-center transition', cmsType === 'csv' ? t.text + ' border-b-2 ' + t.border : 'text-slate-400 hover:bg-slate-50']">剧本库
+                                    (CSV)</button>
+                            </div>
+
+                            <div class="flex-1 overflow-y-auto p-4 space-y-4" v-if="cmsType === 'md'">
+                                <div v-for="(files, folder) in groupedMdFiles" :key="folder">
+                                    <div class="text-xs font-bold text-slate-400 mb-2 px-2 uppercase tracking-wider">{{
+                                        folder }}</div>
+                                    <ul class="space-y-1">
+                                        <li v-for="file in files" :key="file">
+                                            <button @click="loadFile(file)"
+                                                :class="['w-full text-left px-3 py-2 rounded-lg text-sm truncate transition-colors flex items-center', cmsActiveFile === file ? t.primary + ' text-white shadow-md' : 'text-slate-600 hover:bg-slate-100']">
+                                                <svg class="w-4 h-4 mr-2 opacity-70" fill="none" stroke="currentColor"
+                                                    viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                                                    </path>
+                                                </svg>
+                                                {{ getFileName(file) }}
+                                            </button>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <ul class="flex-1 overflow-y-auto p-4 space-y-1" v-if="cmsType === 'csv'">
+                                <li v-for="file in fileList.csv" :key="file">
+                                    <button @click="loadFile(file)"
+                                        :class="['w-full text-left px-3 py-2 rounded-lg text-sm truncate transition-colors flex items-center', cmsActiveFile === file ? t.primary + ' text-white shadow-md' : 'text-slate-600 hover:bg-slate-100']">
+                                        <svg class="w-4 h-4 mr-2 opacity-70" fill="none" stroke="currentColor"
+                                            viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z">
+                                            </path>
+                                        </svg>
+                                        {{ file }}
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div
+                            class="flex-1 glass-panel rounded-2xl border border-slate-200 flex flex-col shadow-sm overflow-hidden">
+                            <div
+                                class="h-14 px-6 flex items-center justify-between border-b border-slate-200 bg-white shadow-sm z-10">
+                                <div class="flex items-center text-slate-700">
+                                    <svg class="w-5 h-5 mr-2 text-slate-400" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
+                                        </path>
+                                    </svg>
+                                    <span class="font-semibold">{{ cmsActiveFile || '请在左侧选择文件' }}</span>
+                                </div>
+
+                                <div class="flex items-center">
+                                    <div v-if="cmsType === 'csv' && cmsActiveFile"
+                                        class="flex bg-slate-100 rounded-lg p-1 mr-4 border border-slate-200">
+                                        <button @click="toggleView('table')"
+                                            :class="['px-3 py-1.5 text-xs font-semibold rounded-md transition-colors', viewMode === 'table' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700']">
+                                            表格视图
+                                        </button>
+                                        <button @click="toggleView('raw')"
+                                            :class="['px-3 py-1.5 text-xs font-semibold rounded-md transition-colors', viewMode === 'raw' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700']">
+                                            源码视图
+                                        </button>
+                                    </div>
+
+                                    <button v-if="cmsActiveFile" @click="saveFile"
+                                        :class="['text-sm text-white px-5 py-2 rounded-lg transition-colors shadow-sm', t.primary]">
+                                        💾 保存更改
+                                    </button>
+                                </div>
+                            </div>
+
+                            <textarea v-show="viewMode === 'raw'" v-model="cmsContent" :disabled="!cmsActiveFile"
+                                class="flex-1 w-full p-6 bg-slate-50 outline-none resize-none font-mono text-sm text-slate-700 leading-relaxed custom-scrollbar"
+                                placeholder="文件内容将显示在这里..."></textarea>
+
+                            <div v-show="viewMode === 'table'"
+                                class="flex-1 overflow-auto bg-slate-50 relative custom-scrollbar flex flex-col">
+                                <table v-if="parsedCsv.length > 0"
+                                    class="w-full text-sm text-left border-collapse min-w-max">
+                                    <thead
+                                        class="text-xs text-slate-700 bg-slate-200 uppercase sticky top-0 z-10 shadow-sm">
+                                        <tr>
+                                            <th
+                                                class="w-12 px-2 py-3 border border-slate-300 text-center font-bold text-slate-400">
+                                                #</th>
+                                            <th v-for="(col, colIdx) in parsedCsv[0]" :key="'h-'+colIdx"
+                                                class="px-3 py-3 border border-slate-300 min-w-[120px]">
+                                                <input v-model="parsedCsv[0][colIdx]"
+                                                    class="w-full bg-transparent outline-none font-bold placeholder-slate-400"
+                                                    placeholder="列名" />
+                                            </th>
+                                            <th
+                                                class="w-16 px-3 py-3 border border-slate-300 text-center sticky right-0 bg-slate-200 shadow-sm">
+                                                操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="(row, rowIdx) in parsedCsv.slice(1)" :key="'r-'+rowIdx"
+                                            class="bg-white border-b hover:bg-slate-50 transition-colors">
+                                            <td
+                                                class="px-2 py-2 border border-slate-200 text-center font-mono text-xs text-slate-400 bg-slate-50">
+                                                {{ rowIdx + 1 }}</td>
+                                            <td v-for="(col, colIdx) in row" :key="'c-'+rowIdx+'-'+colIdx"
+                                                class="border border-slate-200 p-0 relative group">
+                                                <textarea v-model="parsedCsv[rowIdx + 1][colIdx]"
+                                                    class="w-full h-full min-h-[44px] p-2 bg-transparent outline-none resize-y text-slate-700 block leading-relaxed"></textarea>
+                                            </td>
+                                            <td
+                                                class="px-2 py-2 border border-slate-200 text-center sticky right-0 bg-white group-hover:bg-slate-50 transition-colors">
+                                                <button @click="removeRow(rowIdx + 1)"
+                                                    class="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                                                    title="删除当前行">
+                                                    <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor"
+                                                        viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                                                        </path>
+                                                    </svg>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <div v-else class="flex items-center justify-center h-full text-slate-400">
+                                    此文件目前为空白，点击下方添加数据
+                                </div>
+
+                                <div
+                                    class="p-4 flex space-x-4 border-t border-slate-200 bg-white sticky bottom-0 z-10 mt-auto shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                                    <button @click="addRow"
+                                        class="flex items-center px-4 py-2 bg-slate-50 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors border border-slate-200 shadow-sm">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M12 4v16m8-8H4"></path>
+                                        </svg>
+                                        在底部增加一行
+                                    </button>
+                                    <button @click="addColumn"
+                                        class="flex items-center px-4 py-2 bg-slate-50 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors border border-slate-200 shadow-sm">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M12 4v16m8-8H4"></path>
+                                        </svg>
+                                        在右侧增加一列
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-show="currentTab === 'settings'" class="max-w-3xl mx-auto mt-10">
+                    <div class="glass-panel p-10 rounded-3xl border border-slate-200 shadow-md">
+                        <div class="flex items-center mb-8 border-b border-slate-100 pb-6">
+                            <div
+                                :class="['w-12 h-12 rounded-xl flex items-center justify-center text-white mr-4 shadow-inner', t.primary]">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
+                                    </path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-slate-800">核心引擎参数</h3>
+                                <p class="text-sm text-slate-500">动态调节大语言模型的发散能力与 API 接入点。</p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-6">
+                            <div class="grid grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-semibold text-slate-700 mb-2">网关地址 (Base
+                                        URL)</label>
+                                    <input type="text" v-model="settings.base_url"
+                                        class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition shadow-inner">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-slate-700 mb-2">模型版本 (Model
+                                        Name)</label>
+                                    <input type="text" v-model="settings.model_name"
+                                        class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition shadow-inner">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-2">API Key (通信密钥)</label>
+                                <input type="password" v-model="settings.api_key" placeholder="保留为空则使用后端环境变量"
+                                    class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition shadow-inner">
+                            </div>
+
+                            <div class="border-t border-slate-100 pt-6 mt-6">
+                                <label class="block text-sm font-semibold text-slate-700 mb-2 flex justify-between">
+                                    <span>发散思维 (Temperature)</span>
+                                    <span :class="['font-bold', t.text]">{{ settings.temperature }}</span>
+                                </label>
+                                <input type="range" v-model.number="settings.temperature" min="0" max="2" step="0.1"
+                                    class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                                <p class="text-xs text-slate-400 mt-2">数值越低越严谨，越高越可能产生“幻觉”剧情。</p>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-2 flex justify-between">
+                                    <span>最大生成长度 (Max Tokens)</span>
+                                    <span :class="['font-bold', t.text]">{{ settings.max_tokens }}</span>
+                                </label>
+                                <input type="number" v-model.number="settings.max_tokens" min="100" max="4000" step="50"
+                                    class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 transition shadow-inner">
+                            </div>
+
+                            <div class="pt-6">
+                                <button @click="saveSettings"
+                                    :class="['w-full py-4 text-white rounded-xl font-bold transition-transform shadow-lg hover:scale-[1.02]', t.primary]">
+                                    💾 保存并应用全局配置
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const currentTab = ref('monitor');
+                const toastMsg = ref('');
+
+                // 主题引擎
+                const activeTheme = ref('blue');
+                const themeMap = {
+                    blue: { sidebar: 'bg-slate-900', primary: 'bg-blue-600 hover:bg-blue-700', text: 'text-blue-600', border: 'border-blue-600' },
+                    emerald: { sidebar: 'bg-teal-950', primary: 'bg-emerald-600 hover:bg-emerald-700', text: 'text-emerald-600', border: 'border-emerald-600' },
+                    violet: { sidebar: 'bg-indigo-950', primary: 'bg-violet-600 hover:bg-violet-700', text: 'text-violet-600', border: 'border-violet-600' },
+                    orange: { sidebar: 'bg-stone-900', primary: 'bg-orange-600 hover:bg-orange-700', text: 'text-orange-600', border: 'border-orange-600' }
+                };
+                const t = computed(() => themeMap[activeTheme.value]);
+
+                // 状态数据
+                const monitor = ref({ san: 100, money: 2000, gpa: 4.0, chapter: 1, turn: 0, evt_id: '', last_action: '无', affinity: '{}', display_text: '', sys_prompt: '', user_prompt: '' });
+                const showPrompt = ref(false);
+
+                // 🌟 CMS 模块响应式变量
+                const cmsType = ref('md');
+                const fileList = ref({ md: [], csv: [] });
+                const cmsActiveFile = ref('');
+                const cmsContent = ref('');
+                const viewMode = ref('raw'); // 'raw' 或 'table'
+                const parsedCsv = ref([]);   // CSV 解析后的二维数组
+
+                const settings = ref({ api_key: '', base_url: '', model_name: '', temperature: 0.7, max_tokens: 800 });
+
+                const tabTitle = computed(() => {
+                    if (currentTab.value === 'monitor') return '中央调度中心 / 雷达面板';
+                    if (currentTab.value === 'cms') return '数据库资源管理平台';
+                    return '引擎核心参数调试';
+                });
+
+                // CMS 文件树处理
+                const groupedMdFiles = computed(() => {
+                    const groups = {};
+                    fileList.value.md.forEach(file => {
+                        const parts = file.split('/');
+                        const folder = parts.length > 1 ? parts[0] : '根目录';
+                        if (!groups[folder]) groups[folder] = [];
+                        groups[folder].push(file);
+                    });
+                    return groups;
+                });
+
+                const getFileName = (path) => {
+                    if (!path) return '';
+                    const parts = path.split('/');
+                    return parts[parts.length - 1];
+                };
+
+                const showToast = (msg) => {
+                    toastMsg.value = msg;
+                    setTimeout(() => toastMsg.value = '', 3000);
+                };
+
+                // 🌟 视图与数据同步逻辑
+                const toggleView = (mode) => {
+                    if (mode === viewMode.value) return;
+                    if (mode === 'table') {
+                        // 切换到表格：解析源码为数组
+                        const parsed = Papa.parse(cmsContent.value || '');
+                        let data = parsed.data || [];
+                        // 移除 PapaParse 可能产生的空尾行
+                        if (data.length > 0 && data[data.length - 1].length === 1 && data[data.length - 1][0] === '') {
+                            data.pop();
+                        }
+                        if (data.length === 0) data = [['列名1', '列名2']]; // 初始化空白表
+                        parsedCsv.value = data;
+                    } else {
+                        // 切换回源码：将数组压缩回 CSV 格式
+                        cmsContent.value = Papa.unparse(parsedCsv.value);
+                    }
+                    viewMode.value = mode;
+                };
+
+                // 🌟 表格管理方法
+                const addRow = () => {
+                    const colCount = parsedCsv.value[0] ? parsedCsv.value[0].length : 2;
+                    parsedCsv.value.push(new Array(colCount).fill(''));
+                };
+
+                const removeRow = (index) => {
+                    parsedCsv.value.splice(index, 1);
+                };
+
+                const addColumn = () => {
+                    if (parsedCsv.value.length === 0) {
+                        parsedCsv.value = [['新列名']];
+                        return;
+                    }
+                    parsedCsv.value[0].push('新列名');
+                    for (let i = 1; i < parsedCsv.value.length; i++) {
+                        parsedCsv.value[i].push('');
+                    }
+                };
+
+                const changeCmsType = (type) => {
+                    cmsType.value = type;
+                    cmsActiveFile.value = '';
+                    cmsContent.value = '';
+                    // Markdown 强制使用源码视图，CSV 默认表格
+                    viewMode.value = type === 'csv' ? 'table' : 'raw';
+                };
+
+                // API 交互
+                const fetchMonitorData = async () => {
+                    try {
+                        const res = await fetch('/api/game/monitor');
+                        const data = await res.json();
+                        if (data.status === 'success' && data.data.response) {
+                            const rsp = data.data.response;
+                            const req = data.data.request || {};
+                            monitor.value = {
+                                san: rsp.san || 100, money: rsp.money || 2000, gpa: rsp.gpa || 4.0, chapter: rsp.chapter || 1, turn: rsp.turn || 0,
+                                evt_id: rsp.current_evt_id || '', last_action: req.choice || '无',
+                                affinity: JSON.stringify(rsp.affinity || {}, null, 2),
+                                display_text: `【事件快报】\n${rsp.narrator_transition || ''}\n\n${rsp.display_text || ''}`,
+                                sys_prompt: rsp.sys_prompt || '', user_prompt: rsp.user_prompt || ''
+                            };
+                        }
+                    } catch (e) { }
+                };
+
+                const fetchFileList = async () => {
+                    try {
+                        const res = await fetch('/api/admin/files');
+                        const data = await res.json();
+                        if (data.status === 'success') fileList.value = { md: data.md, csv: data.csv };
+                    } catch (e) { }
+                };
+
+                const loadFile = async (fileName) => {
+                    cmsActiveFile.value = fileName;
+                    try {
+                        const res = await fetch(`/api/admin/file?type=${cmsType.value}&name=${encodeURIComponent(fileName)}`);
+                        const data = await res.json();
+                        cmsContent.value = data.content || '';
+
+                        // 如果是 CSV，自动加载进表格视图
+                        if (cmsType.value === 'csv') {
+                            viewMode.value = 'raw'; // 先重置
+                            toggleView('table');
+                        } else {
+                            viewMode.value = 'raw';
+                        }
+                    } catch (e) { showToast("❌ 读取文件失败"); }
+                };
+
+                const saveFile = async () => {
+                    if (!cmsActiveFile.value) return;
+
+                    // 🌟 核心：如果在表格模式下点击保存，先同步数据回文本域
+                    if (cmsType.value === 'csv' && viewMode.value === 'table') {
+                        cmsContent.value = Papa.unparse(parsedCsv.value);
+                    }
+
+                    try {
+                        const res = await fetch('/api/admin/file', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ type: cmsType.value, name: cmsActiveFile.value, content: cmsContent.value })
+                        });
+                        const data = await res.json();
+                        if (data.status === 'success') showToast(`💾 ${cmsActiveFile.value} 已保存！(别忘了点热重载)`);
+                    } catch (e) { showToast("❌ 保存失败"); }
+                };
+
+                const triggerRebuild = async () => {
+                    try {
+                        showToast("🔄 正在向引擎注入新数据...");
+                        const res = await fetch('/api/system/rebuild_knowledge', { method: 'POST' });
+                        const data = await res.json();
+                        if (data.status === 'success') showToast("✅ 热重载完毕！");
+                        else showToast("❌ " + data.message);
+                    } catch (e) { showToast("❌ 热重载失败"); }
+                };
+
+                const fetchSettings = async () => {
+                    try {
+                        const res = await fetch('/api/system/settings');
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            settings.value = data.data;
+                        }
+                    } catch (e) { }
+                };
+
+                const saveSettings = async () => {
+                    try {
+                        const res = await fetch('/api/system/settings', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(settings.value)
+                        });
+                        const data = await res.json();
+                        showToast(data.message || "✅ 引擎配置已更新生效");
+                    } catch (e) { showToast("❌ 配置更新失败"); }
+                };
+
+                onMounted(() => {
+                    fetchFileList();
+                    fetchSettings();
+                    setInterval(fetchMonitorData, 3000);
+                });
+
+                return {
+                    currentTab, tabTitle, monitor, showPrompt, toastMsg, activeTheme, t,
+                    cmsType, fileList, cmsActiveFile, cmsContent, settings, groupedMdFiles, getFileName,
+                    viewMode, parsedCsv, toggleView, addRow, removeRow, addColumn, changeCmsType,
+                    fetchMonitorData, loadFile, saveFile, triggerRebuild, saveSettings
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+
+</html>

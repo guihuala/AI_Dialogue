@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-// 🌟 移除了单例，它现在只是一个普通的 MonoBehaviour 界面脚本
 public class WeChatApp : MonoBehaviour
 {
     [Header("UI Views")]
@@ -20,11 +19,6 @@ public class WeChatApp : MonoBehaviour
     
     private string activeChatName = "";
     
-    private void OnEnable()
-    {
-        ShowChatList();
-    }
-
     // --- UI Navigation ---
 
     public void ShowChatList()
@@ -59,7 +53,7 @@ public class WeChatApp : MonoBehaviour
 
         foreach (Transform child in chatListContent) Destroy(child.gameObject);
 
-        // 🌟 核心：自己不存数据，直接从 PhoneManager 的大脑里拿数据渲染！
+        // 自己不存数据，直接从 PhoneManager 的大脑里拿数据渲染
         var memories = PhoneManager.Instance.ChatMemories;
 
         foreach (var kvp in memories)
