@@ -299,7 +299,7 @@ class GameEngine:
                             })
             
             # ========================================================
-            # 🛠️ 真实工具调用执行层 (Function Calling / Tool Use)
+            # 真实工具调用执行层
             # ========================================================
             tool_calls = parsed.get("tool_calls", [])
             if isinstance(tool_calls, dict): tool_calls = [tool_calls]
@@ -383,7 +383,10 @@ class GameEngine:
                 "dialogue_sequence": seq if isinstance(seq, list) else [],
                 "error": parsed.get("error", ""),
                 "sys_prompt": sys_prm,
-                "user_prompt": user_prm
+                "user_prompt": user_prm,
+                "memory": self.mm.get_recent_history() if hasattr(self.mm, 'get_recent_history') else "模块离线",
+                "relationships": self.pm.get_all_relationships() if hasattr(self.pm, 'get_all_relationships') else "模块离线",
+                "tools": self.tm.get_tool_logs() if hasattr(self.tm, 'get_tool_logs') else "模块离线"
             }
         except Exception as e:
             return {

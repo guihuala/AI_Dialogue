@@ -292,7 +292,7 @@ def update_settings(req: SettingsRequest):
     return {"status": "success", "message": "大模型配置已更新"}
 
 # ==========================================
-# 🌟 现代化 Web 管理后台专属接口
+# Web 管理后台专属接口
 # ==========================================
 class AdminFileSaveReq(BaseModel):
     type: str
@@ -400,6 +400,87 @@ def serve_admin_ui():
         return "<h1>⚠️ 找不到 admin.html，请确保将它放在 src 目录下！</h1>"
     with open(ui_path, "r", encoding="utf-8") as f:
         return f.read()
+    
+# ==========================================
+# 系统干预专属接口
+# ==========================================
+
+class MemoryAddReq(BaseModel):
+    content: str
+
+@app.get("/api/intervention/memory")
+def get_memories():
+    """提取底层向量数据库中的所有记忆节点"""
+    if not engine or not hasattr(engine, 'mm'): return {"status": "error"}
+    try:
+        data = engine.mm.vector_store.collection.get()
+        mems = []
+        if data and data['ids']:
+            for i, mid in enumerate(data['ids']):
+                meta = data['metadatas'][i] or {}
+                doc = data['documents'][i] if data.get('documents') else meta.get('content', '')
+                mems.append({"id": mid, "type": meta.get("type", "unknown"), "content": doc})
+        # 倒序返回，让最新记忆在最前面
+        return {"status": "success", "data": mems[::-1]}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/intervention/memory")
+def add_memory(req: MemoryAddReq):
+    """强制注入记忆片段"""
+    from src.models.schema import MemoryItem
+    import uuid
+    # 标注 type 为 intervention，区别于普通 observation
+    mem = MemoryItem(id=str(uuid.uuid4()), type="intervention", content=f"【思想钢印】{req.content}")
+    engine.mm.vector_store.add_memories([mem])
+    return {"status": "success", "message": "思想钢印注入成功"}
+
+@app.delete("/api/intervention/memory/{mem_id}")
+def delete_memory(mem_id: str):
+    """抹除指定记忆节点"""
+    engine.mm.vector_store.collection.delete(ids=[mem_id])
+    return {"status": "success"}
+
+@app.get("/api/intervention/tools")
+def get_tools():
+    """获取所有可用的底层挂载工具"""
+    if not engine: return {"status": "error"}
+    # 反射提取 tool_manager 中的自定义工具函数
+    methods = [func for func in dir(engine.tm) if callable(getattr(engine.tm, func)) and not func.startswith("__") and func not in ["execute", "get_tool_logs"]]
+    return {"status": "success", "data": methods}
+
+class ToolTriggerReq(BaseModel):
+    tool_name: str
+    args: dict
+
+@app.post("/api/intervention/tool")
+def trigger_tool(req: ToolTriggerReq):
+    """强制越权调用系统工具"""
+    res = engine.tm.execute(req.tool_name, req.args)
+    # 将工具产生的影响（数值/文本）强制注入到当前的全局状态缓存中，从而影响游戏前端
+    global LATEST_GAME_STATE_CACHE
+    if "response" in LATEST_GAME_STATE_CACHE:
+        LATEST_GAME_STATE_CACHE["response"]["display_text"] += res.get("display_text", "")
+        if "san_delta" in res:
+            LATEST_GAME_STATE_CACHE["response"]["san"] += res["san_delta"]
+            LATEST_GAME_STATE_CACHE["response"]["san"] = max(0, min(100, LATEST_GAME_STATE_CACHE["response"]["san"]))
+        if "money_delta" in res:
+            LATEST_GAME_STATE_CACHE["response"]["money"] += res["money_delta"]
+        if "gpa_delta" in res:
+            LATEST_GAME_STATE_CACHE["response"]["gpa"] += res["gpa_delta"]
+    return {"status": "success", "result": res}
+
+class OverrideAffinityReq(BaseModel):
+    char_name: str
+    value: int
+
+@app.post("/api/intervention/affinity")
+def override_affinity(req: OverrideAffinityReq):
+    """强制篡改当前会话的好感度缓存"""
+    global LATEST_GAME_STATE_CACHE
+    if "response" in LATEST_GAME_STATE_CACHE and "affinity" in LATEST_GAME_STATE_CACHE["response"]:
+        LATEST_GAME_STATE_CACHE["response"]["affinity"][req.char_name] = req.value
+    return {"status": "success"}
 
 if __name__ == "__main__":
     import uvicorn

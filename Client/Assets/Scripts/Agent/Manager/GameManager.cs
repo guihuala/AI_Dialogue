@@ -37,7 +37,7 @@ public class GameManager : Singleton<GameManager>
         }
         else
         {
-            // 🌟 如果是新游戏，进入本地播片流程
+            // 如果是新游戏，进入本地播片流程
             StartNewGameIntro();
         }
     }
@@ -49,16 +49,16 @@ public class GameManager : Singleton<GameManager>
             PhoneManager.Instance.ImportChatHistory(new List<WeChatSession>());
         Data.BroadcastAllStats();
 
-        // 🌟 1. 从 SO 中读取预设的开场白
+        // 1. 从 SO 中读取预设的开场白
         List<DialogueTurn> seq = introSequenceSO != null ? introSequenceSO.sequence : new List<DialogueTurn>();
 
-        // 🌟 2. 播完后，从 GameContext 提取名单，正式呼叫大模型！
+        // 2. 播完后，从 GameContext 提取名单，正式呼叫大模型！
         MsgCenter.SendMsg(MsgConst.PLAY_DIALOGUE_SEQUENCE, seq, (System.Action)(() => {
             StartBackendGame(GameContext.SelectedRoommates);
         }));
     }
     
-    // 🌟 3. 真正联络后端
+    // 3. 真正联络后端
     public void StartBackendGame(List<string> selectedRoommates)
     {
         Data.activeRoommates = selectedRoommates;

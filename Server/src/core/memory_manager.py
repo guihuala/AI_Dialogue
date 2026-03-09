@@ -75,6 +75,27 @@ class MemoryManager:
                     print(f"✅ 成功清理了 {len(ids_to_delete)} 条上一局的临时记忆！")
         except Exception as e:
             print(f"❌ 清理历史记忆失败: {e}")
+
+    def get_recent_history(self, limit: int = 15) -> str:
+        """抽取非固定预设（非Lore）的动态记忆载荷"""
+        try:
+            data = self.vector_store.collection.get()
+            if not data or not data.get('ids'): 
+                return "暂无记忆流数据"
+            
+            history = []
+            for i, meta in enumerate(data.get('metadatas', [])):
+                # 过滤掉底层自带的 lore，只抽取动态生成的 action/observation
+                if meta and meta.get("type") != "lore":
+                    doc = data.get('documents', [''])[i] if data.get('documents') else meta.get('content', '未知数据碎块')
+                    if doc: history.append(doc)
+                    
+            if not history: 
+                return "暂无动态记忆记录"
+            recent = history[-limit:]
+            return "\n".join([f"🔹 {h}" for h in recent])
+        except Exception as e:
+            return f"记忆流读取异常: {e}"
             
     def _construct_system_prompt(self, player_stats: str = "", player_persona: str = "", current_time: str = "", current_event_obj = None) -> str:
         p = self.profile

@@ -25,29 +25,17 @@ public class DialogueTurn
     public string mood; // Mock接口暂时没返回，但保留没关系，会是null
 }
 
-
-// --- 新增请求/响应数据结构 ---
-
 [Serializable]
 public class StartGameRequest
 {
     public List<string> roommates; // optional, can be empty
 }
 
-// 模拟 Python 中的 Dict[str, float]
 [Serializable]
 public class StringFloatDictionary
 {
     public List<string> keys;
     public List<float> values;
-}
-
-[Serializable]
-public class WeChatNotification
-{
-    public string chat_name;
-    public string sender;
-    public string message;
 }
 
 [Serializable]
@@ -67,18 +55,29 @@ public class GameTurnRequest
     public List<WeChatSession> wechat_data_list; 
 }
 
+// 接收大模型 JSON 传来的单条提示
 [Serializable]
-public class WeChatSession
+public class WeChatNotification
 {
     public string chat_name;
-    public List<WeChatMessageData> messages;
+    public string sender;
+    public string message;
 }
 
+// 存放在手机内存中的单条历史消息
 [Serializable]
 public class WeChatMessageData
 {
     public string sender;
     public string message;
+}
+
+// 存放在手机内存中的单个会话（群聊/私聊）
+[Serializable]
+public class WeChatSession
+{
+    public string chat_name;
+    public List<WeChatMessageData> messages;
 }
 
 [Serializable]
@@ -111,7 +110,6 @@ public class SettingsRequest
     public float temperature;
     public int max_tokens;
     
-    // 🌟 新增：大模型动态配置字段
     public string api_key;
     public string base_url;
     public string model_name;
@@ -123,7 +121,6 @@ public class SettingsCurrentState
     public float temperature;
     public int max_tokens;
     
-    // 🌟 如果你想从后端读取当前配置，也可以把这些加上
     public string api_key;
     public string base_url;
     public string model_name;

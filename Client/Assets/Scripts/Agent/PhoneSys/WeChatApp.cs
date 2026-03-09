@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -15,12 +16,19 @@ public class WeChatApp : MonoBehaviour
     [Header("Chat Room Elements")]
     public Text chatRoomTitleText;    
     public Transform messageContent;  
-    public GameObject messageBubblePrefab; 
+    
+    // 用于自动滚动的 ScrollRect 组件
+    [Header("Auto Scroll")]
+    public ScrollRect chatRoomScrollRect; 
+
+    // 左右气泡拆分
+    [Header("Chat Bubbles")]
+    public GameObject leftBubblePrefab;  // 别人的消息（通常放左边，白气泡）
+    public GameObject rightBubblePrefab; // 自己的消息（通常放右边，绿气泡）
     
     private string activeChatName = "";
     
     // --- UI Navigation ---
-
     public void ShowChatList()
     {
         if (chatListView) chatListView.SetActive(true);
@@ -36,9 +44,7 @@ public class WeChatApp : MonoBehaviour
         RefreshChatRoom();
     }
 
-    // --- UI Rendering (从 PhoneManager 读取数据) ---
-
-    // 开放给 PhoneManager 调用的统一刷新入口
+    // --- UI Rendering ---
     public void RefreshCurrentView()
     {
         if (chatListView != null && chatListView.activeSelf) 
@@ -53,8 +59,10 @@ public class WeChatApp : MonoBehaviour
 
         foreach (Transform child in chatListContent) Destroy(child.gameObject);
 
-        // 自己不存数据，直接从 PhoneManager 的大脑里拿数据渲染
         var memories = PhoneManager.Instance.ChatMemories;
+        
+        // 检查数据是否成功传入手机大脑
+        Debug.Log($"[WeChatApp Debug] 当前内存中有 {memories.Count} 个聊天会话。"); 
 
         foreach (var kvp in memories)
         {
@@ -70,6 +78,10 @@ public class WeChatApp : MonoBehaviour
                 var last = session.messages[session.messages.Count - 1];
                 texts[1].text = $"{last.sender}: {last.message}";
             }
+            else if (texts.Length == 0)
+            {
+                Debug.LogWarning("[WeChatApp Debug] ChatRowPrefab 上找不到 Text 组件！如果你用了 TextMeshPro，请看下方的排查指南。");
+            }
 
             Button btn = row.GetComponent<Button>();
             if (btn != null)
@@ -81,7 +93,8 @@ public class WeChatApp : MonoBehaviour
 
     private void RefreshChatRoom()
     {
-        if (messageContent == null || messageBubblePrefab == null) return;
+        // 确保两个气泡 Prefab 都已赋值
+        if (messageContent == null || leftBubblePrefab == null || rightBubblePrefab == null) return;
         
         var memories = PhoneManager.Instance.ChatMemories;
         if (!memories.ContainsKey(activeChatName)) return;
@@ -91,16 +104,46 @@ public class WeChatApp : MonoBehaviour
         foreach (Transform child in messageContent) Destroy(child.gameObject);
 
         var session = memories[activeChatName];
+        
+        // 🐛 排错点 3：检查当前聊天室的数据量
+        Debug.Log($"[WeChatApp Debug] 正在渲染聊天室 [{activeChatName}]，包含 {session.messages.Count} 条消息。");
+
         foreach (var msg in session.messages)
         {
-            GameObject bubble = Instantiate(messageBubblePrefab, messageContent);
+            // 【左右气泡区分逻辑】判断发送者是否是玩家（设定为陆陈安然）
+            bool isMe = (msg.sender == "陆陈安然" || msg.sender == "Player");
+            GameObject prefabToUse = isMe ? rightBubblePrefab : leftBubblePrefab;
+
+            GameObject bubble = Instantiate(prefabToUse, messageContent);
             
             Text bubbleText = bubble.GetComponentInChildren<Text>();
             if (bubbleText != null)
             {
-                // 同样只负责渲染
                 bubbleText.text = $"<b>{msg.sender}</b>\n{msg.message}";
             }
+            else
+            {
+                Debug.LogWarning("[WeChatApp Debug] 气泡 Prefab 上找不到 Text 组件！");
+            }
+        }
+
+        // 自动滚动逻辑
+        // 必须确保在 UI 激活状态下调用协程
+        if (gameObject.activeInHierarchy)
+        {
+            StartCoroutine(ScrollToBottom());
+        }
+    }
+
+    // 等待 UI 排版完成后，再将滚动条拉到底部
+    private IEnumerator ScrollToBottom()
+    {
+        // 等待一帧，让 ContentSizeFitter 和 VerticalLayoutGroup 计算完最新的高度
+        yield return new WaitForEndOfFrame();
+        
+        if (chatRoomScrollRect != null)
+        {
+            chatRoomScrollRect.verticalNormalizedPosition = 0f;
         }
     }
 }

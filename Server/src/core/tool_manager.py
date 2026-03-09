@@ -1,22 +1,35 @@
 class ToolManager:
-    """🛠️ 系统级工具箱：负责处理 AI 的所有实体工具调用"""
+    """系统级工具箱：负责处理 AI 的所有实体工具调用"""
     
-    def execute(self, func_name: str, args: dict) -> dict:
-        """🌟 动态路由：自动寻找并执行对应的工具函数"""
-        # 利用反射机制，动态获取对应名字的函数
-        method = getattr(self, func_name, None)
+    def __init__(self):
+        self.call_history = []  # 初始化工具调用栈
         
+    def execute(self, func_name: str, args: dict) -> dict:
+        """动态路由：自动寻找并执行对应的工具函数"""
+        # 记录调用载荷
+        self.call_history.append({"func": func_name, "args": args})
+        
+        method = getattr(self, func_name, None)
         if method and callable(method):
             try:
-                # 执行工具函数，并返回结果
                 return method(args)
             except Exception as e:
                 return {"display_text": f"\n\n⚠️ **[系统异常]** 工具 '{func_name}' 执行失败: {e}\n"}
                 
         return {"display_text": f"\n\n⚠️ **[系统警告]** AI 尝试调用了未知的系统工具: {func_name}\n"}
 
+    def get_tool_logs(self) -> str:
+        """导出底层工具调用历史栈"""
+        if not self.call_history: 
+            return "未侦测到工具挂载与调用"
+        
+        logs = []
+        for i, record in enumerate(self.call_history[-10:]):  # 提取最近10条
+            logs.append(f"[{i+1}] 接口: {record['func']} | 载荷: {record['args']}")
+        return "\n".join(logs)
+
     # ==========================================
-    # 🧰 以下是具体的工具函数实现 (新增工具只需在这里加函数即可)
+    # 以下是具体的工具函数实现 (新增工具只需在这里加函数即可)
     # ==========================================
 
     def post_to_campus_wall(self, args: dict) -> dict:
