@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-[CreateAssetMenu(fileName = "NewDialogueSequence", menuName = "GameConfig/Dialogue Sequence SO")]
+[CreateAssetMenu(fileName = "NewDialogueSequence", menuName = "Game/Dialogue Sequence")]
 public class DialogueSequence : ScriptableObject
 {
     [Header("固定对话序列")]

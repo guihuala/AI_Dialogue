@@ -60,10 +60,19 @@ public class PhoneManager : Singleton<PhoneManager>
     // ==========================================
     // 数据处理与存档对接
     // ==========================================
+// 1. 拦截底层数据，加上 Debug 探针
     private void HandleIncomingMessages(params object[] args)
     {
         List<WeChatNotification> notifications = args[0] as List<WeChatNotification>;
-        if (notifications == null) return;
+    
+        // 探针 A：确认事件中心是否成功派发了数据
+        if (notifications == null) 
+        {
+            Debug.LogError("[PhoneManager] 收到了微信广播，但数据是空的或类型转换失败！");
+            return;
+        }
+
+        Debug.Log($"[PhoneManager] 成功接收到 {notifications.Count} 条新消息准备写入内存！");
 
         foreach (var notif in notifications)
         {
@@ -75,8 +84,7 @@ public class PhoneManager : Singleton<PhoneManager>
                     messages = new List<WeChatMessageData>() 
                 };
             }
-
-            // 仅仅修改底层数据
+        
             ChatMemories[notif.chat_name].messages.Add(new WeChatMessageData 
             {
                 sender = notif.sender,
@@ -84,7 +92,7 @@ public class PhoneManager : Singleton<PhoneManager>
             });
         }
 
-        // 如果玩家正在看微信，通知 UI 重新渲染最新数据
+        // 依然保留：如果玩家正在看手机，实时刷新
         if (wechatAppPanel != null && wechatAppPanel.activeInHierarchy)
         {
             wechatAppPanel.GetComponent<WeChatApp>()?.RefreshCurrentView();
@@ -169,14 +177,25 @@ public class PhoneManager : Singleton<PhoneManager>
         if (calendarAppPanel != null) calendarAppPanel.SetActive(true);
     }
 
+    
     public void OpenWeChat()
     {
         homeScreen.SetActive(false);
         if (settingsAppPanel != null) settingsAppPanel.SetActive(false);
-        
+    
         if (wechatAppPanel != null)
         {
             wechatAppPanel.SetActive(true);
+            
+            var appScript = wechatAppPanel.GetComponent<WeChatApp>();
+            if (appScript != null)
+            {
+                appScript.ShowChatList(); 
+            }
+            else
+            {
+                Debug.LogError("[PhoneManager] wechatAppPanel 上没有挂载 WeChatApp.cs 脚本！");
+            }
         }
     }
 

@@ -130,13 +130,25 @@ public class CharacterSelectionPanel : BasePanel
         // 防御检查：必须选满才能开局
         if (selectedIds.Count < MAX_SELECTION) return;
         
-        // 🌟 1. 存入跨场景中转站
+        // 1. 存入跨场景中转站
         GameContext.SelectedRoommates = new List<string>(selectedIds);
         
-        // 🌟 2. 标记为新游戏
+        // 2. 标记为新游戏
         PlayerPrefs.SetInt("IsContinuingGame", 0);
         PlayerPrefs.Save();
         
         startGameButton.interactable = false;
+        
+        UIManager.Instance.ClosePanel(panelName);
+
+        // 把名单正式交给 GameManager
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.StartBackendGame(GameContext.SelectedRoommates);
+        }
+        else
+        {
+            Debug.LogError("找不到 GameManager，无法连接后端！");
+        }
     }
 }

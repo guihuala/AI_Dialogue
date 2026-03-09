@@ -3443,7 +3443,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d30559bc90bef4ddf8b5d4420bb486e1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  introSequenceSO: {fileID: 0}
+  introSequenceSO: {fileID: 11400000, guid: 55606e843a8b24a02ad8f3b29bf19b0f, type: 2}
 --- !u!114 &500088324
 MonoBehaviour:
   m_ObjectHideFlags: 0

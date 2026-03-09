@@ -41,7 +41,7 @@ public class GameManager : Singleton<GameManager>
             StartNewGameIntro();
         }
     }
-    
+
     public void StartNewGameIntro()
     {
         Data.ResetForNewGame();
@@ -52,10 +52,9 @@ public class GameManager : Singleton<GameManager>
         // 1. 从 SO 中读取预设的开场白
         List<DialogueTurn> seq = introSequenceSO != null ? introSequenceSO.sequence : new List<DialogueTurn>();
 
-        // 2. 播完后，从 GameContext 提取名单，正式呼叫大模型！
-        MsgCenter.SendMsg(MsgConst.PLAY_DIALOGUE_SEQUENCE, seq, (System.Action)(() => {
-            StartBackendGame(GameContext.SelectedRoommates);
-        }));
+        // 2. 播完后，呼叫角色选择面板！
+        MsgCenter.SendMsg(MsgConst.PLAY_DIALOGUE_SEQUENCE, seq,
+            (System.Action)(() => { UIManager.Instance.OpenPanel("CharacterSelectionPanel"); }));
     }
     
     // 3. 真正联络后端
