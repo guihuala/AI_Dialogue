@@ -147,7 +147,6 @@ public class StageController : MonoBehaviour
         HashSet<string> currentSpeakerIDs = new HashSet<string>();
         foreach (var turn in sequence)
         {
-            // 【新增防护】如果 speaker 没名字，跳过逻辑判定
             if (string.IsNullOrEmpty(turn.speaker)) continue;
 
             string spk = turn.speaker.ToLower();
@@ -231,7 +230,6 @@ public class StageController : MonoBehaviour
     {
         foreach (var turn in sequence)
         {
-            // 【新增防护】提供默认值，防止空指针崩溃
             string spk = string.IsNullOrEmpty(turn.speaker) ? "system" : turn.speaker.ToLower();
             string rawSpeaker = string.IsNullOrEmpty(turn.speaker) ? "神秘人" : turn.speaker;
             string safeContent = string.IsNullOrEmpty(turn.content) ? "..." : turn.content; // 如果没内容，打省略号
@@ -270,19 +268,49 @@ public class StageController : MonoBehaviour
                 UpdatePortraitFocus(isPlayerTurn ? playerData.id.ToLower() : spk);
             }
 
-            bool finished = false;
-            // 延长文本显示的时间（对于系统独白而言）
+            bool textFinished = false;
+            
             if (textAnimator != null) 
             {
-                textAnimator.ShowText(safeContent, () => finished = true); // 使用判空后的 safeContent
+                textAnimator.ShowText(safeContent, () => textFinished = true); 
             }
             else 
             {
-                finished = true;
+                textFinished = true;
+            }
+            
+            // 等待打字机播放（期间监听跳过输入）
+            while (!textFinished) 
+            {
+                // 如果在打字过程中按下了确认键，通知 TextAnimator 瞬间显示全部文字
+                if (Input.GetKeyDown(KeyCode.Return) || 
+                    Input.GetKeyDown(KeyCode.KeypadEnter) || 
+                    Input.GetKeyDown(KeyCode.Space) || 
+                    Input.GetMouseButtonDown(0))
+                {
+                    if (textAnimator != null)
+                    {
+                        textAnimator.SkipTypewriter();
+                    }
+                }
+                yield return null;
             }
 
-            while (!finished) yield return null;
-            yield return new WaitForSeconds(1.0f);
+            yield return null; 
+
+            // 文字已全部显示，死等玩家输入以进入下一句
+            bool waitForInput = true;
+            while (waitForInput)
+            {
+                if (Input.GetKeyDown(KeyCode.Return) || 
+                    Input.GetKeyDown(KeyCode.KeypadEnter) || 
+                    Input.GetKeyDown(KeyCode.Space) || 
+                    Input.GetMouseButtonDown(0))
+                {
+                    waitForInput = false;
+                }
+                yield return null; 
+            }
         }
 
         onComplete?.Invoke();
