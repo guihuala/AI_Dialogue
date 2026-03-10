@@ -7,8 +7,17 @@
     <title>Roommate Survival - 控制台</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "vue": "https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.esm-browser.js"
+        }
+      }
+    </script>
+
+    <script type="module" src="/static/js/main.js" defer></script>
 
     <style>
         ::-webkit-scrollbar {
@@ -38,7 +47,6 @@
 </head>
 
 <body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex selection:bg-blue-200">
-
     <div
         class="hidden bg-slate-900 bg-teal-950 bg-indigo-950 bg-stone-900 bg-blue-600 hover:bg-blue-700 text-blue-600 border-blue-600 bg-emerald-600 hover:bg-emerald-700 text-emerald-600 border-emerald-600 bg-violet-600 hover:bg-violet-700 text-violet-600 border-violet-600 bg-orange-600 hover:bg-orange-700 text-orange-600 border-orange-600">
     </div>
@@ -52,39 +60,46 @@
             <nav class="flex-1 py-4 overflow-y-auto">
                 <ul class="space-y-1">
                     <li>
-                        <button @click="currentTab = 'monitor'"
+                        <button @click="switchTab('monitor')"
                             :class="['w-full flex items-center px-6 py-3 transition-colors', currentTab === 'monitor' ? t.primary + ' text-white shadow-lg' : 'text-slate-300 hover:bg-white/10 hover:text-white']">
                             <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z">
                                 </path>
-                            </svg>
-                            监视中心
+                            </svg> 监视中心
                         </button>
                     </li>
                     <li>
-                        <button @click="openIntervention"
+                        <button @click="switchTab('intervention')"
                             :class="['w-full flex items-center px-6 py-3 transition-colors', currentTab === 'intervention' ? t.primary + ' text-white shadow-lg' : 'text-slate-300 hover:bg-white/10 hover:text-white']">
                             <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                            </svg>
-                            系统干预
+                            </svg> 系统干预
                         </button>
                     </li>
                     <li>
-                        <button @click="currentTab = 'cms'"
+                        <button @click="switchTab('saves')"
+                            :class="['w-full flex items-center px-6 py-3 transition-colors', currentTab === 'saves' ? t.primary + ' text-white shadow-lg' : 'text-slate-300 hover:bg-white/10 hover:text-white']">
+                            <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4">
+                                </path>
+                            </svg> 快照档案室
+                        </button>
+                    </li>
+                    <li>
+                        <button @click="switchTab('cms')"
                             :class="['w-full flex items-center px-6 py-3 transition-colors', currentTab === 'cms' ? t.primary + ' text-white shadow-lg' : 'text-slate-300 hover:bg-white/10 hover:text-white']">
                             <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
                                 </path>
-                            </svg>
-                            资源管理
+                            </svg> 资源管理
                         </button>
                     </li>
                     <li>
-                        <button @click="currentTab = 'settings'"
+                        <button @click="switchTab('settings')"
                             :class="['w-full flex items-center px-6 py-3 transition-colors', currentTab === 'settings' ? t.primary + ' text-white shadow-lg' : 'text-slate-300 hover:bg-white/10 hover:text-white']">
                             <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -92,8 +107,7 @@
                                 </path>
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            </svg>
-                            参数调优
+                            </svg> 参数调优
                         </button>
                     </li>
                 </ul>
@@ -105,7 +119,6 @@
             <header
                 class="h-16 flex items-center justify-between px-8 bg-white border-b border-slate-200 shrink-0 z-10 shadow-sm">
                 <h2 class="text-xl font-semibold text-slate-700">{{ tabTitle }}</h2>
-
                 <div class="flex items-center space-x-6">
                     <div class="flex space-x-2 bg-slate-100 p-1.5 rounded-full border border-slate-200">
                         <button @click="activeTheme = 'blue'"
@@ -117,22 +130,17 @@
                         <button @click="activeTheme = 'orange'"
                             class="w-6 h-6 rounded-full bg-orange-500 shadow-inner hover:scale-110 transition-transform"></button>
                     </div>
-
                     <button v-if="currentTab === 'monitor'" @click="fetchMonitorData"
-                        :class="['flex items-center text-white px-5 py-2 rounded-lg font-medium transition-all shadow-sm', t.primary]">
-                        强制抓取状态
-                    </button>
+                        :class="['flex items-center text-white px-5 py-2 rounded-lg font-medium transition-all shadow-sm', t.primary]">强制抓取状态</button>
                     <button v-if="currentTab === 'cms'" @click="triggerRebuild"
-                        :class="['flex items-center text-white px-5 py-2 rounded-lg font-medium transition-all shadow-sm', t.primary]">
-                        热重载服务器
-                    </button>
+                        :class="['flex items-center text-white px-5 py-2 rounded-lg font-medium transition-all shadow-sm', t.primary]">热重载服务器</button>
                 </div>
             </header>
 
             <div class="flex-1 overflow-auto p-8 bg-slate-50 relative">
                 <transition name="fade">
                     <div v-if="toastMsg"
-                        class="absolute top-4 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl flex items-center z-50">
+                        class="absolute top-4 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl flex items-center z-50 z-[100]">
                         <span class="mr-2">{{ toastMsg }}</span>
                     </div>
                 </transition>
@@ -161,7 +169,6 @@
                                 </div>
                             </div>
                         </div>
-
                         <div class="glass-panel p-6 rounded-2xl border border-slate-200 flex-1 flex flex-col">
                             <h3 class="text-sm font-bold text-slate-400 mb-4">底层快照</h3>
                             <div class="space-y-3 overflow-auto flex-1 text-sm text-slate-600">
@@ -176,7 +183,6 @@
                             </div>
                         </div>
                     </div>
-
                     <div class="col-span-8 glass-panel p-6 rounded-2xl border border-slate-200 flex flex-col h-full">
                         <div class="flex justify-between items-center mb-4">
                             <h3 class="text-sm font-bold text-slate-400">系统核心监控区</h3>
@@ -245,7 +251,8 @@
 
                     <div v-show="ivTab === 'memory'" class="flex-1 flex space-x-6 overflow-hidden">
                         <div class="flex-1 glass-panel p-6 rounded-2xl border border-slate-200 flex flex-col shadow-sm">
-                            <h3 class="text-sm font-bold text-slate-700 mb-4 border-b border-slate-100 pb-2">现有动态记忆</h3>
+                            <h3 class="text-sm font-bold text-slate-700 mb-4 border-b border-slate-100 pb-2">现有动态记忆链
+                                (Vector DB)</h3>
                             <div class="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-2">
                                 <div v-for="mem in memoryList" :key="mem.id"
                                     class="p-4 bg-white rounded-xl border border-slate-100 shadow-sm flex flex-col group relative">
@@ -270,8 +277,7 @@
                         </div>
                         <div
                             class="w-96 shrink-0 glass-panel p-6 rounded-2xl border border-slate-200 flex flex-col shadow-sm">
-                            <h3 class="text-sm font-bold text-slate-700 mb-4 border-b border-slate-100 pb-2">植入</h3>
-                            <p class="text-xs text-slate-400 mb-4">强行给 AI 注入一段不可磨灭的事件记忆，影响其后续判断。</p>
+                            <h3 class="text-sm font-bold text-slate-700 mb-4 border-b border-slate-100 pb-2">植入思想钢印</h3>
                             <textarea v-model="newMemoryContent"
                                 class="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none resize-none text-sm text-slate-700 shadow-inner mb-4"
                                 placeholder="例如：安然昨天把林飒的画给撕了，林飒发誓要报仇..."></textarea>
@@ -283,11 +289,8 @@
                     <div v-show="ivTab === 'affinity'"
                         class="flex-1 glass-panel p-8 rounded-2xl border border-slate-200 shadow-sm overflow-y-auto">
                         <div class="max-w-3xl mx-auto">
-                            <h3 class="text-lg font-bold text-slate-800 mb-2">当前会话实时好感度</h3>
-                            <p class="text-sm text-slate-500 mb-8 pb-4 border-b border-slate-100">注：全局底层认知请前往【资源管理 ->
-                                relationship.csv】修改。此处修改仅在当前运行时生效。</p>
-
-                            <div class="space-y-6">
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">当前会话情感锚点 (实时好感度)</h3>
+                            <div class="space-y-6 mt-8">
                                 <div v-for="(val, char) in editableAffinity" :key="char"
                                     class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center">
                                     <div class="w-32 font-bold text-slate-700">{{ char }}</div>
@@ -308,11 +311,8 @@
                     <div v-show="ivTab === 'tools'"
                         class="flex-1 glass-panel p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center">
                         <div class="max-w-2xl w-full">
-                            <h3 class="text-lg font-bold text-slate-800 mb-2">触发越权指令</h3>
-                            <p class="text-sm text-slate-500 mb-8 pb-4 border-b border-slate-100">无视 AI 判断逻辑，以 GM
-                                权限强行向当前游戏环境中投放事件或惩罚。</p>
-
-                            <div class="space-y-6">
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">触发越权指令 (Tools Override)</h3>
+                            <div class="space-y-6 mt-8">
                                 <div>
                                     <label class="block text-sm font-bold text-slate-700 mb-2">选择系统接口</label>
                                     <select v-model="selectedTool"
@@ -321,25 +321,61 @@
                                         <option v-for="tool in toolList" :key="tool" :value="tool">{{ tool }}</option>
                                     </select>
                                 </div>
-
                                 <div>
                                     <label class="block text-sm font-bold text-slate-700 mb-2">输入载荷参数 (JSON
                                         Payload)</label>
                                     <textarea v-model="toolArgsStr"
-                                        class="w-full h-40 p-4 bg-slate-900 text-green-400 font-mono text-sm border border-slate-200 rounded-xl outline-none resize-none shadow-inner"
-                                        placeholder='{\n  "author": "教务处",\n  "content": "全校通报批评"\n}'></textarea>
+                                        class="w-full h-40 p-4 bg-slate-900 text-green-400 font-mono text-sm border border-slate-200 rounded-xl outline-none resize-none shadow-inner"></textarea>
                                 </div>
-
                                 <button @click="triggerGodTool" :disabled="!selectedTool"
                                     :class="['w-full py-4 text-white rounded-xl font-bold transition-all shadow-lg text-lg flex justify-center items-center', selectedTool ? t.primary + ' hover:scale-[1.02]' : 'bg-slate-300 cursor-not-allowed']">
                                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                             d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                    </svg>
-                                    强制执行指令
+                                    </svg>强制执行指令
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <div v-show="currentTab === 'saves'" class="h-full flex flex-col space-y-6">
+                    <div class="grid grid-cols-3 gap-6 shrink-0">
+                        <div v-for="slot in saveSlots" :key="slot.slot_id"
+                            class="glass-panel p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group h-40 flex flex-col justify-center transition-all hover:shadow-md">
+                            <div v-if="slot.is_empty" class="flex flex-col items-center justify-center text-slate-400">
+                                <span class="font-bold text-sm">槽位 {{ slot.slot_id }} - 空档案</span>
+                            </div>
+                            <div v-else class="flex flex-col h-full justify-between">
+                                <div>
+                                    <div class="text-sm font-bold text-slate-800 mb-1 flex items-center">存档槽位 {{
+                                        slot.slot_id }}</div>
+                                    <div class="text-xs text-slate-500">{{ slot.timestamp }}</div>
+                                </div>
+                                <div>
+                                    <div
+                                        class="text-xs font-bold text-white bg-slate-800 py-1.5 px-3 rounded-lg inline-block shadow-sm">
+                                        {{ slot.chapter_info }}</div>
+                                </div>
+                            </div>
+                            <div v-if="!slot.is_empty"
+                                class="absolute inset-0 bg-white/95 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center items-center space-y-3">
+                                <button @click="viewSave(slot.slot_id)"
+                                    :class="['px-5 py-2 text-white text-sm font-bold rounded-xl transition-colors shadow-md w-36', t.primary]">透视底层数据</button>
+                                <button @click="deleteSave(slot.slot_id)"
+                                    class="px-5 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-bold rounded-xl transition-colors shadow-md w-36">强制抹除</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="saveDetailData"
+                        class="flex-1 glass-panel p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
+                        <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                            <h3 class="text-sm font-bold text-slate-700">正在检视槽位 {{ currentViewSlotId }} 的全量快照</h3>
+                            <button @click="saveDetailData = ''"
+                                class="text-xs font-bold text-slate-500 hover:text-slate-800 px-3 py-1.5 bg-slate-100 rounded-lg">关闭视图</button>
+                        </div>
+                        <textarea readonly :value="saveDetailData"
+                            class="flex-1 w-full p-6 bg-slate-900 text-green-400 font-mono text-sm border border-slate-200 rounded-xl outline-none resize-none shadow-inner custom-scrollbar leading-relaxed"></textarea>
                     </div>
                 </div>
 
@@ -422,8 +458,7 @@
                                             <td
                                                 class="px-2 py-2 border border-slate-200 text-center sticky right-0 bg-white">
                                                 <button @click="removeRow(rowIdx + 1)"
-                                                    class="text-red-400 hover:text-red-600 p-1.5">删除</button>
-                                            </td>
+                                                    class="text-red-400 hover:text-red-600 p-1.5">删除</button></td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -496,276 +531,6 @@
             </div>
         </main>
     </div>
-
-    <script>
-        const { createApp, ref, computed, onMounted } = Vue;
-
-        createApp({
-            setup() {
-                const currentTab = ref('monitor');
-                const toastMsg = ref('');
-
-                const activeTheme = ref('blue');
-                const themeMap = {
-                    blue: { sidebar: 'bg-slate-900', primary: 'bg-blue-600 hover:bg-blue-700', text: 'text-blue-600', border: 'border-blue-600' },
-                    emerald: { sidebar: 'bg-teal-950', primary: 'bg-emerald-600 hover:bg-emerald-700', text: 'text-emerald-600', border: 'border-emerald-600' },
-                    violet: { sidebar: 'bg-indigo-950', primary: 'bg-violet-600 hover:bg-violet-700', text: 'text-violet-600', border: 'border-violet-600' },
-                    orange: { sidebar: 'bg-stone-900', primary: 'bg-orange-600 hover:bg-orange-700', text: 'text-orange-600', border: 'border-orange-600' }
-                };
-                const t = computed(() => themeMap[activeTheme.value]);
-
-                // 原有状态数据
-                const resultViewMode = ref('story');
-                const monitor = ref({ san: 100, money: 2000, gpa: 4.0, chapter: 1, turn: 0, evt_id: '', last_action: '无', affinity: '{}', display_text: '', sys_prompt: '', user_prompt: '', raw_json: '', memory: '', relationships: '', tools: '' });
-                const cmsType = ref('md');
-                const fileList = ref({ md: [], csv: [] });
-                const cmsActiveFile = ref('');
-                const cmsContent = ref('');
-                const viewMode = ref('raw');
-                const parsedCsv = ref([]);
-                const settings = ref({ api_key: '', base_url: '', model_name: '', temperature: 0.7, max_tokens: 800 });
-
-                // 🌟 新增：系统干预模块响应式变量
-                const ivTab = ref('memory');
-                const memoryList = ref([]);
-                const newMemoryContent = ref('');
-                const editableAffinity = ref({});
-                const toolList = ref([]);
-                const selectedTool = ref('');
-                const toolArgsStr = ref('{\n  "author": "测试账户",\n  "content": "测试内容"\n}');
-
-                const tabTitle = computed(() => {
-                    if (currentTab.value === 'monitor') return '监视中心';
-                    if (currentTab.value === 'intervention') return '控制权限：上帝干预模式';
-                    if (currentTab.value === 'cms') return '资源管理';
-                    return '参数调优';
-                });
-
-                const showToast = (msg) => {
-                    toastMsg.value = msg;
-                    setTimeout(() => toastMsg.value = '', 3000);
-                };
-
-                const openIntervention = () => {
-                    currentTab.value = 'intervention';
-                    fetchMemories();
-                    fetchTools();
-                    // 将实时监控中的好感度解析并拷贝，用于滑动条编辑
-                    try {
-                        const affObj = typeof monitor.value.affinity === 'string' ? JSON.parse(monitor.value.affinity) : monitor.value.affinity;
-                        editableAffinity.value = { ...affObj };
-                    } catch (e) { editableAffinity.value = {}; }
-                };
-
-                const fetchMemories = async () => {
-                    try {
-                        const res = await fetch('/api/intervention/memory');
-                        const data = await res.json();
-                        if (data.status === 'success') memoryList.value = data.data;
-                    } catch (e) { }
-                };
-
-                const injectMemory = async () => {
-                    if (!newMemoryContent.value) return showToast("执行拒绝：载荷不可为空");
-                    try {
-                        const res = await fetch('/api/intervention/memory', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ content: newMemoryContent.value })
-                        });
-                        const data = await res.json();
-                        if (data.status === 'success') {
-                            showToast(data.message);
-                            newMemoryContent.value = '';
-                            fetchMemories(); // 刷新列表
-                        }
-                    } catch (e) { showToast("接口异常"); }
-                };
-
-                const deleteMemory = async (id) => {
-                    try {
-                        await fetch(`/api/intervention/memory/${id}`, { method: 'DELETE' });
-                        fetchMemories();
-                    } catch (e) { }
-                };
-
-                const applyAffinity = async (charName) => {
-                    try {
-                        const res = await fetch('/api/intervention/affinity', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ char_name: charName, value: editableAffinity.value[charName] })
-                        });
-                        if ((await res.json()).status === 'success') showToast(`已强制覆写 ${charName} 的好感锚点`);
-                    } catch (e) { showToast("覆写失败"); }
-                };
-
-                const fetchTools = async () => {
-                    try {
-                        const res = await fetch('/api/intervention/tools');
-                        const data = await res.json();
-                        if (data.status === 'success') toolList.value = data.data;
-                    } catch (e) { }
-                };
-
-                const triggerGodTool = async () => {
-                    let parsedArgs = {};
-                    try { parsedArgs = JSON.parse(toolArgsStr.value); }
-                    catch (e) { return showToast("执行拒绝：JSON 格式不合法"); }
-
-                    try {
-                        const res = await fetch('/api/intervention/tool', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ tool_name: selectedTool.value, args: parsedArgs })
-                        });
-                        const data = await res.json();
-                        if (data.status === 'success') showToast("指令强制执行完毕，请回监视器查看结果！");
-                    } catch (e) { showToast("指令发送失败"); }
-                };
-
-                // ========== CMS 原有逻辑 ==========
-                const groupedMdFiles = computed(() => {
-                    const groups = {};
-                    fileList.value.md.forEach(file => {
-                        const parts = file.split('/');
-                        const folder = parts.length > 1 ? parts[0] : '根节点';
-                        if (!groups[folder]) groups[folder] = [];
-                        groups[folder].push(file);
-                    });
-                    return groups;
-                });
-
-                const getFileName = (path) => {
-                    if (!path) return '';
-                    const parts = path.split('/');
-                    return parts[parts.length - 1];
-                };
-
-                const toggleView = (mode) => {
-                    if (mode === viewMode.value) return;
-                    if (mode === 'table') {
-                        const parsed = Papa.parse(cmsContent.value || '');
-                        let data = parsed.data || [];
-                        if (data.length > 0 && data[data.length - 1].length === 1 && data[data.length - 1][0] === '') data.pop();
-                        if (data.length === 0) data = [['键名1', '键名2']];
-                        parsedCsv.value = data;
-                    } else { cmsContent.value = Papa.unparse(parsedCsv.value); }
-                    viewMode.value = mode;
-                };
-
-                const addRow = () => {
-                    const colCount = parsedCsv.value[0] ? parsedCsv.value[0].length : 2;
-                    parsedCsv.value.push(new Array(colCount).fill(''));
-                };
-                const removeRow = (index) => { parsedCsv.value.splice(index, 1); };
-                const addColumn = () => {
-                    if (parsedCsv.value.length === 0) return parsedCsv.value = [['新列']];
-                    parsedCsv.value[0].push('新列');
-                    for (let i = 1; i < parsedCsv.value.length; i++) parsedCsv.value[i].push('');
-                };
-
-                const changeCmsType = (type) => {
-                    cmsType.value = type;
-                    cmsActiveFile.value = '';
-                    cmsContent.value = '';
-                    viewMode.value = type === 'csv' ? 'table' : 'raw';
-                };
-
-                const fetchMonitorData = async () => {
-                    try {
-                        const res = await fetch('/api/game/monitor');
-                        const data = await res.json();
-                        if (data.status === 'success' && data.data.response) {
-                            const rsp = data.data.response;
-                            const req = data.data.request || {};
-                            monitor.value = {
-                                san: rsp.san || 100, money: rsp.money || 2000, gpa: rsp.gpa || 4.0, chapter: rsp.chapter || 1, turn: rsp.turn || 0,
-                                evt_id: rsp.current_evt_id || '', last_action: req.choice || '无',
-                                affinity: JSON.stringify(rsp.affinity || {}, null, 2),
-                                display_text: `【事件回传】\n${rsp.narrator_transition || ''}\n\n${rsp.display_text || ''}`,
-                                sys_prompt: rsp.sys_prompt || '', user_prompt: rsp.user_prompt || '', raw_json: JSON.stringify(rsp, null, 2),
-                                memory: rsp.memory || '', relationships: rsp.relationships || '', tools: rsp.tools || ''
-                            };
-                        }
-                    } catch (e) { }
-                };
-
-                const fetchFileList = async () => {
-                    try {
-                        const res = await fetch('/api/admin/files');
-                        const data = await res.json();
-                        if (data.status === 'success') fileList.value = { md: data.md, csv: data.csv };
-                    } catch (e) { }
-                };
-
-                const loadFile = async (fileName) => {
-                    cmsActiveFile.value = fileName;
-                    try {
-                        const res = await fetch(`/api/admin/file?type=${cmsType.value}&name=${encodeURIComponent(fileName)}`);
-                        const data = await res.json();
-                        cmsContent.value = data.content || '';
-                        if (cmsType.value === 'csv') { viewMode.value = 'raw'; toggleView('table'); } else { viewMode.value = 'raw'; }
-                    } catch (e) { showToast("读取文件失败"); }
-                };
-
-                const saveFile = async () => {
-                    if (!cmsActiveFile.value) return;
-                    if (cmsType.value === 'csv' && viewMode.value === 'table') cmsContent.value = Papa.unparse(parsedCsv.value);
-                    try {
-                        const res = await fetch('/api/admin/file', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ type: cmsType.value, name: cmsActiveFile.value, content: cmsContent.value })
-                        });
-                        if ((await res.json()).status === 'success') showToast(`${cmsActiveFile.value} 数据已写入`);
-                    } catch (e) { showToast("执行写入失败"); }
-                };
-
-                const triggerRebuild = async () => {
-                    try {
-                        showToast("正在向引擎注入新数据...");
-                        const res = await fetch('/api/system/rebuild_knowledge', { method: 'POST' });
-                        const data = await res.json();
-                        if (data.status === 'success') showToast("热重载完毕");
-                        else showToast("执行拒绝：" + data.message);
-                    } catch (e) { showToast("通信异常，重载失败"); }
-                };
-
-                const fetchSettings = async () => {
-                    try {
-                        const res = await fetch('/api/system/settings');
-                        const data = await res.json();
-                        if (data.status === 'success') settings.value = data.data;
-                    } catch (e) { }
-                };
-
-                const saveSettings = async () => {
-                    try {
-                        const res = await fetch('/api/system/settings', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(settings.value)
-                        });
-                        const data = await res.json();
-                        showToast(data.message || "运行协议已更新生效");
-                    } catch (e) { showToast("协议应用失败"); }
-                };
-
-                onMounted(() => {
-                    fetchFileList();
-                    fetchSettings();
-                    setInterval(fetchMonitorData, 3000);
-                });
-
-                return {
-                    currentTab, tabTitle, monitor, toastMsg, activeTheme, t,
-                    resultViewMode, cmsType, fileList, cmsActiveFile, cmsContent, settings, groupedMdFiles, getFileName,
-                    viewMode, parsedCsv, toggleView, addRow, removeRow, addColumn, changeCmsType,
-                    fetchMonitorData, loadFile, saveFile, triggerRebuild, saveSettings,
-
-                    // 导出的干预变量和函数
-                    ivTab, memoryList, newMemoryContent, editableAffinity, toolList, selectedTool, toolArgsStr,
-                    openIntervention, deleteMemory, injectMemory, applyAffinity, triggerGodTool
-                };
-            }
-        }).mount('#app');
-    </script>
 </body>
 
 </html>

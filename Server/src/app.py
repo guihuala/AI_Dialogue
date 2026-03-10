@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import json
@@ -27,6 +28,10 @@ if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
 
 app = FastAPI(title="Roommate Survival Game API")
+
+STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
+if os.path.exists(STATIC_DIR):
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # 全局监听缓存：用于给测试界面做上帝视角
 LATEST_GAME_STATE_CACHE = {}
@@ -246,6 +251,21 @@ def load_game(slot_id: int):
         return {"status": "success", "data": save_data["state"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"读取存档失败: {str(e)}")
+
+@app.delete("/api/game/save/{slot_id}")
+def delete_save_slot(slot_id: int):
+    """强制抹除指定槽位的存档"""
+    if slot_id not in [1, 2, 3]: 
+        raise HTTPException(status_code=400, detail="无效的槽位ID")
+    
+    file_path = os.path.join(SAVE_DIR, f"slot_{slot_id}.json")
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+            return {"status": "success", "message": f"槽位 {slot_id} 已被彻底清空"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"删除文件失败: {str(e)}")
+    return {"status": "success", "message": "该槽位本就为空"}
 
 @app.post("/api/game/reset")
 def reset_game():

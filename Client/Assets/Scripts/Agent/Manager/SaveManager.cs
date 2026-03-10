@@ -7,17 +7,14 @@ public class SaveManager
 
     // 自动存档配置
     public bool enableTimerAutoSave = true;
-    public float autoSaveInterval = 300f; 
+    public float autoSaveInterval = 10f; 
     private Coroutine autoSaveCoroutine;
 
     public SaveManager(GameManager hub)
     {
         this.hub = hub;
     }
-
-    // ==========================================
-    // 💾 存读档逻辑
-    // ==========================================
+    
     public void LoadGameFromSlot(int slotId)
     {
         hub.StartCoroutine(NetworkService.Instance.LoadGameCoroutine(slotId, (res) =>
@@ -45,33 +42,20 @@ public class SaveManager
         }));
     }
 
-    public void SaveGameToSlot(int slotId)
-    {
-        if (slotId < 1 || slotId > 3) return;
-        
-        hub.Data.currentSlotId = slotId; // 更新当前绑定的槽位
-        SaveGameRequest req = hub.Data.PackSaveData();
-
-        hub.StartCoroutine(NetworkService.Instance.SaveGameCoroutine(req, (res) =>
-        {
-            Debug.Log($"[Save] 槽位 {slotId} 存档成功!");
-            PlayerPrefs.SetInt("LastPlayedSlot", slotId);
-            PlayerPrefs.Save();
-            MsgCenter.SendMsg(MsgConst.SHOW_IMMEDIATE_MESSAGE, "系统", $"游戏已保存至槽位 {slotId}。", Color.green);
-        }, 
-        (err) => hub.ShowSystemError("存档失败: " + err)));
-    }
-
     public void AutoSaveGame()
     {
-        if (hub.Data.currentSlotId < 1 || hub.Data.currentSlotId > 3) return;
+        if (hub.Data.currentSlotId < 1 || hub.Data.currentSlotId > 3) 
+        {
+            Debug.Log("[AutoSave] 当前未绑定存档槽位，默认分配至槽位 1");
+            hub.Data.currentSlotId = 1; 
+        }
 
         SaveGameRequest req = hub.Data.PackSaveData();
         hub.StartCoroutine(NetworkService.Instance.SaveGameCoroutine(req, (res) =>
-        {
-            Debug.Log($"[AutoSave] 已静默保存至槽位 {hub.Data.currentSlotId}。");
-        }, 
-        (err) => Debug.LogWarning($"[AutoSave] 失败: {err}")));
+            {
+                Debug.Log($"<color=cyan>[AutoSave] 已静默保存至槽位 {hub.Data.currentSlotId}。</color>");
+            }, 
+            (err) => Debug.LogWarning($"[AutoSave] 失败: {err}")));
     }
 
     // ==========================================

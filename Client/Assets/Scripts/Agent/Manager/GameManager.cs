@@ -49,12 +49,29 @@ public class GameManager : Singleton<GameManager>
             PhoneManager.Instance.ImportChatHistory(new List<WeChatSession>());
         Data.BroadcastAllStats();
 
-        // 1. 从 SO 中读取预设的开场白
         List<DialogueTurn> seq = introSequenceSO != null ? introSequenceSO.sequence : new List<DialogueTurn>();
+        
+        MsgCenter.SendMsg(MsgConst.TOGGLE_SKIP_BUTTON, true); 
 
-        // 2. 播完后，呼叫角色选择面板！
         MsgCenter.SendMsg(MsgConst.PLAY_DIALOGUE_SEQUENCE, seq,
-            (System.Action)(() => { UIManager.Instance.OpenPanel("CharacterSelectionPanel"); }));
+            (System.Action)(() => { 
+                
+                MsgCenter.SendMsg(MsgConst.TOGGLE_SKIP_BUTTON, false); 
+                
+                UIManager.Instance.OpenPanel("CharacterSelectionPanel"); 
+            }));
+    }
+    
+    public void SkipIntro()
+    {
+        Debug.Log("[GameManager] 玩家选择跳过开场剧情。");
+
+        MsgCenter.SendMsg(MsgConst.STOP_DIALOGUE);
+        
+        // 【新增 3】：玩家按了跳过，立刻隐藏跳过按钮
+        MsgCenter.SendMsg(MsgConst.TOGGLE_SKIP_BUTTON, false); 
+        
+        UIManager.Instance.OpenPanel("CharacterSelectionPanel");
     }
     
     // 3. 真正联络后端

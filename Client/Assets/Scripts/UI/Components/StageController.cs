@@ -26,6 +26,8 @@ public class StageController : MonoBehaviour
     // 运行时数据
     private Dictionary<string, CharacterPortrait> activeCharacters = new Dictionary<string, CharacterPortrait>();
     public System.Action<string> OnOptionSelected;
+    private Coroutine _currentDialogueCoroutine;
+    private System.Action _currentDialogueCallback;
 
     private void Start()
     {
@@ -35,6 +37,7 @@ public class StageController : MonoBehaviour
         MsgCenter.RegisterMsg(MsgConst.SHOW_OPTIONS, ShowOptions);
         MsgCenter.RegisterMsg(MsgConst.SHOW_IMMEDIATE_MESSAGE, ShowImmediateMessage);
         MsgCenter.RegisterMsg(MsgConst.PLAY_DIALOGUE_SEQUENCE, HandlePlayDialogueSequence);
+        MsgCenter.RegisterMsg(MsgConst.STOP_DIALOGUE, ForceStopDialogue);
     }
 
     private void OnDestroy()
@@ -43,6 +46,7 @@ public class StageController : MonoBehaviour
         MsgCenter.UnregisterMsg(MsgConst.SHOW_OPTIONS, ShowOptions);
         MsgCenter.UnregisterMsg(MsgConst.SHOW_IMMEDIATE_MESSAGE, ShowImmediateMessage);
         MsgCenter.UnregisterMsg(MsgConst.PLAY_DIALOGUE_SEQUENCE, HandlePlayDialogueSequence);
+        MsgCenter.UnregisterMsg(MsgConst.STOP_DIALOGUE, ForceStopDialogue);
     }
 
     public void InitializeRoommates(params object[] args)
@@ -223,7 +227,9 @@ public class StageController : MonoBehaviour
         }
 
         // 5. 舞台调度完成，开始逐句播放对话
-        StartCoroutine(PlayDialogueSequence(sequence, onComplete));
+        if (_currentDialogueCoroutine != null) StopCoroutine(_currentDialogueCoroutine);
+        _currentDialogueCallback = onComplete; 
+        _currentDialogueCoroutine = StartCoroutine(PlayDialogueSequence(sequence, onComplete));
     }
 
     public IEnumerator PlayDialogueSequence(List<DialogueTurn> sequence, System.Action onComplete)
@@ -372,5 +378,22 @@ public class StageController : MonoBehaviour
             if (kvp.Value.CharacterID.ToLower() == canonicalId) kvp.Value.SetFocus(true);
             else kvp.Value.SetFocus(false);
         }
+    }
+    
+    private void ForceStopDialogue(params object[] args)
+    {
+        // 1. 停止文字协程
+        if (_currentDialogueCoroutine != null)
+        {
+            StopCoroutine(_currentDialogueCoroutine);
+            _currentDialogueCoroutine = null;
+        }
+        
+        // 2. 清空回调，防止它又去触发原有设定好的后续事件
+        _currentDialogueCallback = null;
+        
+        // 3. 清理舞台上的文字，保持画面干净
+        if (speakerNameText) speakerNameText.text = "";
+        if (textAnimator) textAnimator.ShowText("");
     }
 }

@@ -1,0 +1,36 @@
+{
+    "slot_id": 1,
+    "timestamp": "2026-03-10 02:18:38",
+    "chapter_info": "第 1 章 - 第 1 回合",
+    "state": {
+        "slot_id": 1,
+        "active_roommates": [
+            "苏浅",
+            "林飒",
+            "陈雨婷",
+            "陆陈安然"
+        ],
+        "current_evt_id": "evt_ch1_groupwork",
+        "chapter": 1,
+        "turn": 1,
+        "san": 100,
+        "money": 2000.0,
+        "gpa": 4.0,
+        "arg_count": 0,
+        "wechat_data_list": [
+            {
+                "chat_name": "JMU-3栋-404寝室群",
+                "messages": [
+                    {
+                        "sender": "苏浅",
+                        "message": "那个...小组作业的事，我有点害怕，要不我们私下商量一下？"
+                    },
+                    {
+                        "sender": "陈雨婷",
+                        "message": "大家关于小组作业有什么想法吗？我们可以找个时间一起讨论一下，确保每个人都参与进来哦~"
+                    }
+                ]
+            }
+        ]
+    }
+}

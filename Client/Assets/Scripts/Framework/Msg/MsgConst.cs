@@ -9,4 +9,6 @@ public class MsgConst
     public const int WECHAT_NOTIFIED = 1007;        // 微信新消息通知
     public const int ADD_TRANSACTION = 1008;        // 账单流水
     public const int CHANGE_SCENE = 1009;
+    public const int STOP_DIALOGUE = 1010;          // 强制停止当前对话序列
+    public const int TOGGLE_SKIP_BUTTON = 1011;     // 显示/隐藏对话跳过按钮
 }
