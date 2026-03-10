@@ -44,10 +44,11 @@ public class SaveManager
 
     public void AutoSaveGame()
     {
+        // 现在直接判定，如果不合法直接 return，因为合法逻辑在 GameManager 里已经控制好了
         if (hub.Data.currentSlotId < 1 || hub.Data.currentSlotId > 3) 
         {
-            Debug.Log("[AutoSave] 当前未绑定存档槽位，默认分配至槽位 1");
-            hub.Data.currentSlotId = 1; 
+            Debug.LogWarning("[AutoSave] 槽位 ID 异常，终止自动存档！");
+            return;
         }
 
         SaveGameRequest req = hub.Data.PackSaveData();

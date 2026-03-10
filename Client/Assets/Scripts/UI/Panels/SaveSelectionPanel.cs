@@ -5,14 +5,17 @@ using UnityEngine.UI;
 public class SaveSelectionPanel : BasePanel
 {
     [Header("UI 引用")]
-    public SaveSlotItem[] slotItems; // 拖入 3 个 Slot 预制体实例
+    public SaveSlotItem[] slotItems; 
     public Button backButton;
+
+    // 【新增】缓存槽位状态，用来判断玩家点的是空档还是有数据的档
+    private List<SaveSlotInfo> _cachedSlots = new List<SaveSlotInfo>();
     
     public override void OpenPanel(string name)
     {
         base.OpenPanel(name);
         
-        backButton.onClick.RemoveAllListeners(); // 养成好习惯，防止重复注册
+        backButton.onClick.RemoveAllListeners(); 
         backButton.onClick.AddListener(() => UIManager.Instance.ClosePanel(name));
   
         StartCoroutine(NetworkService.Instance.GetSavesInfoCoroutine(OnGetSavesSuccess, OnGetSavesFailure));
@@ -22,6 +25,8 @@ public class SaveSelectionPanel : BasePanel
     {
         if (res.slots != null)
         {
+            _cachedSlots = res.slots; // 缓存下来
+
             for (int i = 0; i < slotItems.Length; i++)
             {
                 if (i < res.slots.Count)
@@ -39,13 +44,20 @@ public class SaveSelectionPanel : BasePanel
 
     private void OnSlotClicked(int slotId)
     {
-        // 1. 设置标记，告诉下个场景的 GameManager 要读哪个档
-        PlayerPrefs.SetInt("IsContinuingGame", 1);
-        PlayerPrefs.SetInt("SelectedSlotID", slotId);
-        PlayerPrefs.Save();
+        // 1. 判断点击的槽位是不是空档
+        bool isEmpty = true;
+        var slotInfo = _cachedSlots.Find(s => s.slot_id == slotId);
+        if (slotInfo != null)
+        {
+            isEmpty = slotInfo.is_empty;
+        }
 
-        // 2. 跳转场景 (假定你的场景加载管理器是这么写的)
-        // 如果你的场景管理叫别的名字，请替换为你自己的跳转代码，比如 SceneManager.LoadScene("MainGameScene");
-        UnityEngine.SceneManagement.SceneManager.LoadScene("MainGameScene");
+        // 2. 将数据写入跨场景的 GameContext
+        GameContext.SelectedSaveSlot = slotId;
+        GameContext.IsContinuingGame = !isEmpty; // 如果不是空的，那就是继续游戏
+
+        // 3. 跳转到核心玩法场景
+        // 注意：统一使用你在 TitleUIController 里的 SceneLoader 来跳转
+        SceneLoader.Instance.LoadScene(GameScene.Gameplay);
     }
 }

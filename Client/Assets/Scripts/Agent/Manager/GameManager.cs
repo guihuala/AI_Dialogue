@@ -28,16 +28,18 @@ public class GameManager : Singleton<GameManager>
     {
         yield return null; 
 
-        if (PlayerPrefs.GetInt("IsContinuingGame", 0) == 1)
+        // 1. 无论新游戏还是老游戏，一进场景就把 GameContext 选中的槽位绑定到数据中心
+        // 这样一来，新游戏的自动存档也会乖乖存进这个槽位，不会乱跑了！
+        Data.currentSlotId = GameContext.SelectedSaveSlot;
+
+        // 2. 根据 GameContext 的标记决定是走读档流程，还是播片流程
+        if (GameContext.IsContinuingGame)
         {
-            int slotId = PlayerPrefs.GetInt("SelectedSlotID", 1);
-            PlayerPrefs.SetInt("IsContinuingGame", 0);
-            PlayerPrefs.Save();
-            Save.LoadGameFromSlot(slotId);
+            Save.LoadGameFromSlot(GameContext.SelectedSaveSlot);
         }
         else
         {
-            // 如果是新游戏，进入本地播片流程
+            // 如果点的是空槽位，进入新游戏播片流程
             StartNewGameIntro();
         }
     }
@@ -68,7 +70,7 @@ public class GameManager : Singleton<GameManager>
 
         MsgCenter.SendMsg(MsgConst.STOP_DIALOGUE);
         
-        // 【新增 3】：玩家按了跳过，立刻隐藏跳过按钮
+        // 玩家按了跳过，立刻隐藏跳过按钮
         MsgCenter.SendMsg(MsgConst.TOGGLE_SKIP_BUTTON, false); 
         
         UIManager.Instance.OpenPanel("CharacterSelectionPanel");
