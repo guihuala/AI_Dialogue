@@ -25,8 +25,9 @@ public class DialogueSequenceImporter : Editor
 
     private void ImportFromText(DialogueSequence sequenceSO)
     {
-        // 弹出文件选择框，选择纯文本文件
-        string path = EditorUtility.OpenFilePanel("选择剧本文件", "", "txt");
+        string defaultPath = Application.dataPath + "/Resources/Data/FixDialogue"; 
+        
+        string path = EditorUtility.OpenFilePanel("选择剧本文件", defaultPath, "txt");
         if (string.IsNullOrEmpty(path)) return;
 
         // 记录撤销操作，防止误覆盖

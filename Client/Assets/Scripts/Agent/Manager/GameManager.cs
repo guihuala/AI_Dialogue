@@ -28,14 +28,14 @@ public class GameManager : Singleton<GameManager>
     {
         yield return null; 
 
-        // 1. 无论新游戏还是老游戏，一进场景就把 GameContext 选中的槽位绑定到数据中心
-        // 这样一来，新游戏的自动存档也会乖乖存进这个槽位，不会乱跑了！
-        Data.currentSlotId = GameContext.SelectedSaveSlot;
-
-        // 2. 根据 GameContext 的标记决定是走读档流程，还是播片流程
+        // 根据 GameContext 的标记决定是走读档流程，还是播片流程
         if (GameContext.IsContinuingGame)
         {
             Save.LoadGameFromSlot(GameContext.SelectedSaveSlot);
+            
+            // 防御性编程：读档结束后，强行再把当前选中的槽位号绑回去
+            // （防止读取的旧废档里 slot_id 是 0，导致覆盖后又无法自动存档）
+            Data.currentSlotId = GameContext.SelectedSaveSlot;
         }
         else
         {
@@ -46,9 +46,14 @@ public class GameManager : Singleton<GameManager>
 
     public void StartNewGameIntro()
     {
+        // 重置所有新游戏数据
         Data.ResetForNewGame();
+        
+        Data.currentSlotId = GameContext.SelectedSaveSlot;
+
         if (PhoneManager.Instance != null)
             PhoneManager.Instance.ImportChatHistory(new List<WeChatSession>());
+        
         Data.BroadcastAllStats();
 
         List<DialogueTurn> seq = introSequenceSO != null ? introSequenceSO.sequence : new List<DialogueTurn>();
@@ -57,13 +62,10 @@ public class GameManager : Singleton<GameManager>
 
         MsgCenter.SendMsg(MsgConst.PLAY_DIALOGUE_SEQUENCE, seq,
             (System.Action)(() => { 
-                
                 MsgCenter.SendMsg(MsgConst.TOGGLE_SKIP_BUTTON, false); 
-                
                 UIManager.Instance.OpenPanel("CharacterSelectionPanel"); 
             }));
     }
-    
     public void SkipIntro()
     {
         Debug.Log("[GameManager] 玩家选择跳过开场剧情。");
