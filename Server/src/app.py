@@ -60,6 +60,8 @@ class GameTurnRequest(BaseModel):
     san: int = 100
     money: float = 2000.0
     gpa: float = 4.0
+    hygiene: int = 100
+    reputation: int = 100
     arg_count: int = 0
     affinity: Dict[str, float] = {}
     wechat_data_list: List[Dict[str, Any]] = []
@@ -112,7 +114,9 @@ def start_game(req: StartGameRequest):
         init_res = engine.play_main_turn(
             action_text="", selected_chars=selected_ids, current_evt_id="", is_transition=True,
             api_key="", base_url="", model="", tmp=0.7, top_p=1.0, max_t=350, pres_p=0.3, freq_p=0.5,
-            san=100, money=2000, gpa=4.0, arg_count=0, chapter=1, turn=0,
+            hygiene=100, reputation=100,
+            san=100, money=2000,
+            gpa=4.0, arg_count=0, chapter=1, turn=0,
             affinity={sid: 50 for sid in selected_ids}, wechat_data_dict={}
         )
         global LATEST_GAME_STATE_CACHE
@@ -134,7 +138,7 @@ def perform_turn(req: GameTurnRequest):
                 if chat_name:
                     wechat_dict[chat_name] = [[m.get("sender", ""), m.get("message", "")] for m in session.get("messages", [])]
 
-        # 🌟 1. 拦截接管后台计算任务
+        #  1. 拦截接管后台计算任务
         cache_key = f"{req.current_evt_id}_{req.turn}_{req.choice}"
         
         if cache_key in PREFETCH_FUTURES:
@@ -142,7 +146,6 @@ def perform_turn(req: GameTurnRequest):
             print(f"⌛ 正在挂起主线程，接管后台剩余计算（如果后台已算完，将瞬间返回）...")
             future = PREFETCH_FUTURES.pop(cache_key)
             
-            # .result() 是魔法！如果算完了瞬间返回；如果没算完，就只等剩下的一点时间！
             res = future.result() 
             print(f"✅ [影子推演] 完美衔接！")
             
@@ -162,6 +165,7 @@ def perform_turn(req: GameTurnRequest):
                 is_transition=req.is_transition, api_key="", base_url="", model="",
                 tmp=0.7, top_p=1.0, max_t=350, pres_p=0.3, freq_p=0.5,
                 san=req.san, money=req.money, gpa=req.gpa, arg_count=req.arg_count,
+                hygiene=req.hygiene, reputation=req.reputation,
                 chapter=req.chapter, turn=req.turn, affinity=req.affinity, wechat_data_dict=wechat_dict,
                 is_prefetch=False
             )
@@ -179,14 +183,15 @@ def perform_turn(req: GameTurnRequest):
                 
                 next_cache_key = f"{res['current_evt_id']}_{next_turn}_{opt_choice}"
                 
-                print(f"🔮 将分支加入预计算线程池: {opt_choice}")
+                print(f"将分支加入预计算线程池: {opt_choice}")
                 # 提交给线程池并保留“契约票据 (Future)”
                 future = PREFETCH_POOL.submit(
                     engine.play_main_turn,
                     action_text=opt_choice, selected_chars=req.active_roommates, current_evt_id=res["current_evt_id"],
                     is_transition=False, api_key="", base_url="", model="",
                     tmp=0.7, top_p=1.0, max_t=350, pres_p=0.3, freq_p=0.5,
-                    san=res["san"], money=res["money"], gpa=res["gpa"], arg_count=res["arg_count"],
+                    san=res["san"], money=res["money"], gpa=res["gpa"], hygiene=res["hygiene"], 
+                    reputation=res["reputation"], arg_count=res["arg_count"],
                     chapter=res["chapter"], turn=res["turn"], affinity=res["affinity"].copy() if isinstance(res.get("affinity"), dict) else {},
                     wechat_data_dict=wechat_dict,
                     is_prefetch=True
@@ -277,7 +282,7 @@ def reset_game():
         return {"status": "error", "message": str(e)}
 
 # ==========================================
-# ⚙️ 系统设置接口 (获取与更新)
+# 系统设置接口
 # ==========================================
 
 @app.get("/api/system/settings")

@@ -74,7 +74,7 @@ class GameEngine:
                 "is_end": False
             }
 
-    def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, arg_count, chapter, turn, affinity, wechat_data_dict, is_prefetch=False):
+    def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, hygiene, reputation, arg_count, chapter, turn, affinity, wechat_data_dict, is_prefetch=False):
         self.llm.update_config(api_key=api_key, base_url=base_url, model=model)
         
         mapped_chars = []
@@ -370,6 +370,8 @@ class GameEngine:
                 "san": san, 
                 "money": money, 
                 "gpa": gpa, 
+                "hygiene": hygiene,
+                "reputation": reputation,
                 "arg_count": arg_count, 
                 "chapter": chapter, 
                 "turn": turn, 

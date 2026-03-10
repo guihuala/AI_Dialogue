@@ -49,9 +49,10 @@ public class GameTurnRequest
     public int turn;
     public int san;
     public float money;
+    public int hygiene;
+    public int reputation;
     public float gpa;
     public int arg_count;
-    // 适配 Unity JsonUtility 无法序列化字典的问题，改为传递 List
     public List<WeChatSession> wechat_data_list; 
 }
 
@@ -88,6 +89,8 @@ public class GameTurnResponse
     public int san;
     public float money;
     public float gpa;
+    public int hygiene;
+    public int reputation;
     public int arg_count;
     public int chapter;
     public int turn;

@@ -11,6 +11,8 @@ public class DataManager
     public int currentSan = 100;
     public float currentMoney = 2000f;
     public float currentGpa = 4.0f;
+    public int currentHygiene = 100;
+    public int currentReputation = 0;
     public int argCount = 0;
     
     public int currentChapter = 1;

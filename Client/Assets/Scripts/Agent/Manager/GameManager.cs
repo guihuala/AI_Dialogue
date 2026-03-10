@@ -111,6 +111,8 @@ public class GameManager : Singleton<GameManager>
             turn = Data.currentTurn,
             san = Data.currentSan,
             money = Data.currentMoney,
+            hygiene = Data.currentHygiene,
+            reputation = Data.currentReputation,
             gpa = Data.currentGpa,
             arg_count = Data.argCount,
             wechat_data_list = PhoneManager.Instance != null ? PhoneManager.Instance.ExportChatHistory() : new List<WeChatSession>()
