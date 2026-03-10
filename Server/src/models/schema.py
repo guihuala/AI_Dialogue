@@ -3,7 +3,7 @@ from typing import List, Dict, Optional, Any
 from datetime import datetime
 
 # ==========================================
-# 1. 记忆与检索系统相关模型 (Memory System)
+# 1. 记忆与检索系统相关模型
 # ==========================================
 class MemoryItem(BaseModel):
     id: str
@@ -22,7 +22,7 @@ class DailyLog(BaseModel):
     interacted_with: List[str] = []
 
 # ==========================================
-# 2. 角色设定与档案模型 (Character Profiles)
+# 2. 角色设定与档案模型
 # ==========================================
 class SocialContext(BaseModel):
     world_view: str = ""
@@ -58,7 +58,6 @@ class CurrentStatus(BaseModel):
     Money: float = 0.0
 
 class CharacterProfile(BaseModel):
-    # 兼容 presets.py 的字段命名
     Character_ID: Optional[str] = None
     Name: Optional[str] = None
     Core_Archetype: Optional[str] = None
@@ -72,7 +71,6 @@ class CharacterProfile(BaseModel):
     Roommate_Behavior: Optional[str] = None
     External_Behavior: Optional[str] = None
     
-    # 兼容 memory_manager.py 的字段命名
     name: Optional[str] = None
     context: Optional[SocialContext] = None
     personality: Optional[Personality] = None
@@ -87,19 +85,21 @@ class CharacterProfile(BaseModel):
         if self.Name is None and self.name is not None:
             self.Name = self.name
         
-        # 容错：如果没传 context 和 personality，给个默认空对象防止报错
+        # 如果没传 context 和 personality，给个默认空对象防止报错
         if self.context is None:
             self.context = SocialContext()
         if self.personality is None:
             self.personality = Personality()
 
 # ==========================================
-# 3. 游戏系统与事件模型 (Game System)
+# 3. 游戏系统与事件模型
 # ==========================================
-class PlayerStats(BaseModel):
+class PlayerStats:
     san: int = 100
-    gpa: float = 4.0
-    money: float = 0.0
+    money: float = 1500.0
+    gpa: float = 3.0
+    hygiene: int = 100
+    reputation: int = 50
 
 class ScriptedEvent(BaseModel):
     id: str

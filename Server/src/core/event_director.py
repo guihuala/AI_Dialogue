@@ -45,7 +45,7 @@ class EventDirector:
         return default_timeline
 
     def _check_conditions(self, event, player_stats, active_chars, affinity):
-        """🌟 核心升级：动态条件解析引擎"""
+        """动态条件解析引擎"""
         
         # 1. 检查【专属角色】(支持逗号分隔，要求全部在场)
         if hasattr(event, 'exclusive_char') and event.exclusive_char:
@@ -73,15 +73,18 @@ class EventDirector:
                     continue
                 
                 # 动态获取玩家状态或好感度
+                # 动态获取玩家状态或好感度
                 actual_val = 50 
                 k_lower = key.lower()
                 if k_lower in ['san', 'sanity']: actual_val = player_stats.get('san', 100)
                 elif k_lower in ['money']: actual_val = player_stats.get('money', 0)
                 elif k_lower in ['gpa']: actual_val = player_stats.get('gpa', 3.0)
                 elif k_lower in ['hygiene']: actual_val = player_stats.get('hygiene', 100)
-                elif key in affinity: actual_val = affinity[key] # 直接读取某室友的好感度
+                elif k_lower in ['reputation', 'rep']: actual_val = player_stats.get('reputation', 50) 
+                elif key in affinity: actual_val = affinity[key]
                 else: 
-                    continue # 未知变量，跳过该条判定
+                    print(f"⚠️ [条件引擎警告] 未知变量 '{key}'，已拦截事件: {event.id}")
+                    return False
 
                 # 动态比较运算符
                 if op == '>' and not (actual_val > val): return False
@@ -136,6 +139,7 @@ class EventDirector:
                 # 极端兜底：连通用事件都因条件卡死了，无视条件硬抽一个（防崩溃）
                 valid_pool = [e for e in available_events if "通用" in e.event_type]
                 if not valid_pool:
+                    print(f"🔄 [事件调度] 第 {self.current_chapter} 章事件池已枯竭，重置事件历史记录！")
                     self.used_events = [] # 穷尽了，重置历史
                     return self.get_next_event(player_stats, active_chars, affinity)
 

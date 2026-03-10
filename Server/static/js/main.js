@@ -17,8 +17,8 @@ createApp({
 
         const tabTitle = computed(() => {
             if (currentTab.value === 'monitor') return '监视中心';
-            if (currentTab.value === 'intervention') return '控制权限：上帝干预模式';
-            if (currentTab.value === 'saves') return '快照档案室：存档管理';
+            if (currentTab.value === 'intervention') return '控制权限';
+            if (currentTab.value === 'saves') return '快照档案室';
             if (currentTab.value === 'cms') return '资源管理';
             return '参数调优';
         });

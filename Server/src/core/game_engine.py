@@ -93,7 +93,7 @@ class GameEngine:
                 mapped_affinity[k] = v
         affinity = mapped_affinity
 
-        player_stats = {"money": money, "san": san, "hygiene": 100, "gpa": gpa}
+        player_stats = {"money": money, "san": san, "hygiene": hygiene, "gpa": gpa, "reputation": reputation}
         settlement_msg = ""
         
         if is_transition or current_evt_id == "":
@@ -110,14 +110,15 @@ class GameEngine:
                 settlement_msg = f"**[大{chapter}学年结算]** 扣除生活费800。GPA：{gpa:.2f}\n\n"
                 chapter = next_evt.chapter; arg_count = 0 
             turn = 1
-            event_context = f"【系统指令】直接开始以下事件，不要写任何开场白或过场旁白。\n【新事件】:{next_evt.name}\n【场景描述】:{next_evt.description}"
+            event_context = f"【系统指令】开始以下事件，不要写任何开场白或过场旁白。\n【新事件】:{next_evt.name}\n【场景描述】:{next_evt.description}"
         else:
             next_evt = EVENT_DATABASE.get(current_evt_id)
             if not next_evt:
                 return {"error": "事件丢失，请重置游戏。"}
             turn += 1
-            pacing = "【节奏：结局】明确收尾，is_end 置为 true。" if turn >= 3 else "【节奏：激化】冲突升级。"
-            event_context = f"【事件】: {next_evt.name}\n【回合】: {turn}/3\n{pacing}\n【玩家选择意图】: {action_text}"
+            # 将 turn >= 3 改为 turn >= 6
+            pacing = "【节奏：结局】事件已充分发展，请明确收尾，将 is_end 置为 true。" if turn >= 6 else "【节奏：激化】冲突升级，引发新的讨论。"
+            event_context = f"【事件】: {next_evt.name}\n【回合】: {turn}/6\n{pacing}\n【玩家选择意图】: {action_text}"
 
         try:
             relevant_docs = self.mm.vector_store.search(f"{next_evt.name} {action_text}", n_results=6)
@@ -316,8 +317,8 @@ class GameEngine:
                     if "gpa_delta" in tool_res: gpa = max(0.0, min(4.0, gpa + tool_res["gpa_delta"]))
                     if "money_delta" in tool_res: money += tool_res["money_delta"]
             
-            is_end = True if getattr(next_evt, 'is_cg', False) or turn >= 3 else parsed.get("is_end", False)
-            
+            is_end = True if getattr(next_evt, 'is_cg', False) or turn >= 6 else parsed.get("is_end", False)
+
             if not getattr(next_evt, 'is_cg', False) and action_text and "（时间推移..." not in action_text and not is_prefetch:
                 self.mm.save_interaction(user_input=action_text, ai_response=" ".join(dialogue_lines), user_name="陆陈安然")
 

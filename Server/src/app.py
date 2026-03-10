@@ -36,7 +36,7 @@ if os.path.exists(STATIC_DIR):
 # 全局监听缓存：用于给测试界面做上帝视角
 LATEST_GAME_STATE_CACHE = {}
 
-# 最大线程设为 3，防止太多并发导致你的 API 被平台封禁/限流
+# 最大线程设为 3
 PREFETCH_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=3)
 PREFETCH_FUTURES = {} 
 
