@@ -53,19 +53,15 @@ public class NetworkService : SingletonPersistent<NetworkService>
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
-
-            // ⏱️ 1. 在发送请求前，掏出并启动秒表！
+            
             System.Diagnostics.Stopwatch stopwatch = new System.Diagnostics.Stopwatch();
             stopwatch.Start();
-
-            // 发起请求，开始漫长等待...
+            
             yield return request.SendWebRequest();
-
-            // ⏱️ 2. 请求返回，立刻掐表！
+            
             stopwatch.Stop();
             float elapsedSeconds = stopwatch.ElapsedMilliseconds / 1000f;
             
-            // 打印出极其醒目的测速日志
             Debug.Log($"<color=orange><b>[性能监控] AI 思考总耗时: {elapsedSeconds:F2} 秒</b></color>");
 
             if (request.result != UnityWebRequest.Result.Success) 
@@ -76,14 +72,45 @@ public class NetworkService : SingletonPersistent<NetworkService>
             else 
             {
                 string rawText = request.downloadHandler.text;
-                // Debug.Log($"[NetworkService] Turn 返回: {rawText}");
                 onSuccess?.Invoke(JsonUtility.FromJson<GameTurnResponse>(rawText));
             }
         }
     }
     
+    public IEnumerator TriggerReflectionCoroutine(List<string> roommates, string eventHistory, Action<ReflectionResponse> onSuccess)
+    {
+        ReflectionRequest req = new ReflectionRequest 
+        { 
+            active_roommates = roommates, 
+            recent_events = eventHistory 
+        };
+        string json = JsonUtility.ToJson(req);
+    
+        Debug.Log($"<color=cyan>[System] 正在触发 AI 深度反思: {eventHistory}</color>");
+
+        using (UnityWebRequest request = new UnityWebRequest($"{baseUrl}/game/reflect", "POST"))
+        {
+            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                var res = JsonUtility.FromJson<ReflectionResponse>(request.downloadHandler.text);
+                onSuccess?.Invoke(res);
+            }
+            else
+            {
+                Debug.LogWarning("[NetworkService] 反思请求失败，但不影响游戏继续执行。");
+            }
+        }
+    }
+    
     // ============================================
-    // 💾 存档与读档网络请求 (Save/Load System)
+    // 存档与读档网络请求
     // ============================================
 
     /// <summary>
@@ -122,8 +149,7 @@ public class NetworkService : SingletonPersistent<NetworkService>
     public IEnumerator LoadGameCoroutine(int slotId, Action<LoadGameResponse> onSuccess, Action<string> onFailure)
     {
         Debug.Log($"[NetworkService] 请求读取槽位 {slotId} 的数据...");
-
-        // GET 请求，直接在 URL 后面拼接 slotId
+        
         using (UnityWebRequest request = UnityWebRequest.Get($"{baseUrl}/game/load/{slotId}"))
         {
             yield return request.SendWebRequest();
@@ -168,7 +194,7 @@ public class NetworkService : SingletonPersistent<NetworkService>
     }
     
     // ============================================
-    // ⚙️ 系统与开发者设置
+    // 系统设置
     // ============================================
 
     public IEnumerator RebuildKnowledgeCoroutine(Action<string> onSuccess, Action<string> onFailure)

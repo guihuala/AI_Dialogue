@@ -102,9 +102,11 @@ public class GameTurnResponse
 
     public List<WeChatNotification> wechat_notifications;
     public List<DialogueTurn> dialogue_sequence;
+    public bool reflection_triggered; // 后端是否触发了反思
+    public List<string> reflection_logs;
     public string narrator_transition;
     public string current_scene;
-    public string error; // Backend Exception message
+    public string error;
 }
 
 [Serializable]
@@ -134,11 +136,29 @@ public class SettingsResponse
 {
     public string status;
     public SettingsCurrentState current_settings;
-    public string message; // 兼容我们刚刚在 Python 后端加的 message 字段
+    public string message;
 }
 
 // ==========================================
-// 💾 存档系统相关数据结构
+// 反思系统相关数据结构
+// ==========================================
+
+[Serializable]
+public class ReflectionRequest
+{
+    public List<string> active_roommates;
+    public string recent_events; // 可以是最近几个事件名称的拼接
+}
+
+[Serializable]
+public class ReflectionResponse
+{
+    public string status;
+    public List<string> logs; // 后端生成的反思日志总结
+}
+
+// ==========================================
+// 存档系统相关数据结构
 // ==========================================
 
 [Serializable]
@@ -186,6 +206,5 @@ public class SaveGameResponse
 public class LoadGameResponse
 {
     public string status;
-    // 后端读取时返回的 data 其实就是我们保存进去的 SaveGameRequest 的字段组合
     public SaveGameRequest data; 
 }

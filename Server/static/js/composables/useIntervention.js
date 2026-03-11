@@ -24,7 +24,7 @@ export function useIntervention(showToast, monitorData) {
             editableAffinity.value = JSON.parse(JSON.stringify(monitorData.value.affinity));
         }
 
-        // 可选：打开干预面板时，自动同步当前监视器里的最新主角数据
+        // 打开干预面板时，自动同步当前监视器里的最新主角数据
         if (monitorData.value) {
             if (monitorData.value.san !== undefined) interventionStats.value.san = monitorData.value.san;
             if (monitorData.value.money !== undefined) interventionStats.value.money = monitorData.value.money;
@@ -97,8 +97,27 @@ export function useIntervention(showToast, monitorData) {
         } catch (e) { showToast("情感锚点篡改失败"); }
     };
 
+    const manualReflect = async () => {
+        try {
+            showToast("正在强制启动 AI 深度反思...");
+            const res = await fetch('/api/game/reflect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    active_roommates: monitorData.value.active_roommates || [],
+                    recent_events: "手动强制触发"
+                })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                showToast("反思完成，记忆已写入 Vector DB");
+                console.log("反思日志:", data.logs);
+            }
+        } catch (e) { showToast("强制反思失败"); }
+    };
+
     // ==========================================
-    // 🌟 新增：提交主角属性修改的核心方法
+    // 提交主角属性修改的核心方法
     // ==========================================
     const applyStats = async () => {
         try {
@@ -123,6 +142,6 @@ export function useIntervention(showToast, monitorData) {
         ivTab, memoryList, newMemoryContent, editableAffinity, toolList, selectedTool, toolArgsStr,
         interventionStats,
         openIntervention, fetchMemories, deleteMemory, injectMemory, fetchTools, triggerGodTool, applyAffinity,
-        applyStats
+        applyStats, manualReflect
     };
 }

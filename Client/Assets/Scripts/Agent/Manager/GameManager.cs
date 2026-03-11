@@ -96,7 +96,7 @@ public class GameManager : Singleton<GameManager>
     }
 
     // ==========================================
-    // 🔄 网络核心回合流转
+    // 网络回合流转
     // ==========================================
     public void SendTurnRequest(string choiceText, bool isTransition = false)
     {
@@ -152,6 +152,8 @@ public class GameManager : Singleton<GameManager>
         Data.currentSan = res.san;
         Data.currentMoney = res.money;
         Data.currentGpa = res.gpa;
+        Data.currentHygiene = res.hygiene; 
+        Data.currentReputation = res.reputation;
         Data.currentChapter = res.chapter;
         Data.currentTurn = res.turn;
         Data.argCount = res.arg_count;
@@ -186,6 +188,16 @@ public class GameManager : Singleton<GameManager>
 
         // 5. 剧情节点完成，自动存档
         if (res.is_end) Save.AutoSaveGame();
+        
+        // 6. 反思反馈处理
+        if (res.reflection_triggered)
+        {
+            string logSummary = res.reflection_logs != null ? string.Join("\n", res.reflection_logs) : "无详细记录";
+            Debug.Log($"<color=cyan>[AI 反思完成]</color> 总结如下：\n{logSummary}");
+    
+            // 发送消息通知 UI 层展示（例如弹出一个小气泡或系统消息）
+            MsgCenter.SendMsg(MsgConst.SHOW_IMMEDIATE_MESSAGE, "系统", "室友们对最近发生的事情有了新的看法...", Color.cyan);
+        }
     }
 
     public void HandlePlayerChoice(string choice)

@@ -35,8 +35,13 @@ class GameEngine:
         self.pm = PromptManager()
         self.tm = ToolManager()
 
+        self.event_completion_count = 0  # 记录已完成的事件数
+        self.recent_event_ids = []
+
     def reset(self):
         self.director.reset()
+        self.event_completion_count = 0
+        self.recent_event_ids = []
 
     def parse_and_repair_json(self, raw_text):
         raw_text = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL)

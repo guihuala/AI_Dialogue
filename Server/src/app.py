@@ -169,6 +169,32 @@ def perform_turn(req: GameTurnRequest):
                 chapter=req.chapter, turn=req.turn, affinity=req.affinity, wechat_data_dict=wechat_dict,
                 is_prefetch=False
             )
+        
+        if engine.event_completion_count >= 3:
+            print("🧠 [自动反思] 阈值已到，启动后台提炼...")
+            active_roommates = req.active_roommates.copy()
+            event_context = ", ".join(engine.recent_event_ids)
+            current_chapter = req.chapter
+    
+            from src.core.agent_system import ReflectionSystem
+            
+            # 这里是同步函数，我们将其封装进线程池
+            def run_reflection_task():
+                try:
+                    # 传入正确的初始化参数
+                    rs = ReflectionSystem(engine.llm, PROMPTS_DIR)
+                    # 调用正确的函数名
+                    rs.trigger_night_reflection(current_chapter, event_context, active_roommates)
+                except Exception as e:
+                    print(f"后台反思失败: {e}")
+    
+            PREFETCH_POOL.submit(run_reflection_task)
+    
+            # 重置计数器
+            engine.event_completion_count = 0
+            engine.recent_event_ids = []
+            res["reflection_triggered"] = True 
+            res["reflection_logs"] = ["反思任务已提交至后台线程池..."]
 
         #  2. 触发下一回合的影子预测执行
         if not res.get("is_end", False) and res.get("next_options"):
@@ -208,11 +234,17 @@ def perform_turn(req: GameTurnRequest):
 
 @app.get("/api/game/monitor")
 def monitor_game():
-    return {"status": "success", "data": LATEST_GAME_STATE_CACHE}
+    # 引擎的计数状态
+    engine_stats = {
+        "event_completion_count": engine.event_completion_count if engine else 0,
+        "recent_event_ids": engine.recent_event_ids if engine else []
+    }
+    return {
+        "status": "success", 
+        "data": LATEST_GAME_STATE_CACHE,
+        "engine_stats": engine_stats
+    }
 
-# ==========================================
-# 以下部分原封不动保留
-# ==========================================
 @app.post("/api/game/save")
 def save_game(req: SaveGameRequest):
     if req.slot_id not in [1, 2, 3]:
@@ -378,13 +410,28 @@ def rebuild_knowledge():
     
 @app.post("/api/game/reflect")
 def trigger_reflection(req: ReflectionRequest):
-    if not engine: raise HTTPException(status_code=500, detail="Engine not initialized.")
+    if not engine: 
+        raise HTTPException(status_code=500, detail="Engine not initialized.")
     try:
         from src.core.agent_system import ReflectionSystem
-        rs = ReflectionSystem(engine.llm)
-        logs = rs.trigger_reflection(req.active_roommates, req.recent_events)
+        
+        # 1. 修复初始化：需要传入 prompts_dir
+        rs = ReflectionSystem(engine.llm, PROMPTS_DIR) 
+        
+        # 2. 修复函数名与参数：调用 trigger_night_reflection，并补全 chapter
+        # 注意：这里假设从全局缓存或 req 中获取 chapter，暂设为 engine.director.current_chapter
+        current_chapter = getattr(engine.director, 'current_chapter', 1)
+        
+        logs = rs.trigger_night_reflection(
+            chapter=current_chapter,
+            recent_history=req.recent_events,
+            active_chars=req.active_roommates
+        )
+        
         return {"status": "success", "logs": logs}
     except Exception as e:
+        import traceback
+        print(f"❌ 反思接口崩溃 Traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/agent/chat")
@@ -506,6 +553,26 @@ def override_affinity(req: OverrideAffinityReq):
     if "response" in LATEST_GAME_STATE_CACHE and "affinity" in LATEST_GAME_STATE_CACHE["response"]:
         LATEST_GAME_STATE_CACHE["response"]["affinity"][req.char_name] = req.value
     return {"status": "success"}
+
+class StatsOverrideReq(BaseModel):
+    san: int
+    money: float
+    gpa: float
+    hygiene: int
+    reputation: int
+
+@app.post("/api/intervention/stats")
+def override_stats(req: StatsOverrideReq):
+    """强制篡改全局状态缓存中的主角数值"""
+    global LATEST_GAME_STATE_CACHE
+    if "response" in LATEST_GAME_STATE_CACHE:
+        LATEST_GAME_STATE_CACHE["response"]["san"] = req.san
+        LATEST_GAME_STATE_CACHE["response"]["money"] = req.money
+        LATEST_GAME_STATE_CACHE["response"]["gpa"] = req.gpa
+        LATEST_GAME_STATE_CACHE["response"]["hygiene"] = req.hygiene
+        LATEST_GAME_STATE_CACHE["response"]["reputation"] = req.reputation
+        return {"status": "success", "message": "数值已强制同步"}
+    return {"status": "error", "message": "当前没有运行中的游戏实例"}
 
 if __name__ == "__main__":
     import uvicorn
