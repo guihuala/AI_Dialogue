@@ -12,7 +12,6 @@ class VectorStore:
 
     def add_memories(self, memories: List[MemoryItem]):
         ids = [m.id for m in memories]
-        # Use summary for embedding if available, otherwise content
         documents = [m.summary if m.summary else m.content for m in memories]
         
         metadatas = []
@@ -21,7 +20,7 @@ class VectorStore:
                 "type": m.type, 
                 "timestamp": str(m.timestamp), 
                 "importance": m.importance,
-                "original_content": m.content # Store original content in metadata
+                "original_content": m.content
             }
             metadatas.append(meta)
         
@@ -37,12 +36,10 @@ class VectorStore:
             n_results=n_results
         )
         
-        # Format results
         formatted_results = []
         if results['ids']:
             for i in range(len(results['ids'][0])):
                 meta = results['metadatas'][0][i]
-                # Retrieve original content from metadata if available
                 content = meta.get("original_content", results['documents'][0][i])
                 
                 formatted_results.append({
@@ -62,4 +59,3 @@ class VectorStore:
 
     def delete_memory(self, id: str):
         self.collection.delete(ids=[id])
-

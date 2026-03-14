@@ -208,7 +208,7 @@ class GameEngine:
                 reactions = asyncio.run(fetch_all_reactions())
             print(f"🛑 [耗时监控] NPC 并发思考耗时: {time.time() - t1:.2f} 秒")
                 
-            reactions_str = "\n\n【🎬 演员就位：以下是在场室友刚才做出的独立反应】\n(⚠️系统警告：请你作为 DM，严格采纳以下室友的反应进行编排。禁止篡改她们的原意、动作和准备发送的微信内容！)\n"
+            reactions_str = "\n\n【演员就位：以下是在场室友刚才做出的独立反应】\n(⚠️系统警告：请你作为 DM，严格采纳以下室友的反应进行编排。禁止篡改她们的原意、动作和准备发送的微信内容！)\n"
             for i, char_name in enumerate(npc_chars):
                 r = reactions[i]
                 mood = r.get("mood", "平静")
