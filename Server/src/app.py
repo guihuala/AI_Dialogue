@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+import shutil
 from typing import List, Dict, Any, Optional
 import json
 import os
@@ -15,6 +16,40 @@ from src.core.presets import CANDIDATE_POOL
 from src.core.game_engine import GameEngine
 from datetime import datetime
 
+# --- 动态列表管理器 ---
+PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "prompts")
+ROSTER_PATH = os.path.join(PROMPTS_DIR, "characters", "roster.json")
+
+def get_current_roster():
+    """动态获取当前角色档案库集"""
+    # 1. 如果存在 roster.json，优先使用
+    if os.path.exists(ROSTER_PATH):
+        try:
+            with open(ROSTER_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading roster.json: {e}")
+            
+    # 2. 如果不存在，从汇编好的 presets 中提取并生成一个基础版
+    roster = {}
+    for cid, profile in CANDIDATE_POOL.items():
+        roster[cid] = {
+            "name": profile.Name,
+            "archetype": profile.Core_Archetype,
+            "tags": profile.Tags,
+            "description": profile.Background_Secret[:40] + "...",
+            "file": f"{cid}.md"
+        }
+    
+    # 将其写入磁盘，使之后的 MOD 能够直接覆盖它而不需要修改 Python 代码
+    try:
+        os.makedirs(os.path.dirname(ROSTER_PATH), exist_ok=True)
+        with open(ROSTER_PATH, 'w', encoding='utf-8') as f:
+            json.dump(roster, f, ensure_ascii=False, indent=4)
+    except: pass
+    
+    return roster
+
 try:
     from src.core.data_loader import load_all_events
     from src.core.event_script import EVENT_DATABASE
@@ -27,7 +62,34 @@ SAVE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="Roommate Survival Game API")
+
+@app.get("/api/game/candidates")
+def get_candidates():
+    """获取所有可选的室友角色基本信息 (动态加载)"""
+    roster = get_current_roster()
+    data = []
+    for cid, info in roster.items():
+        data.append({
+            "id": cid,
+            "name": info.get("name", "未知"),
+            "avatar": info.get("avatar", ""),
+            "archetype": info.get("archetype", "未知"),
+            "tags": info.get("tags", []),
+            "description": info.get("description", "")
+        })
+    return {"status": "success", "data": data}
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allow any origin for local dev
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
 if os.path.exists(STATIC_DIR):
@@ -49,6 +111,7 @@ except Exception as e:
 # --- 请求体定义 ---
 class StartGameRequest(BaseModel):
     roommates: List[str] = []
+    custom_prompts: Optional[Dict[str, str]] = None
 
 class GameTurnRequest(BaseModel):
     choice: str
@@ -65,6 +128,7 @@ class GameTurnRequest(BaseModel):
     arg_count: int = 0
     affinity: Dict[str, float] = {}
     wechat_data_list: List[Dict[str, Any]] = []
+    custom_prompts: Optional[Dict[str, str]] = None
 
 class SaveGameRequest(BaseModel):
     slot_id: int
@@ -105,9 +169,11 @@ def start_game(req: StartGameRequest):
     engine.reset()
     
     selected_ids = req.roommates
+    roster = get_current_roster()
+    
     if not selected_ids:
         import random
-        all_ids = list(CANDIDATE_POOL.keys())
+        all_ids = list(roster.keys())
         selected_ids = random.sample(all_ids, min(3, len(all_ids)))
         
     try:
@@ -117,7 +183,8 @@ def start_game(req: StartGameRequest):
             hygiene=100, reputation=100,
             san=100, money=2000,
             gpa=4.0, arg_count=0, chapter=1, turn=0,
-            affinity={sid: 50 for sid in selected_ids}, wechat_data_dict={}
+            affinity={sid: 50 for sid in selected_ids}, wechat_data_dict={},
+            custom_prompts=req.custom_prompts
         )
         global LATEST_GAME_STATE_CACHE
         LATEST_GAME_STATE_CACHE = {"request": req.dict(), "response": init_res}
@@ -167,7 +234,7 @@ def perform_turn(req: GameTurnRequest):
                 san=req.san, money=req.money, gpa=req.gpa, arg_count=req.arg_count,
                 hygiene=req.hygiene, reputation=req.reputation,
                 chapter=req.chapter, turn=req.turn, affinity=req.affinity, wechat_data_dict=wechat_dict,
-                is_prefetch=False
+                is_prefetch=False, custom_prompts=req.custom_prompts
             )
         
         if engine.event_completion_count >= 3:
@@ -366,11 +433,11 @@ def get_admin_files():
     if os.path.exists(PROMPTS_DIR):
         for root, dirs, files in os.walk(PROMPTS_DIR):
             for file in files:
-                if file.endswith(".md"):
+                if file.endswith((".md", ".json")):
                     # 统一路径分隔符，方便前端解析
                     md_files.append(os.path.relpath(os.path.join(root, file), PROMPTS_DIR).replace("\\", "/"))
     
-    csv_files = [f for f in os.listdir(EVENTS_DIR) if f.endswith(".csv")] if os.path.exists(EVENTS_DIR) else []
+    csv_files = [f for f in os.listdir(EVENTS_DIR) if f.endswith((".csv", ".json"))] if os.path.exists(EVENTS_DIR) else []
     return {"status": "success", "md": sorted(md_files), "csv": sorted(csv_files)}
 
 @app.get("/api/admin/file")
@@ -394,6 +461,23 @@ def save_admin_file(req: AdminFileSaveReq):
         return {"status": "success", "message": f"{req.name} 保存成功"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/admin/upload_portrait")
+async def upload_portrait(file: UploadFile = File(...)):
+    """上传角色立绘图片"""
+    portraits_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "WebClient", "public", "assets", "portraits")
+    if not os.path.exists(portraits_dir):
+        os.makedirs(portraits_dir, exist_ok=True)
+    
+    # 简单的安全处理：只允许图片格式
+    if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+        raise HTTPException(status_code=400, detail="Only images are allowed")
+
+    file_path = os.path.join(portraits_dir, file.filename)
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    return {"status": "success", "url": f"/assets/portraits/{file.filename}"}
 
 # CMS 热重载接口
 @app.post("/api/system/rebuild_knowledge")
@@ -458,21 +542,141 @@ async def agent_chat(req: AgentChatRequest):
                         rel_text += f"- 对待【{target}】：表面[{surface}]，内心觉得[{inner}]。\n"
                         
         agent = NPCAgent(req.character, profile_text, rel_text, engine.llm)
-        react_res = await agent.async_react(req.event_context, req.player_action)
-        return {"status": "success", "reaction": react_res}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# ==========================================
+# 创意工坊 Workshop 接口
+# ==========================================
+
+WORKSHOP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "workshop")
+if not os.path.exists(WORKSHOP_DIR):
+    os.makedirs(WORKSHOP_DIR)
+
+class WorkshopPublishReq(BaseModel):
+    name: str
+    author: str
+    description: str
+
+@app.post("/api/workshop/publish_current")
+def publish_current_mod(req: WorkshopPublishReq):
+    """把当前服务端的 data/prompts 和 data/events 物理文件打包存入工坊仓库"""
+    print(f"📦 [Workshop] Start packaging mod: {req.name} by {req.author}")
+    pack_content = {"md": {}, "csv": {}}
+    
+    # 读取 MD 文件
+    if os.path.exists(PROMPTS_DIR):
+        for root, dirs, files in os.walk(PROMPTS_DIR):
+            for file in files:
+                if file.endswith((".md", ".json")):
+                    rel_path = os.path.relpath(os.path.join(root, file), PROMPTS_DIR)
+                    with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
+                        pack_content["md"][rel_path] = f.read()
+
+    # 读取 CSV 文件
+    if os.path.exists(EVENTS_DIR):
+        for file in os.listdir(EVENTS_DIR):
+            if file.endswith(".csv"):
+                with open(os.path.join(EVENTS_DIR, file), 'r', encoding='utf-8-sig') as f:
+                    pack_content["csv"][file] = f.read()
+
+    import uuid
+    item_id = str(uuid.uuid4())[:8]
+    data = {
+        "id": item_id,
+        "type": "prompt_pack",
+        "name": req.name,
+        "author": req.author,
+        "description": req.description,
+        "content": pack_content,
+        "downloads": 0,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    file_path = os.path.join(WORKSHOP_DIR, f"{item_id}.json")
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    
+    print(f"✅ [Workshop] Mod package created: {item_id}")
+    return {"status": "success", "id": item_id}
+
+@app.get("/api/workshop/list")
+def get_workshop_list():
+    items = []
+    if os.path.exists(WORKSHOP_DIR):
+        for filename in os.listdir(WORKSHOP_DIR):
+            if filename.endswith(".json"):
+                try:
+                    with open(os.path.join(WORKSHOP_DIR, filename), 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        items.append({
+                            "id": data.get("id"),
+                            "type": data.get("type"),
+                            "name": data.get("name"),
+                            "author": data.get("author"),
+                            "description": data.get("description"),
+                            "downloads": data.get("downloads", 0)
+                        })
+                except Exception as e:
+                    print(f"Error reading workshop file {filename}: {e}")
+    return {"status": "success", "data": items}
+
+@app.post("/api/workshop/apply/{item_id}")
+def apply_workshop_mod(item_id: str):
+    """从工坊解包并重写当前服务端的物理配置文件"""
+    print(f"🚀 [Workshop] Applying mod: {item_id}")
+    file_path = os.path.join(WORKSHOP_DIR, f"{item_id}.json")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Item not found")
+        
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        content = data.get("content", {})
+        
+        # 1. 应用 MD 与 JSON (由其 RP 决定)
+        md_files = content.get("md", {})
+        for rp, text in md_files.items():
+            abs_p = os.path.join(PROMPTS_DIR, rp)
+            os.makedirs(os.path.dirname(abs_p), exist_ok=True)
+            with open(abs_p, 'w', encoding='utf-8') as f:
+                f.write(text)
+        
+        # 2. 应用 CSV
+        csv_files = content.get("csv", {})
+        for fn, text in csv_files.items():
+            abs_p = os.path.join(EVENTS_DIR, fn)
+            with open(abs_p, 'w', encoding='utf-8') as f:
+                f.write(text)
+
+        # 3. 自动触发热重载
+        try:
+            from src.core.build_knowledge import build_knowledge
+            build_knowledge()
+            if engine:
+                if hasattr(engine, 'director'): engine.director.reload_timeline()
+                if hasattr(engine, 'pm'): engine.pm.__init__()
+        except Exception as re_e:
+            print(f"Mod Apply Rebuild Warning: {re_e}")
+        
+        print(f"✅ [Workshop] Mod applied successfully.")
+        return {"status": "success", "message": f"模组 [{data.get('name')}] 已成功部署并完成实时热重载。"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-from fastapi.responses import HTMLResponse
-@app.get("/admin", response_class=HTMLResponse)
-def serve_admin_ui():
-    """ 将 Vue 前端页面直接发给浏览器"""
-    ui_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin.html")
-    if not os.path.exists(ui_path):
-        return "<h1>⚠️ 找不到 admin.html，请确保将它放在 src 目录下！</h1>"
-    with open(ui_path, "r", encoding="utf-8") as f:
-        return f.read()
-    
+@app.delete("/api/workshop/{item_id}")
+def delete_workshop_item(item_id: str):
+    """从工坊仓库彻底删除指定的模组包文件"""
+    file_path = os.path.join(WORKSHOP_DIR, f"{item_id}.json")
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+            return {"status": "success"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=404, detail="Not found")
+
 # ==========================================
 # 系统干预专属接口
 # ==========================================

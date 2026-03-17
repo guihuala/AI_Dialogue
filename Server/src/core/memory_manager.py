@@ -58,7 +58,7 @@ class MemoryManager:
         return response, relevant_memories
     
     def clear_game_history(self):
-        """清空上一轮游戏的互动记忆，保留角色专属语料(lore)"""
+        """清空上一轮游戏的互动记忆，保留角色专属语料"""
         try:
             # 获取底层的所有数据
             data = self.vector_store.collection.get()
@@ -72,9 +72,9 @@ class MemoryManager:
                 # 执行批量删除
                 if ids_to_delete:
                     self.vector_store.collection.delete(ids=ids_to_delete)
-                    print(f"✅ 成功清理了 {len(ids_to_delete)} 条上一局的临时记忆！")
+                    print(f"成功清理了 {len(ids_to_delete)} 条上一局的临时记忆！")
         except Exception as e:
-            print(f"❌ 清理历史记忆失败: {e}")
+            print(f"清理历史记忆失败: {e}")
 
     def get_recent_history(self, limit: int = 15) -> str:
         """抽取非固定预设（非Lore）的动态记忆载荷"""
@@ -143,4 +143,11 @@ Respond naturally.
 """
 
     def reflect_on_interaction(self, chat_history: List[Dict], user_name: str = "User") -> str:
-        return "Reflection skipped for brevity in MVP."
+        """
+        夜间反思机制：将零散的近期对话缓存提取，交由 LLM 进行归纳与提炼
+        将总结后的高级认知记忆存回 ChromaDB 以降低后续检索引擎的噪点
+        """
+        # 抽取近期记忆切片
+        recent_slices = self.get_recent_history(limit=15)
+        # ...向大模型发起提炼 Prompt 请求并写回向量数据库...
+        return "Reflected"

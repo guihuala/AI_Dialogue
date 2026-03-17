@@ -1,0 +1,77 @@
+{
+    "tang_mengqi": {
+        "name": "唐梦琪",
+        "avatar": "/assets/portraits/唐.webp",
+        "archetype": "天真烂漫/极度情绪化/外向型依赖",
+        "tags": [
+            "Shopaholic",
+            "Boyfriend_Dependent"
+        ],
+        "description": "家里负债，父母常吵架，但自身高消费习惯难改。...",
+        "file": "tang_mengqi.md"
+    },
+    "li_yinuo": {
+        "name": "李一诺",
+        "avatar": "/assets/portraits/李.webp",
+        "archetype": "厌恶低效/规则至上/优绩主义",
+        "tags": [
+            "Rule_Enforcer",
+            "Early_Bird",
+            "GPA_Oriented"
+        ],
+        "description": "害怕努力失败。对规则的严格执行源于内心对秩序崩塌的恐惧。...",
+        "file": "li_yinuo.md"
+    },
+    "zhao_xin": {
+        "name": "赵鑫",
+        "avatar": "/assets/portraits/赵.webp",
+        "archetype": "老鼠人/韧性强/实用主义/抠搜",
+        "tags": [
+            "Hoarder",
+            "Gamer",
+            "Frugal",
+            "Tomboy"
+        ],
+        "description": "隐忍但有清晰底线，被触及会引发可怕的报复。...",
+        "file": "zhao_xin.md"
+    },
+    "lin_sa": {
+        "name": "林飒",
+        "avatar": "/assets/portraits/林.webp",
+        "archetype": "爱装B/反叛/感性/艺术至上",
+        "tags": [
+            "Rebel",
+            "Artistic",
+            "Smoker",
+            "Night_Owl"
+        ],
+        "description": "和一些女同学的关系被说闲话。极度害怕被保守的父母知道真实情况。...",
+        "file": "lin_sa.md"
+    },
+    "chen_yuting": {
+        "name": "陈雨婷",
+        "avatar": "/assets/portraits/陈.webp",
+        "archetype": "控制狂/社交为王/精于算计",
+        "tags": [
+            "Student_Council_Leader",
+            "Clean_Freak",
+            "Two_Faced",
+            "Information_Hub"
+        ],
+        "description": "掌握大量学生及老师的黑料。最大弱点是害怕失去权力。...",
+        "file": "chen_yuting.md"
+    },
+    "su_qian": {
+        "name": "苏浅",
+        "avatar": "/assets/portraits/苏.webp",
+        "archetype": "社恐/内向敏感/脆弱易碎",
+        "tags": [
+            "Social_Phobia",
+            "Net_Famous",
+            "Depressed",
+            "Artist"
+        ],
+        "description": "网络名气不好，曾被指控抄袭且被开盒泄露身份证照，导致严重躯体化。...",
+        "file": "su_qian.md"
+    }
+}

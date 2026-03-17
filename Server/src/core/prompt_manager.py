@@ -21,7 +21,11 @@ class PromptManager:
             "relationship_matrix": self._skill_relationship_matrix 
         }
 
-        self.char_file_map = {
+        # 动态角色文件映射
+        self.char_file_map = self._load_char_file_map()
+
+    def _load_char_file_map(self) -> dict:
+        default_map = {
             "陆陈安然": "player_anran.md",
             "唐梦琪": "tang_mengqi.md",
             "陈雨婷": "chen_yuting.md",
@@ -30,6 +34,27 @@ class PromptManager:
             "赵鑫": "zhao_xin.md",
             "林飒": "lin_sa.md"
         }
+        
+        mapping_file = os.path.join(self.chars_dir, "roster.json")
+        if os.path.exists(mapping_file):
+            try:
+                import json
+                with open(mapping_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    # data format: { "id": { "name": "...", "file": "..." }, ... }
+                    new_map = {}
+                    for cid, profile in data.items():
+                        name = profile.get("name")
+                        filename = profile.get("file")
+                        if name and filename:
+                            new_map[name] = filename
+                    return new_map
+            except Exception as e:
+                print(f"Failed to load dynamic roster: {e}")
+        
+        # fallback: scan directory if no mapping exists, using filenames as names (simplified)
+        # But for now, returning default_map is safer to avoid breaking old characters
+        return default_map
 
     def _read_md(self, relative_path: str) -> str:
         if not relative_path: return ""
@@ -100,6 +125,16 @@ class PromptManager:
         if rag_lore: active_skills.append(f"【专属语料检索命中】（如果以下语料符合当前情境，请优先引用）：\n{rag_lore}")
 
         skills_str = "\n\n[已加载的系统动态插件 (Skills)]\n" + "\n".join(active_skills) if active_skills else ""
+        
+        custom_prompts = context.get("custom_prompts", {}) or {}
+        c_world, c_events, c_char = custom_prompts.get("world"), custom_prompts.get("events"), custom_prompts.get("character")
+        if c_world or c_events or c_char:
+            mod_override = "\n\n🚀【玩家深度干预 MOD (Local Overrides)】（最高优先级硬性设定，无条件覆盖默认）：\n"
+            if c_world: mod_override += f"🌍 [世界观重构]:\n{c_world}\n"
+            if c_events: mod_override += f"📜 [事件流干预]:\n{c_events}\n"
+            if c_char: mod_override += f"👤 [角色灵魂修正]:\n{c_char}\n"
+            skills_str += mod_override
+
         if "[ACTIVE_SKILLS]" in base_prompt: return base_prompt.replace("[ACTIVE_SKILLS]", skills_str)
         return base_prompt + skills_str
 

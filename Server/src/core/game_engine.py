@@ -79,23 +79,29 @@ class GameEngine:
                 "is_end": False
             }
 
-    def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, hygiene, reputation, arg_count, chapter, turn, affinity, wechat_data_dict, is_prefetch=False):
+    def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, hygiene, reputation, arg_count, chapter, turn, affinity, wechat_data_dict, is_prefetch=False, custom_prompts=None):
         self.llm.update_config(api_key=api_key, base_url=base_url, model=model)
         
-        mapped_chars = []
-        for c in selected_chars:
-            if c in presets_module.CANDIDATE_POOL:
-                mapped_chars.append(presets_module.CANDIDATE_POOL[c].Name)
-            else:
-                mapped_chars.append(c)
-        selected_chars = mapped_chars
+        # --- 动态映射逻辑 ---
+        roster_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "prompts", "characters", "roster.json")
+        roster = {}
+        if os.path.exists(roster_path):
+            try:
+                with open(roster_path, 'r', encoding='utf-8') as f:
+                    roster = json.load(f)
+            except: pass
+
+        def get_name(cid):
+            if cid in roster: return roster[cid].get("name", cid)
+            if hasattr(presets_module, "CANDIDATE_POOL") and cid in presets_module.CANDIDATE_POOL:
+                return presets_module.CANDIDATE_POOL[cid].Name
+            return cid
+
+        selected_chars = [get_name(c) for c in selected_chars]
         
         mapped_affinity = {}
         for k, v in affinity.items():
-            if k in presets_module.CANDIDATE_POOL:
-                mapped_affinity[presets_module.CANDIDATE_POOL[k].Name] = v
-            else:
-                mapped_affinity[k] = v
+            mapped_affinity[get_name(k)] = v
         affinity = mapped_affinity
 
         player_stats = {"money": money, "san": san, "hygiene": hygiene, "gpa": gpa, "reputation": reputation}
@@ -153,7 +159,8 @@ class GameEngine:
             "event_name": next_evt.name,               
             "event_description": next_evt.description, 
             "active_chars": selected_chars,
-            "rag_lore": lore_str
+            "rag_lore": lore_str,
+            "custom_prompts": custom_prompts
         }
 
         sys_prm = self.pm.get_main_system_prompt(game_context)
@@ -171,7 +178,9 @@ class GameEngine:
             for char_name in npc_chars:
                 char_file = self.pm.char_file_map.get(char_name, "")
                 profile_text = ""
-                if char_file:
+                if custom_prompts and char_name in custom_prompts:
+                    profile_text = custom_prompts[char_name]
+                elif char_file:
                     profile_text = self.pm._read_md(f"characters/{char_file}")
                 else:
                     profile_text = f"你扮演的大型语言模型未能找到 {char_name} 的具体设定文件，请根据你的名字合理推演。"
