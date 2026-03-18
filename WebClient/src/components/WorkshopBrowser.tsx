@@ -27,9 +27,9 @@ export const WorkshopBrowser = () => {
     const filteredItems = useMemo(() => {
         if (!searchQuery.trim()) return items;
         const query = searchQuery.toLowerCase();
-        return items.filter(item => 
-            item.name?.toLowerCase().includes(query) || 
-            item.description?.toLowerCase().includes(query) || 
+        return items.filter(item =>
+            item.name?.toLowerCase().includes(query) ||
+            item.description?.toLowerCase().includes(query) ||
             item.author?.toLowerCase().includes(query)
         );
     }, [items, searchQuery]);
@@ -50,30 +50,20 @@ export const WorkshopBrowser = () => {
         }
     };
 
-    const handleDelete = async (id: string) => {
-        if (!window.confirm("确定要从工坊删除这个包吗？")) return;
-        try {
-            await gameApi.deleteWorkshopMod(id);
-            loadItems();
-        } catch (e) {
-            alert('删除失败');
-        }
-    };
-
     return (
         <div className="flex-1 flex flex-col h-full bg-white/80 backdrop-blur-md rounded-2xl border-2 border-[var(--color-cyan-main)]/20 shadow-xl overflow-hidden p-8 relative">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                 <div>
                     <h2 className="text-2xl font-black text-[var(--color-cyan-dark)] flex items-center tracking-wide">
                         <Cloud className="mr-3 text-[var(--color-cyan-main)]" />
-                        创意工坊 (联机仓库)
+                        创意工坊
                     </h2>
                 </div>
-                
+
                 <div className="flex items-center gap-3 w-full md:w-auto">
                     <div className="relative flex-1 md:w-64">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-cyan-main)]/50" size={18} />
-                        <input 
+                        <input
                             type="text"
                             placeholder="搜索模组、作者或描述..."
                             value={searchQuery}
@@ -108,14 +98,6 @@ export const WorkshopBrowser = () => {
                     )}
                     {filteredItems.map(item => (
                         <div key={item.id} className="border-2 border-[var(--color-cyan-main)]/10 p-5 rounded-2xl shadow-sm hover:shadow-[var(--color-cyan-main)]/20 hover:border-[var(--color-cyan-main)]/30 transition-all bg-white flex flex-col relative group">
-
-                            <button
-                                onClick={() => handleDelete(item.id)}
-                                className="absolute top-4 right-4 p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                                title="从工坊下架"
-                            >
-                                <Trash2 size={16} />
-                            </button>
 
                             <div className="flex justify-between items-start mb-2 pr-6">
                                 <h3 className="font-black text-lg text-[var(--color-cyan-dark)] truncate">{item.name}</h3>

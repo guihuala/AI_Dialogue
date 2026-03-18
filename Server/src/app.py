@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException, File, UploadFile
+from fastapi import FastAPI, HTTPException, File, UploadFile, Header, Depends
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import shutil
 from typing import List, Dict, Any, Optional
@@ -8,6 +9,7 @@ import os
 import sys
 import concurrent.futures
 from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 # 把当前文件的上一级目录加入系统路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,10 +17,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.core.presets import CANDIDATE_POOL
 from src.core.game_engine import GameEngine
 from datetime import datetime
+from src.core.config import (
+    PROMPTS_DIR, ROSTER_PATH, DATA_ROOT, SAVES_DIR, EVENTS_DIR,
+    get_user_saves_dir, get_user_chroma_path
+)
 
 # --- 动态列表管理器 ---
-PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "prompts")
-ROSTER_PATH = os.path.join(PROMPTS_DIR, "characters", "roster.json")
+# Paths are now managed in src.core.config
 
 def get_current_roster():
     """动态获取当前角色档案库集"""
@@ -53,18 +58,30 @@ def get_current_roster():
 try:
     from src.core.data_loader import load_all_events
     from src.core.event_script import EVENT_DATABASE
-    EVENTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "events")
     EVENT_DATABASE.update(load_all_events(EVENTS_DIR))
 except Exception as e:
     print(f"Warning: Failed to load events data: {e}")
 
-SAVE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "saves")
-if not os.path.exists(SAVE_DIR):
-    os.makedirs(SAVE_DIR)
+# SAVE_DIR is now SAVES_DIR from config.py
+SAVE_DIR = SAVES_DIR
 
-from fastapi.middleware.cors import CORSMiddleware
+# Global shared pool for background tasks (Prefetching, Reflection)
+PREFETCH_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=10)
 
 app = FastAPI(title="Roommate Survival Game API")
+
+# --- Multi-user Engine Manager ---
+engines: Dict[str, GameEngine] = {}
+
+def get_user_id(x_visitor_id: Optional[str] = Header(None)):
+    """Extract visitor ID from header, fallback to 'default'"""
+    return x_visitor_id or "default"
+
+def get_engine(user_id: str) -> GameEngine:
+    """Get or create a GameEngine for a specific user"""
+    if user_id not in engines:
+        engines[user_id] = GameEngine(user_id)
+    return engines[user_id]
 
 @app.get("/api/game/candidates")
 def get_candidates():
@@ -95,23 +112,11 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file
 if os.path.exists(STATIC_DIR):
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-# 全局监听缓存：用于给测试界面做上帝视角
-LATEST_GAME_STATE_CACHE = {}
-
-# 最大线程设为 3
-PREFETCH_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=3)
-PREFETCH_FUTURES = {} 
-
-try:
-    engine = GameEngine()
-except Exception as e:
-    print(f"Warning: Failed to initialize GameEngine fully, error: {e}")
-    engine = None
-
 # --- 请求体定义 ---
 class StartGameRequest(BaseModel):
     roommates: List[str] = []
     custom_prompts: Optional[Dict[str, str]] = None
+    save_id: str = "slot_0" # 默认为临时槽位
 
 class GameTurnRequest(BaseModel):
     choice: str
@@ -129,6 +134,7 @@ class GameTurnRequest(BaseModel):
     affinity: Dict[str, float] = {}
     wechat_data_list: List[Dict[str, Any]] = []
     custom_prompts: Optional[Dict[str, str]] = None
+    save_id: str = "slot_0"
 
 class SaveGameRequest(BaseModel):
     slot_id: int
@@ -166,7 +172,8 @@ class GenerateSkillPromptReq(BaseModel):
 # --- 路由与接口 ---
 
 @app.post("/api/game/start")
-def start_game(req: StartGameRequest):
+def start_game(req: StartGameRequest, user_id: str = Depends(get_user_id)):
+    engine = get_engine(user_id)
     if not engine:
         raise HTTPException(status_code=500, detail="GameEngine not initialized.")
         
@@ -181,6 +188,13 @@ def start_game(req: StartGameRequest):
         selected_ids = random.sample(all_ids, min(3, len(all_ids)))
         
     try:
+        if engine and hasattr(engine, 'mm'):
+            engine.mm.current_save_id = req.save_id
+
+        # Ensure user save directory exists
+        user_save_dir = get_user_saves_dir(user_id)
+        os.makedirs(user_save_dir, exist_ok=True)
+
         init_res = engine.play_main_turn(
             action_text="", selected_chars=selected_ids, current_evt_id="", is_transition=True,
             api_key="", base_url="", model="", tmp=0.7, top_p=1.0, max_t=350, pres_p=0.3, freq_p=0.5,
@@ -190,18 +204,21 @@ def start_game(req: StartGameRequest):
             affinity={sid: 50 for sid in selected_ids}, wechat_data_dict={},
             custom_prompts=req.custom_prompts
         )
-        global LATEST_GAME_STATE_CACHE
-        LATEST_GAME_STATE_CACHE = {"request": req.dict(), "response": init_res}
+        engine.latest_game_state_cache = {"request": req.model_dump(), "response": init_res}
         return init_res
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/game/turn")
-def perform_turn(req: GameTurnRequest):
+def perform_turn(req: GameTurnRequest, user_id: str = Depends(get_user_id)):
+    engine = get_engine(user_id)
     if not engine:
         raise HTTPException(status_code=500, detail="GameEngine not initialized.")
         
     try:
+        if engine and hasattr(engine, 'mm'):
+            engine.mm.current_save_id = req.save_id
+            
         wechat_dict = {}
         if req.wechat_data_list:
             for session in req.wechat_data_list:
@@ -212,10 +229,10 @@ def perform_turn(req: GameTurnRequest):
         #  1. 拦截接管后台计算任务
         cache_key = f"{req.current_evt_id}_{req.turn}_{req.choice}"
         
-        if cache_key in PREFETCH_FUTURES:
+        if cache_key in engine.prefetch_futures:
             print(f"🚀 [影子推演] 命中预计算队列: {req.choice}")
             print(f"⌛ 正在挂起主线程，接管后台剩余计算（如果后台已算完，将瞬间返回）...")
-            future = PREFETCH_FUTURES.pop(cache_key)
+            future = engine.prefetch_futures.pop(cache_key)
             
             res = future.result() 
             print(f"✅ [影子推演] 完美衔接！")
@@ -231,15 +248,7 @@ def perform_turn(req: GameTurnRequest):
                 engine.mm.save_interaction(user_input=req.choice, ai_response=" ".join(dialogue_lines), user_name="陆陈安然")
         else:
             print(f"⚠️ [影子推演未命中] 正常进行主线程计算: {req.choice}")
-            res = engine.play_main_turn(
-                action_text=req.choice, selected_chars=req.active_roommates, current_evt_id=req.current_evt_id,
-                is_transition=req.is_transition, api_key="", base_url="", model="",
-                tmp=0.7, top_p=1.0, max_t=350, pres_p=0.3, freq_p=0.5,
-                san=req.san, money=req.money, gpa=req.gpa, arg_count=req.arg_count,
-                hygiene=req.hygiene, reputation=req.reputation,
-                chapter=req.chapter, turn=req.turn, affinity=req.affinity, wechat_data_dict=wechat_dict,
-                is_prefetch=False, custom_prompts=req.custom_prompts
-            )
+            res = engine.perform_turn(req.choice, req)
         
         if engine.event_completion_count >= 3:
             print("🧠 [自动反思] 阈值已到，启动后台提炼...")
@@ -272,7 +281,7 @@ def perform_turn(req: GameTurnRequest):
             next_turn = res["turn"] 
             
             # 内存清理机制
-            if len(PREFETCH_FUTURES) > 15: PREFETCH_FUTURES.clear()
+            if len(engine.prefetch_futures) > 15: engine.prefetch_futures.clear()
                 
             for opt_text in res["next_options"]:
                 opt_choice = opt_text.strip()
@@ -293,10 +302,9 @@ def perform_turn(req: GameTurnRequest):
                     wechat_data_dict=wechat_dict,
                     is_prefetch=True
                 )
-                PREFETCH_FUTURES[next_cache_key] = future
+                engine.prefetch_futures[next_cache_key] = future
 
-        global LATEST_GAME_STATE_CACHE
-        LATEST_GAME_STATE_CACHE = {"request": req.dict(), "response": res}
+        engine.latest_game_state_cache = {"request": req.model_dump(), "response": res}
         
         return res
     except Exception as e:
@@ -304,7 +312,8 @@ def perform_turn(req: GameTurnRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/game/monitor")
-def monitor_game():
+def monitor_game(user_id: str = Depends(get_user_id)):
+    engine = get_engine(user_id)
     # 引擎的计数状态
     engine_stats = {
         "event_completion_count": engine.event_completion_count if engine else 0,
@@ -312,18 +321,22 @@ def monitor_game():
     }
     return {
         "status": "success", 
-        "data": LATEST_GAME_STATE_CACHE,
+        "data": engine.latest_game_state_cache,
         "engine_stats": engine_stats
     }
 
 @app.post("/api/game/save")
-def save_game(req: SaveGameRequest):
+def save_game(req: SaveGameRequest, user_id: str = Depends(get_user_id)):
     if req.slot_id not in [1, 2, 3]:
         raise HTTPException(status_code=400, detail="无效的槽位ID")
-    file_path = os.path.join(SAVE_DIR, f"slot_{req.slot_id}.json")
+    
+    user_save_dir = get_user_saves_dir(user_id)
+    os.makedirs(user_save_dir, exist_ok=True)
+    file_path = os.path.join(user_save_dir, f"slot_{req.slot_id}.json")
+    
     save_data = {
         "slot_id": req.slot_id, "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "chapter_info": f"第 {req.chapter} 章 - 第 {req.turn} 回合", "state": req.dict() 
+        "chapter_info": f"第 {req.chapter} 章 - 第 {req.turn} 回合", "state": req.model_dump() 
     }
     try:
         with open(file_path, 'w', encoding='utf-8') as f:
@@ -333,10 +346,12 @@ def save_game(req: SaveGameRequest):
         raise HTTPException(status_code=500, detail=f"保存存档失败: {str(e)}")
 
 @app.get("/api/game/saves_info")
-def get_saves_info():
+def get_saves_info(user_id: str = Depends(get_user_id)):
+    user_save_dir = get_user_saves_dir(user_id)
+    os.makedirs(user_save_dir, exist_ok=True)
     info_list = []
     for i in range(1, 4):
-        file_path = os.path.join(SAVE_DIR, f"slot_{i}.json")
+        file_path = os.path.join(user_save_dir, f"slot_{i}.json")
         if os.path.exists(file_path):
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
@@ -349,24 +364,32 @@ def get_saves_info():
     return {"status": "success", "slots": info_list}
 
 @app.get("/api/game/load/{slot_id}")
-def load_game(slot_id: int):
+def load_game(slot_id: int, user_id: str = Depends(get_user_id)):
     if slot_id not in [1, 2, 3]: raise HTTPException(status_code=400, detail="无效的槽位ID")
-    file_path = os.path.join(SAVE_DIR, f"slot_{slot_id}.json")
+    user_save_dir = get_user_saves_dir(user_id)
+    file_path = os.path.join(user_save_dir, f"slot_{slot_id}.json")
     if not os.path.exists(file_path): raise HTTPException(status_code=404, detail="该槽位为空")
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             save_data = json.load(f)
+        
+        # 加载存档时，同步更新 MemoryManager 的 save_id
+        engine = get_engine(user_id)
+        if engine and hasattr(engine, 'mm'):
+            engine.mm.current_save_id = f"slot_{slot_id}"
+            
         return {"status": "success", "data": save_data["state"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"读取存档失败: {str(e)}")
 
 @app.delete("/api/game/save/{slot_id}")
-def delete_save_slot(slot_id: int):
+def delete_save_slot(slot_id: int, user_id: str = Depends(get_user_id)):
     """强制抹除指定槽位的存档"""
     if slot_id not in [1, 2, 3]: 
         raise HTTPException(status_code=400, detail="无效的槽位ID")
     
-    file_path = os.path.join(SAVE_DIR, f"slot_{slot_id}.json")
+    user_save_dir = get_user_saves_dir(user_id)
+    file_path = os.path.join(user_save_dir, f"slot_{slot_id}.json")
     if os.path.exists(file_path):
         try:
             os.remove(file_path)
@@ -376,8 +399,9 @@ def delete_save_slot(slot_id: int):
     return {"status": "success", "message": "该槽位本就为空"}
 
 @app.post("/api/game/reset")
-def reset_game():
+def reset_game(user_id: str = Depends(get_user_id)):
     try:
+        engine = get_engine(user_id)
         if engine and hasattr(engine, 'mm'):
             engine.mm.clear_game_history()
         return {"status": "success", "message": "Backend memory cleared"}
@@ -385,12 +409,64 @@ def reset_game():
         return {"status": "error", "message": str(e)}
 
 # ==========================================
+# 记忆管理接口 (Memory Viewer)
+# ==========================================
+
+@app.get("/api/game/memories")
+def get_memories(save_id: str = "slot_0", char_name: Optional[str] = None, type: Optional[str] = None, user_id: str = Depends(get_user_id)):
+    """获取指定存档下的记忆流数据"""
+    engine = get_engine(user_id)
+    if not engine or not hasattr(engine, 'mm'):
+        raise HTTPException(status_code=500, detail="Memory module offline")
+    
+    try:
+        # 构造过滤条件
+        where = {"save_id": save_id}
+        if type: where["type"] = type
+        
+        data = engine.mm.vector_store.collection.get(where=where)
+        
+        results = []
+        if data and data['ids']:
+            for i in range(len(data['ids'])):
+                meta = data['metadatas'][i]
+                doc = data['documents'][i]
+                
+                # 手动过滤角色名 (简单的文本匹配)
+                if char_name and char_name not in doc:
+                    continue
+                    
+                results.append({
+                    "id": data['ids'][i],
+                    "content": doc,
+                    "metadata": meta
+                })
+        
+        return {"status": "success", "data": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/game/memories/{memory_id}")
+def delete_memory(memory_id: str, user_id: str = Depends(get_user_id)):
+    """删除指定的记忆片段"""
+    engine = get_engine(user_id)
+    if not engine or not hasattr(engine, 'mm'):
+        raise HTTPException(status_code=500, detail="Memory module offline")
+    
+    try:
+        engine.mm.vector_store.delete_memory(memory_id)
+        return {"status": "success", "message": f"Memory {memory_id} deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
 # 系统设置接口
 # ==========================================
 
 @app.get("/api/system/settings")
-def get_settings():
+def get_settings(user_id: str = Depends(get_user_id)):
     """读取大模型的当前运行配置"""
+    engine = get_engine(user_id)
     if engine and hasattr(engine, 'llm'):
         return {
             "status": "success",
@@ -406,9 +482,10 @@ def get_settings():
     return {"status": "error", "message": "Engine not ready"}
 
 @app.post("/api/system/settings")
-def update_settings(req: SettingsRequest):
+def update_settings(req: SettingsRequest, user_id: str = Depends(get_user_id)):
     """更新大模型底层配置"""
-    if getattr(engine, 'llm', None):
+    engine = get_engine(user_id)
+    if engine and hasattr(engine, 'llm'):
         if req.temperature is not None: engine.llm.temperature = req.temperature
         if req.max_tokens is not None: engine.llm.max_tokens = req.max_tokens
         if req.typewriter_speed is not None: engine.llm.typewriter_speed = req.typewriter_speed
@@ -487,11 +564,15 @@ async def upload_portrait(file: UploadFile = File(...)):
 
 # CMS 热重载接口
 @app.post("/api/system/rebuild_knowledge")
-def rebuild_knowledge():
+def rebuild_knowledge(user_id: str = Depends(get_user_id)):
     """游戏内触发：重建向量知识库并重载剧本"""
     try:
         from src.core.build_knowledge import build_knowledge
-        build_knowledge()
+        # 重建是全局的还是用户的？如果是重建向量库，可能需要传入 user_id 以隔离路径
+        # 这里的 build_knowledge 脚本暂时可能不支持 user_id，如果它只处理原始数据到全局，则保留。
+        # 但我们至少要重载当前用户的 engine 状态。
+        engine = get_engine(user_id)
+        build_knowledge() 
         if engine and hasattr(engine, 'director'): engine.director.reload_timeline()
         if engine and hasattr(engine, 'pm'): engine.pm.__init__() 
         return {"status": "success", "message": "知识库、剧本与提示词已热重载成功！"}
@@ -499,7 +580,8 @@ def rebuild_knowledge():
         return {"status": "error", "message": f"重建失败: {str(e)}"}
     
 @app.post("/api/game/reflect")
-def trigger_reflection(req: ReflectionRequest):
+def trigger_reflection(req: ReflectionRequest, user_id: str = Depends(get_user_id)):
+    engine = get_engine(user_id)
     if not engine: 
         raise HTTPException(status_code=500, detail="Engine not initialized.")
     try:
@@ -509,7 +591,6 @@ def trigger_reflection(req: ReflectionRequest):
         rs = ReflectionSystem(engine.llm, PROMPTS_DIR) 
         
         # 2. 修复函数名与参数：调用 trigger_night_reflection，并补全 chapter
-        # 注意：这里假设从全局缓存或 req 中获取 chapter，暂设为 engine.director.current_chapter
         current_chapter = getattr(engine.director, 'current_chapter', 1)
         
         logs = rs.trigger_night_reflection(
@@ -525,7 +606,8 @@ def trigger_reflection(req: ReflectionRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/agent/chat")
-async def agent_chat(req: AgentChatRequest):
+async def agent_chat(req: AgentChatRequest, user_id: str = Depends(get_user_id)):
+    engine = get_engine(user_id)
     if not engine: raise HTTPException(status_code=500, detail="Engine not initialized.")
     try:
         from src.core.agent_system import NPCAgent
@@ -548,6 +630,8 @@ async def agent_chat(req: AgentChatRequest):
                         rel_text += f"- 对待【{target}】：表面[{surface}]，内心觉得[{inner}]。\n"
                         
         agent = NPCAgent(req.character, profile_text, rel_text, engine.llm)
+        # 这里可能需要后续的 agent.chat() 调用，目前原始代码只到初始化
+        return {"status": "success", "message": "Agent initialized"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
@@ -628,7 +712,7 @@ def get_workshop_list():
     return {"status": "success", "data": items}
 
 @app.post("/api/workshop/apply/{item_id}")
-def apply_workshop_mod(item_id: str):
+def apply_workshop_mod(item_id: str, user_id: str = Depends(get_user_id)):
     """从工坊解包并重写当前服务端的物理配置文件"""
     print(f"🚀 [Workshop] Applying mod: {item_id}")
     file_path = os.path.join(WORKSHOP_DIR, f"{item_id}.json")
@@ -656,10 +740,11 @@ def apply_workshop_mod(item_id: str):
             with open(abs_p, 'w', encoding='utf-8') as f:
                 f.write(text)
 
-        # 3. 自动触发热重载
+        # 3. 自动触发该用户引擎的热重载
         try:
             from src.core.build_knowledge import build_knowledge
             build_knowledge()
+            engine = get_engine(user_id)
             if engine:
                 if hasattr(engine, 'director'): engine.director.reload_timeline()
                 if hasattr(engine, 'pm'): engine.pm.__init__()
@@ -716,8 +801,9 @@ class MemoryAddReq(BaseModel):
     content: str
 
 @app.get("/api/intervention/memory")
-def get_memories():
+def get_intervention_memories(user_id: str = Depends(get_user_id)):
     """提取底层向量数据库中的所有记忆节点"""
+    engine = get_engine(user_id)
     if not engine or not hasattr(engine, 'mm'): return {"status": "error"}
     try:
         data = engine.mm.vector_store.collection.get()
@@ -733,8 +819,9 @@ def get_memories():
         return {"status": "error", "message": str(e)}
 
 @app.post("/api/intervention/memory")
-def add_memory(req: MemoryAddReq):
+def add_memory(req: MemoryAddReq, user_id: str = Depends(get_user_id)):
     """强制注入记忆片段"""
+    engine = get_engine(user_id)
     from src.models.schema import MemoryItem
     import uuid
     # 标注 type 为 intervention，区别于普通 observation
@@ -743,14 +830,16 @@ def add_memory(req: MemoryAddReq):
     return {"status": "success", "message": "思想钢印注入成功"}
 
 @app.delete("/api/intervention/memory/{mem_id}")
-def delete_memory(mem_id: str):
+def delete_intervention_memory(mem_id: str, user_id: str = Depends(get_user_id)):
     """抹除指定记忆节点"""
+    engine = get_engine(user_id)
     engine.mm.vector_store.collection.delete(ids=[mem_id])
     return {"status": "success"}
 
 @app.get("/api/intervention/tools")
-def get_tools():
+def get_tools(user_id: str = Depends(get_user_id)):
     """获取所有可用的底层挂载工具"""
+    engine = get_engine(user_id)
     if not engine: return {"status": "error"}
     # 反射提取 tool_manager 中的自定义工具函数
     methods = [func for func in dir(engine.tm) if callable(getattr(engine.tm, func)) and not func.startswith("__") and func not in ["execute", "get_tool_logs"]]
@@ -761,20 +850,20 @@ class ToolTriggerReq(BaseModel):
     args: dict
 
 @app.post("/api/intervention/tool")
-def trigger_tool(req: ToolTriggerReq):
+def trigger_tool(req: ToolTriggerReq, user_id: str = Depends(get_user_id)):
     """强制越权调用系统工具"""
+    engine = get_engine(user_id)
     res = engine.tm.execute(req.tool_name, req.args)
     # 将工具产生的影响（数值/文本）强制注入到当前的全局状态缓存中，从而影响游戏前端
-    global LATEST_GAME_STATE_CACHE
-    if "response" in LATEST_GAME_STATE_CACHE:
-        LATEST_GAME_STATE_CACHE["response"]["display_text"] += res.get("display_text", "")
+    if engine.latest_game_state_cache and "response" in engine.latest_game_state_cache:
+        engine.latest_game_state_cache["response"]["display_text"] += res.get("display_text", "")
         if "san_delta" in res:
-            LATEST_GAME_STATE_CACHE["response"]["san"] += res["san_delta"]
-            LATEST_GAME_STATE_CACHE["response"]["san"] = max(0, min(100, LATEST_GAME_STATE_CACHE["response"]["san"]))
+            engine.latest_game_state_cache["response"]["san"] += res["san_delta"]
+            engine.latest_game_state_cache["response"]["san"] = max(0, min(100, engine.latest_game_state_cache["response"]["san"]))
         if "money_delta" in res:
-            LATEST_GAME_STATE_CACHE["response"]["money"] += res["money_delta"]
+            engine.latest_game_state_cache["response"]["money"] += res["money_delta"]
         if "gpa_delta" in res:
-            LATEST_GAME_STATE_CACHE["response"]["gpa"] += res["gpa_delta"]
+            engine.latest_game_state_cache["response"]["gpa"] += res["gpa_delta"]
     return {"status": "success", "result": res}
 
 class OverrideAffinityReq(BaseModel):
@@ -782,11 +871,11 @@ class OverrideAffinityReq(BaseModel):
     value: int
 
 @app.post("/api/intervention/affinity")
-def override_affinity(req: OverrideAffinityReq):
+def override_affinity(req: OverrideAffinityReq, user_id: str = Depends(get_user_id)):
     """强制篡改当前会话的好感度缓存"""
-    global LATEST_GAME_STATE_CACHE
-    if "response" in LATEST_GAME_STATE_CACHE and "affinity" in LATEST_GAME_STATE_CACHE["response"]:
-        LATEST_GAME_STATE_CACHE["response"]["affinity"][req.char_name] = req.value
+    engine = get_engine(user_id)
+    if engine.latest_game_state_cache and "response" in engine.latest_game_state_cache and "affinity" in engine.latest_game_state_cache["response"]:
+        engine.latest_game_state_cache["response"]["affinity"][req.char_name] = req.value
     return {"status": "success"}
 
 class StatsOverrideReq(BaseModel):
@@ -797,21 +886,22 @@ class StatsOverrideReq(BaseModel):
     reputation: int
 
 @app.post("/api/intervention/stats")
-def override_stats(req: StatsOverrideReq):
+def override_stats(req: StatsOverrideReq, user_id: str = Depends(get_user_id)):
     """强制篡改全局状态缓存中的主角数值"""
-    global LATEST_GAME_STATE_CACHE
-    if "response" in LATEST_GAME_STATE_CACHE:
-        LATEST_GAME_STATE_CACHE["response"]["san"] = req.san
-        LATEST_GAME_STATE_CACHE["response"]["money"] = req.money
-        LATEST_GAME_STATE_CACHE["response"]["gpa"] = req.gpa
-        LATEST_GAME_STATE_CACHE["response"]["hygiene"] = req.hygiene
-        LATEST_GAME_STATE_CACHE["response"]["reputation"] = req.reputation
+    engine = get_engine(user_id)
+    if engine.latest_game_state_cache and "response" in engine.latest_game_state_cache:
+        engine.latest_game_state_cache["response"]["san"] = req.san
+        engine.latest_game_state_cache["response"]["money"] = req.money
+        engine.latest_game_state_cache["response"]["gpa"] = req.gpa
+        engine.latest_game_state_cache["response"]["hygiene"] = req.hygiene
+        engine.latest_game_state_cache["response"]["reputation"] = req.reputation
         return {"status": "success", "message": "数值已强制同步"}
     return {"status": "error", "message": "当前没有运行中的游戏实例"}
 
 @app.post("/api/admin/generate_skill_prompt")
-def generate_skill_prompt(req: GenerateSkillPromptReq):
+def generate_skill_prompt(req: GenerateSkillPromptReq, user_id: str = Depends(get_user_id)):
     """调用 AI 一键生成 Skill 提示词"""
+    engine = get_engine(user_id)
     if not engine or not engine.llm:
         raise HTTPException(status_code=500, detail="LLM service not available")
     
@@ -843,6 +933,46 @@ def generate_skill_prompt(req: GenerateSkillPromptReq):
         return {"status": "success", "prompt": content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI 生成失败: {str(e)}")
+
+# ==========================================
+# 调试与监控接口
+# ==========================================
+
+@app.get("/api/debug/chat_history")
+def get_chat_history(user_id: str = Depends(get_user_id)):
+    engine = get_engine(user_id)
+    if not engine or not hasattr(engine, 'mm'):
+        return {"status": "error", "message": "Memory module not ready"}
+    return {"status": "success", "history": engine.mm.game_history}
+
+@app.get("/api/debug/state")
+def get_debug_state(user_id: str = Depends(get_user_id)):
+    engine = get_engine(user_id)
+    if not engine:
+        return {"status": "error", "message": "Engine not ready"}
+    
+    # 转换 Set 为 List
+    recent_events = list(engine.recent_event_ids) if hasattr(engine, 'recent_event_ids') else []
+    
+    return {
+        "status": "success",
+        "data": {
+            "current_chapter": engine.director.current_chapter if hasattr(engine, 'director') else 1,
+            "current_turn": engine.director.current_turn if hasattr(engine, 'director') else 1,
+            "event_count": engine.event_completion_count if hasattr(engine, 'event_completion_count') else 0,
+            "recent_event_ids": recent_events,
+            "roommates": engine.director.active_roommates if hasattr(engine, 'director') else []
+        }
+    }
+
+@app.post("/api/debug/clear_cache")
+def clear_engine_cache(user_id: str = Depends(get_user_id)):
+    engine = get_engine(user_id)
+    if engine:
+        engine.prefetch_futures.clear()
+        engine.latest_game_state_cache = None
+        return {"status": "success", "message": "Cache cleared for this user"}
+    return {"status": "error", "message": "Engine not found"}
 
 if __name__ == "__main__":
     import uvicorn

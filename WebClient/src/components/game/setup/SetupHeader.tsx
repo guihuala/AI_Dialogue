@@ -16,7 +16,7 @@ export const SetupHeader = ({ onBack, isReady }: SetupHeaderProps) => {
           <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
         </button>
         <div>
-          <h2 className="text-3xl font-black text-[var(--color-cyan-dark)] tracking-tight">对局前置初始化</h2>
+          <h2 className="text-3xl font-black text-[var(--color-cyan-dark)] tracking-tight">游戏前置初始化</h2>
           <p className="text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.3em]">Room 404</p>
         </div>
       </div>

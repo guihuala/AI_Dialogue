@@ -27,7 +27,7 @@ export const HistoryPanel = ({
     <div className="absolute inset-0 z-40 bg-black/80 backdrop-blur-lg flex flex-col p-6 overflow-hidden">
       <div className="flex justify-between items-center mb-6 shrink-0">
         <h3 className="text-2xl font-black text-[var(--color-cyan-main)] tracking-widest uppercase flex items-center">
-          <ScrollText className="mr-3" /> 对局记录
+          <ScrollText className="mr-3" /> 对话记录
         </h3>
         <button
           onClick={() => setShowHistory(false)}

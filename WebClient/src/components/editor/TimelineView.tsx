@@ -8,7 +8,8 @@ import {
     Settings2,
     Save,
     CalendarDays,
-    Star
+    Star,
+    Sparkles
 } from 'lucide-react';
 
 interface TimelineViewProps {
@@ -39,6 +40,7 @@ export const TimelineView = ({ content, onSave, onSelectPool }: TimelineViewProp
         '随机或专属': UserSearch,
         '随机池': Box,
         '固定': Star,
+        '开局': Sparkles,
     };
 
     const poolColors: Record<string, string> = {
@@ -47,6 +49,7 @@ export const TimelineView = ({ content, onSave, onSelectPool }: TimelineViewProp
         '条件': 'bg-[var(--color-yellow-main)]',
         '随机或专属': 'bg-[var(--color-cyan-light)]',
         '固定': 'bg-[var(--color-yellow-light)]',
+        '开局': 'bg-[var(--color-cyan-main)] shadow-[0_0_15px_rgba(34,197,222,0.4)]',
     };
 
     const years = ['1', '2', '3', '4'];

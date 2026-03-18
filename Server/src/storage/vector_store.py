@@ -1,16 +1,17 @@
 import chromadb
 from chromadb.config import Settings
-from typing import List, Dict
+from typing import List, Dict, Optional
 import uuid
 from datetime import datetime
 from src.models.schema import MemoryItem
+from src.core.config import CHROMA_DB_PATH
 
 class VectorStore:
-    def __init__(self, persist_path: str = "chroma_db"):
+    def __init__(self, persist_path: str = CHROMA_DB_PATH):
         self.client = chromadb.PersistentClient(path=persist_path)
         self.collection = self.client.get_or_create_collection(name="memory_stream")
 
-    def add_memories(self, memories: List[MemoryItem]):
+    def add_memories(self, memories: List[MemoryItem], save_id: Optional[str] = None):
         ids = [m.id for m in memories]
         documents = [m.summary if m.summary else m.content for m in memories]
         
@@ -22,6 +23,8 @@ class VectorStore:
                 "importance": m.importance,
                 "original_content": m.content
             }
+            if save_id:
+                meta["save_id"] = save_id
             metadatas.append(meta)
         
         self.collection.add(
@@ -30,10 +33,11 @@ class VectorStore:
             metadatas=metadatas
         )
 
-    def search(self, query: str, n_results: int = 5) -> List[Dict]:
+    def search(self, query: str, n_results: int = 5, filter_metadata: Optional[Dict] = None) -> List[Dict]:
         results = self.collection.query(
             query_texts=[query],
-            n_results=n_results
+            n_results=n_results,
+            where=filter_metadata
         )
         
         formatted_results = []

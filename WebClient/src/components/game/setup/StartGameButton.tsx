@@ -24,7 +24,7 @@ export const StartGameButton = ({ disabled, isLoading, onClick }: StartGameButto
         ) : (
           <>
             <Rocket className="mr-4 group-hover:animate-bounce" size={20} />
-            构建并注入游戏
+            开始游戏
           </>
         )}
       </button>

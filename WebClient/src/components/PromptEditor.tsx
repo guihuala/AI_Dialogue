@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Globe, Users, ScrollText, Layers, Terminal, Sparkles } from 'lucide-react';
+import { Globe, Users, ScrollText, Layers, Terminal, Sparkles, Save, RefreshCw, Code, UploadCloud } from 'lucide-react';
 import { gameApi } from '../api/gameApi';
 
 import { EditorHeader } from './editor/EditorHeader';
@@ -322,6 +322,7 @@ ${data.content}`;
         if (poolType === 'Boss') targetFile = '01_固定剧情.csv';
         if (poolType === '条件') targetFile = '04_条件触发.csv';
         if (poolType === '专属' || poolType.includes('专属')) targetFile = '03_角色专属.csv';
+        if (poolType === '开局') targetFile = '00_开局剧情.csv';
         
         const file = files.csv.find(f => f.includes(targetFile));
         if (file) {
@@ -381,19 +382,19 @@ ${data.content}`;
                             onClick={() => handleSave()}
                             className="flex items-center px-3 py-2 text-xs font-black text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-main)] hover:text-white rounded-xl transition-colors"
                         >
-                            <span className="mr-3">💾</span> 保存当前修改
+                            <Save size={14} className="mr-3 opacity-40" /> 保存当前修改
                         </button>
                         <button
                             onClick={() => fetchFiles()}
                             className="flex items-center px-3 py-2 text-xs font-black text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-main)] hover:text-white rounded-xl transition-colors"
                         >
-                            <span className="mr-3">🔄</span> 刷新资源列表
+                            <RefreshCw size={14} className="mr-3 opacity-40" /> 刷新资源列表
                         </button>
                         <button
                             onClick={() => setEditMode(editMode === 'visual' ? 'code' : 'visual')}
                             className="flex items-center px-3 py-2 text-xs font-black text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-main)] hover:text-white rounded-xl transition-colors"
                         >
-                            <span className="mr-3">💻</span> 切换编辑模式
+                            <Code size={14} className="mr-3 opacity-40" /> 切换编辑模式
                         </button>
 
                         <div className="h-px bg-[var(--color-cyan-main)]/10 my-2 mx-2" />
@@ -403,13 +404,13 @@ ${data.content}`;
                             onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'game' }))}
                             className="flex items-center px-3 py-2 text-xs font-black text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-main)] hover:text-white rounded-xl transition-colors"
                         >
-                            <span className="mr-3">🌍</span> 返回游戏对局
+                            <Globe size={14} className="mr-3 opacity-40" /> 返回游戏对局
                         </button>
                         <button
                             onClick={() => setShowPublishModal(true)}
                             className="flex items-center px-3 py-2 text-xs font-black text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-main)] hover:text-white rounded-xl transition-colors"
                         >
-                            <span className="mr-3">☁️</span> 发布此模组
+                            <UploadCloud size={14} className="mr-3 opacity-40" /> 发布此模组
                         </button>
                     </div>
                 </div>

@@ -21,7 +21,7 @@ export const GlobalContextMenu = ({
 }: GlobalContextMenuProps) => {
   return (
     <div
-      className="fixed z-[9999] bg-white/95 backdrop-blur-md border-2 border-[var(--color-cyan-main)]/30 rounded-[2rem] shadow-[0_20px_60px_rgba(0,188,212,0.15)] p-3 w-60 animate-in slide-in-from-bottom-5 zoom-in-95 fade-in-0 duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden"
+      className="fixed z-[9999] bg-white/95 backdrop-blur-md border-2 border-[var(--color-cyan-main)]/30 rounded-[1rem] shadow-[0_20px_60px_rgba(0,188,212,0.15)] p-3 w-60 animate-in slide-in-from-bottom-5 zoom-in-95 fade-in-0 duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden"
       style={{
         top: Math.min(y, window.innerHeight - 320),
         left: Math.min(x, window.innerWidth - 240)
@@ -40,7 +40,7 @@ export const GlobalContextMenu = ({
           onClick={() => { showToastMsg("对局已自动存档"); onClose(); }}
           className="flex items-center px-4 py-2.5 text-xs font-black text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-main)] hover:text-white rounded-2xl transition-all hover:translate-x-1 animate-in fade-in slide-in-from-left-3 duration-300 delay-100 fill-mode-both shadow-sm hover:shadow-md"
         >
-          <Save size={16} className="mr-3 text-[var(--color-cyan-main)]" /> 快速存档 (Cloud)
+          <Save size={16} className="mr-3 text-[var(--color-cyan-main)]" /> 快速存档
         </button>
         <button
           onClick={() => { setShowUI(!showUI); onClose(); }}
@@ -70,14 +70,6 @@ export const GlobalContextMenu = ({
         >
           <RefreshCw size={16} className="mr-3" /> 强制刷新界面
         </button>
-
-        <a
-          href="https://github.com"
-          target="_blank"
-          className="mt-4 flex items-center justify-center py-3 bg-[var(--color-yellow-main)] text-[var(--color-cyan-dark)] rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:brightness-105 transition-all shadow-lg animate-in fade-in zoom-in-90 duration-500 delay-400 fill-mode-both active:scale-95"
-        >
-          <Github size={14} className="mr-2" /> 支持本项目
-        </a>
       </div>
     </div>
   );

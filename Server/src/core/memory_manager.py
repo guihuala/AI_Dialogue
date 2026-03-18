@@ -7,10 +7,11 @@ from src.storage.vector_store import VectorStore
 from src.services.llm_service import LLMService
 
 class MemoryManager:
-    def __init__(self, profile_path: str, vector_db_path: str, llm_service: LLMService):
+    def __init__(self, profile_path: str, vector_db_path: str, llm_service: LLMService, save_id: str = "default"):
         self.json_store = JSONStore(profile_path)
         self.vector_store = VectorStore(vector_db_path)
         self.llm_service = llm_service
+        self.current_save_id = save_id
         self.profile = self._load_or_create_profile()
 
     def _load_or_create_profile(self) -> CharacterProfile:
@@ -30,7 +31,7 @@ class MemoryManager:
     def save_interaction(self, user_input: str, ai_response: str, user_name: str = "User"):
         user_mem = MemoryItem(id=str(uuid.uuid4()), type="observation", content=f"{user_name} said: {user_input}")
         ai_mem = MemoryItem(id=str(uuid.uuid4()), type="action", content=f"I replied to {user_name}: {ai_response}")
-        self.vector_store.add_memories([user_mem, ai_mem])
+        self.vector_store.add_memories([user_mem, ai_mem], save_id=self.current_save_id)
 
     def observe_interaction(self, source_name: str, content: str):
         observation = MemoryItem(
@@ -39,11 +40,13 @@ class MemoryManager:
             content=f"I heard {source_name} say: '{content}'",
             related_entities=[source_name]
         )
-        self.vector_store.add_memories([observation])
+        self.vector_store.add_memories([observation], save_id=self.current_save_id)
 
     def chat(self, user_input: str, player_stats_str: str = "", player_persona_str: str = "", current_time_str: str = "", current_event_obj = None) -> tuple[str, List[Dict]]:
         
-        relevant_memories = self.vector_store.search(user_input, n_results=5)
+        # 增加 save_id 过滤
+        filter_meta = {"save_id": self.current_save_id}
+        relevant_memories = self.vector_store.search(user_input, n_results=5, filter_metadata=filter_meta)
         context_str = "\n".join([f"- {m['content']}" for m in relevant_memories])
 
         # 构建 system prompt
@@ -60,19 +63,11 @@ class MemoryManager:
     def clear_game_history(self):
         """清空上一轮游戏的互动记忆，保留角色专属语料"""
         try:
-            # 获取底层的所有数据
-            data = self.vector_store.collection.get()
+            # 获取当前存档下的所有数据
+            data = self.vector_store.collection.get(where={"save_id": self.current_save_id})
             if data and data['ids']:
-                ids_to_delete = []
-                # 遍历判断：如果类型不是 lore，就加入删除列表
-                for i, meta in enumerate(data['metadatas']):
-                    if meta and meta.get("type") != "lore":
-                        ids_to_delete.append(data['ids'][i])
-                
-                # 执行批量删除
-                if ids_to_delete:
-                    self.vector_store.collection.delete(ids=ids_to_delete)
-                    print(f"成功清理了 {len(ids_to_delete)} 条上一局的临时记忆！")
+                self.vector_store.collection.delete(ids=data['ids'])
+                print(f"成功清理了存档 {self.current_save_id} 下的 {len(data['ids'])} 条临时记忆！")
         except Exception as e:
             print(f"清理历史记忆失败: {e}")
 

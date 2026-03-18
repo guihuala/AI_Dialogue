@@ -123,6 +123,7 @@ class EventDirector:
             # 匹配大类
             type_match = False
             if "Boss" in expected_type and getattr(e, 'is_boss', False): type_match = True
+            elif "开局" in expected_type and "开局" in e.event_type: type_match = True
             elif "专属" in expected_type and "专属" in e.event_type: type_match = True
             elif "条件" in expected_type and "条件" in e.event_type: type_match = True
             elif "通用" in expected_type and ("通用" in e.event_type or "随机" in e.event_type): type_match = True

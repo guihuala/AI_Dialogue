@@ -16,9 +16,14 @@ from src.core.event_script import EVENT_DATABASE
 from src.core.prompt_manager import PromptManager
 from src.core.agent_system import NPCAgent
 from src.core.tool_manager import ToolManager
+from src.core.config import (
+    DATA_ROOT, CHROMA_DB_PATH, PROFILE_PATH, 
+    get_user_chroma_path, get_user_saves_dir
+)
 
 class GameEngine:
-    def __init__(self):
+    def __init__(self, user_id: str = "default"):
+        self.user_id = user_id
         self.candidate_pool = {}
         for key, obj in vars(presets_module).items():
             if isinstance(obj, CharacterProfile) and obj.Name != "陆陈安然": 
@@ -26,17 +31,24 @@ class GameEngine:
                 
         self.llm = LLMService()
         
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        data_dir = os.path.join(base_dir, "data")
-        os.makedirs(data_dir, exist_ok=True)
+        # Use user-specific paths
+        user_chroma_path = get_user_chroma_path(user_id)
+        # Profile path is technically global for initial loading, 
+        # but we can make it user-specific if we want they to have different save profiles.
+        # For now, keep PROFILE_PATH global or map it?
+        # Actually, if we want them to have different characters/stats, it should be per-user.
+        user_profile_dir = os.path.dirname(get_user_saves_dir(user_id))
+        user_profile_path = os.path.join(user_profile_dir, "profile.json")
         
-        self.mm = MemoryManager(os.path.join(data_dir, "profile.json"), os.path.join(data_dir, "chroma_db"), self.llm)
+        self.mm = MemoryManager(user_profile_path, user_chroma_path, self.llm)
         self.director = EventDirector()
         self.pm = PromptManager()
         self.tm = ToolManager()
 
         self.event_completion_count = 0  # 记录已完成的事件数
         self.recent_event_ids = []
+        self.prefetch_futures = {}  # 影子推演缓存
+        self.latest_game_state_cache = {}  # 最后状态缓存
 
     def reset(self):
         self.director.reset()

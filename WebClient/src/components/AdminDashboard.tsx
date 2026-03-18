@@ -12,7 +12,7 @@ export const AdminDashboard = () => {
 
     // Simple hardcoded admin password for demonstration
     // In a real app, this should be verified against a backend
-    const ADMIN_PASSWORD = 'admin'; 
+    const ADMIN_PASSWORD = 'mokukeki';
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -104,7 +104,7 @@ export const AdminDashboard = () => {
                             执行身份注入
                         </button>
                     </form>
-                    
+
                     <p className="mt-8 text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest">
                         Unauthorized access is monitored.
                     </p>
@@ -128,7 +128,7 @@ export const AdminDashboard = () => {
                         </div>
                     </div>
                 </div>
-                
+
                 <div className="flex items-center gap-3">
                     <button
                         onClick={loadItems}
@@ -150,13 +150,13 @@ export const AdminDashboard = () => {
 
             <div className="flex-1 overflow-hidden bg-[var(--color-cyan-light)]/10 rounded-3xl border border-[var(--color-cyan-main)]/5 flex flex-col">
                 <div className="p-6 border-b border-[var(--color-cyan-main)]/10 bg-white/50 overflow-hidden">
-                   <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between mb-4">
                         <h3 className="text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.2em] flex items-center">
                             <Package size={14} className="mr-2" /> 创意工坊已发布项目 ({items.length})
                         </h3>
-                   </div>
+                    </div>
 
-                   <div className="overflow-x-auto custom-scrollbar">
+                    <div className="overflow-x-auto custom-scrollbar">
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="text-[10px] font-black text-[var(--color-cyan-main)]/50 uppercase tracking-widest border-b border-[var(--color-cyan-main)]/5">
@@ -184,7 +184,7 @@ export const AdminDashboard = () => {
                                                 <input
                                                     className="w-full bg-white border border-[var(--color-cyan-main)]/30 rounded px-2 py-1 text-sm outline-none focus:border-[var(--color-cyan-main)]"
                                                     value={editForm.name}
-                                                    onChange={e => setEditForm({...editForm, name: e.target.value})}
+                                                    onChange={e => setEditForm({ ...editForm, name: e.target.value })}
                                                 />
                                             ) : item.name}
                                         </td>
@@ -193,7 +193,7 @@ export const AdminDashboard = () => {
                                                 <input
                                                     className="w-full bg-white border border-[var(--color-cyan-main)]/30 rounded px-2 py-1 text-sm outline-none focus:border-[var(--color-cyan-main)]"
                                                     value={editForm.author}
-                                                    onChange={e => setEditForm({...editForm, author: e.target.value})}
+                                                    onChange={e => setEditForm({ ...editForm, author: e.target.value })}
                                                 />
                                             ) : item.author}
                                         </td>
@@ -203,7 +203,7 @@ export const AdminDashboard = () => {
                                                     className="w-full bg-white border border-[var(--color-cyan-main)]/30 rounded px-2 py-1 text-xs outline-none focus:border-[var(--color-cyan-main)] resize-none"
                                                     rows={2}
                                                     value={editForm.description}
-                                                    onChange={e => setEditForm({...editForm, description: e.target.value})}
+                                                    onChange={e => setEditForm({ ...editForm, description: e.target.value })}
                                                 />
                                             ) : (
                                                 <p className="text-xs text-slate-500 font-medium line-clamp-2 leading-relaxed">{item.description}</p>
@@ -213,14 +213,14 @@ export const AdminDashboard = () => {
                                             <div className="flex items-center justify-end gap-2">
                                                 {editingId === item.id ? (
                                                     <>
-                                                        <button 
+                                                        <button
                                                             onClick={handleUpdate}
                                                             className="p-2 text-green-500 hover:bg-green-50 rounded-lg transition"
                                                             title="确认保存"
                                                         >
                                                             <Check size={18} />
                                                         </button>
-                                                        <button 
+                                                        <button
                                                             onClick={() => setEditingId(null)}
                                                             className="p-2 text-slate-400 hover:bg-slate-50 rounded-lg transition"
                                                             title="取消"
@@ -230,14 +230,14 @@ export const AdminDashboard = () => {
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <button 
+                                                        <button
                                                             onClick={() => startEdit(item)}
                                                             className="p-2 text-[var(--color-cyan-main)] hover:bg-[var(--color-cyan-light)] rounded-lg transition"
                                                             title="编辑基本信息"
                                                         >
                                                             <Edit2 size={18} />
                                                         </button>
-                                                        <button 
+                                                        <button
                                                             onClick={() => handleDelete(item.id, item.name)}
                                                             className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition"
                                                             title="彻底下架模组"
@@ -252,11 +252,11 @@ export const AdminDashboard = () => {
                                 ))}
                             </tbody>
                         </table>
-                   </div>
+                    </div>
                 </div>
-                
+
                 <div className="mt-auto p-4 bg-[var(--color-cyan-main)]/5 border-t border-[var(--color-cyan-main)]/10 text-[9px] font-black text-[var(--color-cyan-main)]/40 uppercase tracking-[0.4em] text-center">
-                    Project AntiGravity Admin Interface v1.0.4
+                    Mokukeki Admin Interface v1.0.4
                 </div>
             </div>
         </div>

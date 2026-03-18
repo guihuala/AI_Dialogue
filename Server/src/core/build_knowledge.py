@@ -20,8 +20,10 @@ if PROJECT_ROOT not in sys.path:
 from src.core.memory_manager import MemoryManager
 from src.services.llm_service import LLMService
 from src.models.schema import MemoryItem
+from src.core.config import get_user_chroma_path
+from typing import Optional
 
-def build_knowledge():
+def build_knowledge(user_id: Optional[str] = None):
     data_dir = os.path.join(PROJECT_ROOT, "data")
     lores_dir = os.path.join(data_dir, "lores")
     old_lore_path = os.path.join(data_dir, "lore.csv")
@@ -49,9 +51,15 @@ def build_knowledge():
         except Exception as e:
             print(f"⚠️ 旧版语料迁移失败: {e}")
 
+    # Determine vector DB path based on user_id
+    if user_id:
+        vector_db_path = get_user_chroma_path(user_id)
+    else:
+        vector_db_path = os.path.join(data_dir, "chroma_db")
+
     mm = MemoryManager(
         profile_path=os.path.join(data_dir, "profile.json"), 
-        vector_db_path=os.path.join(data_dir, "chroma_db"), 
+        vector_db_path=vector_db_path, 
         llm_service=LLMService()
     )
 

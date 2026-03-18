@@ -30,6 +30,8 @@ interface GameState {
   audioVolume: number;
   isMuted: boolean;
   uiTransparency: number;
+  currentSaveId: string;
+  visitorId: string;
 
   // actions
   startGame: (roommates?: string[], modId?: string) => Promise<void>;
@@ -68,6 +70,15 @@ export const useGameStore = create<GameState>((set, get) => ({
   audioVolume: 80,
   isMuted: false,
   uiTransparency: 90,
+  currentSaveId: 'slot_0',
+  visitorId: (() => {
+    let id = localStorage.getItem('visitor_id');
+    if (!id) {
+        id = (crypto as any).randomUUID?.() || Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        localStorage.setItem('visitor_id', id);
+    }
+    return id as string;
+  })(),
 
   startGame: async (roommates = [], modId?: string) => {
     set({ isLoading: true });
@@ -75,8 +86,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (modId) {
         await gameApi.applyWorkshopMod(modId);
       }
-      const data = await gameApi.startGame(roommates, undefined);
+      const data = await gameApi.startGame(roommates, undefined, 'slot_0');
       set({
+        currentSaveId: 'slot_0',
         isPlaying: true,
         isLoading: false,
         san: data.san,
@@ -119,10 +131,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         gpa: state.gpa,
         hygiene: state.hygiene,
         reputation: state.reputation,
-        affinity: state.affinity
+        affinity: state.affinity,
+        save_id: state.currentSaveId
       };
       
-      const data = await gameApi.performTurn(turnReq, undefined);
+      const data = await gameApi.performTurn(turnReq, undefined, state.currentSaveId);
       set((prev) => ({
         isLoading: false,
         san: data.san,
@@ -162,10 +175,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({ isLoading: true });
       try {
           const res = await gameApi.loadGame(slotId);
-          const data = res; // app.py returns the state directly in data if wrapped or just the state
-          // res is {"status": "success", "data": state}
           const gameState = res.data;
           set({
+              currentSaveId: `slot_${slotId}`,
               isPlaying: true,
               isLoading: false,
               san: gameState.san,

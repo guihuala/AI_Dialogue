@@ -1,50 +1,45 @@
-# AI Roommate Survival Game (大学室友生存模拟 - 重筑版)
+# 代号：大学档案 ～ AI角色模拟游戏
 
-[English](README_EN.md) | [中文](README.md)
+[English](README_EN.md) | [简体中文](README.md)
 
-## 🌟 项目简介
+## 项目简介
 
-本项目是一个融合了大语言模型（LLM）的**高保真文字冒险与生存模拟游戏**。玩家将在大一至大四的校园周期中，与多位性格迥异、身怀秘密的 AI 室友深度互动，在学业、人际与社交中通过决策生存下去。
+本项目是一个大语言模型驱动的的**角色模拟游戏**，是为桂花拉糕的毕设。
 
-**核心特色：**
-- **🧠 记忆链系统**：基于 ChromaDB 处理多角色长期记忆，AI 室友能记住你曾经的冒犯、帮助与承诺，并在对话中动态回溯。
-- **🎮 自动化剧本引擎**：支持动态推演玩家行为对数值（SAN、GPA、资金、名誉等）的深度影响，并实时重构后续剧情。
-- **📦 创意模组编辑器 (Mod Editor)**：内置强大的可视化配置工具，支持零代码修改角色档案、剧情时间轴、系统逻辑提示词 (Skill)。
-- **🌐 全端 Web 体验**：采用现代化 React + Vite 架构，提供高审美、玻璃拟态风格的 UI 交互，支持 WebAdmin 监控后台。
+玩家（陆陈安然）将在大一至大四的校园周期中，与多位性格迥异、身怀秘密的 AI 室友深度互动，在学业、人际与社交中通过决策生存下去。
 
-## 📂 项目结构
+在我的设想中，大语言模型驱动的角色模拟游戏应该带给玩家更多可能性——于是我设计了自定义prompt，并将prompt打包发布的功能，此功能的目标是：
+- 编写属于自己的世界观、角色和特殊事件
+- 编写skill，让ai完成您提出的任务
+- 发布您编写的模组包到服务器，供其他玩家体验
+
+此外，由于主播水平比较抱歉，本项目高度依赖gemini，代码质量不佳，见笑了。请不要拷打我。
+
+## todo
+
+- [ ] 可能需要重构管理员系统
+- [ ] 默认prompt包写得不怎么样（其实也都是ai生产...主播就差本人都是ai生成的了），ai生成的对话依旧人机，需要修改
+- [ ] 将本项目部署在服务器上
+
+## 项目结构
 
 ```text
 AI_Dialogue/
-├── WebClient/    # React 现代化前端（基于 Vite/Tailwind/Lucide），包含游戏核心与模组编辑器
-├── Server/       # FastAPI 后端服务，处理 LLM 调用、RAG 记忆存储、存档管理与模组打包
+├── WebClient/    # React 现代化前端（基于 Vite/Tailwind/Lucide）
+├── Server/       # FastAPI 后端服务
 ├── README.md     # 本项目中文引导文档
 └── README_EN.md  # 项目英文引导文档
 ```
 
-### 1. 现代化前端 (WebClient)
-- **游戏主对局**：流式打字机演出、微信群聊模拟、实时好感度反馈。
-- **创意编辑器**：
-  - **角色管理**：可视化配置角色档案、立绘上传与身世设定。
-  - **剧情时间轴**：拖拽式编排学年剧情步进与事件池优先级。
-  - **系统逻辑 (Skill)**：支持 AI 一键生成复杂的系统插件 Prompts，并动态挂载至 DM 逻辑中枢。
-- **监控终端**：上帝视角实时查看 AI 决策链、检索到的记忆节点以及底层推理逻辑。
+## 快速启动
 
-### 2. 后端服务 (Server)
-- **src/app.py**：核心 API 网关，支持热重载模组及存档快照。
-- **src/core/game_engine.py**：游戏主控大脑，负责异步推演、分支剪枝及数值结算。
-- **src/core/agent_system.py**：实现 NPC 的反思机制与独立的性格驱动模型。
-- **scripts/run_ai_test.py**：全自动压力测试脚本，可模拟真实玩家进行全周期（大一至大四）的逻辑校验。
-
-## 🚀 快速启动
-
-### 第一步：后端环境配置 (Server)
+### 第一步：后端环境配置
 1. 进入 `Server` 目录并安装依赖：
    ```bash
    cd Server
    pip install -r requirements.txt
    ```
-2. 配置 `.env` 文件，填入你的大模型鉴权：
+2. 配置 `.env` 文件，填入你的APIKEY：
    ```env
    OPENAI_API_KEY=your_key_here
    OPENAI_BASE_URL=https://api.yourprovider.com/v1
@@ -56,8 +51,8 @@ AI_Dialogue/
    ```
    *默认监听地址: `http://127.0.0.1:8000`*
 
-### 第二步：前端环境配置 (WebClient)
-1. 进入 `WebClient` 目录并安装包：
+### 第二步：前端环境配置
+1. 进入 `WebClient` 目录并安装依赖：
    ```bash
    cd WebClient
    npm install
@@ -68,20 +63,10 @@ AI_Dialogue/
    ```
    *默认通过浏览器访问控制台中显示的本地端口*
 
-## 🛠️ 模组开发与测试
-
-### 如何本地测试我的模组？
-我们提供了一套严密的自动测试流水线，避免模组上线后出现剧情死循环或数值崩溃：
-```bash
-# 在 Server 目录下运行
-python scripts/run_ai_test.py
-```
-该脚本将生成详细的测试报告 `Server/data/test_report.md`，供您分析 AI 的逻辑一致性。
-
-## 🎨 技术栈
+## 技术栈
 - **Frontend**: React 18, Vite, Tailwind CSS, Lucide React, Framer Motion
 - **Backend**: FastAPI (Python), ChromaDB (Vector DB), Pydantic
-- **AI Engine**: GPT-4o-mini / DeepSeek (兼容 OpenAI 协议)
+- **AI Engine**: GPT-4 / DeepSeek-V3 (兼容 OpenAI 协议)
 
-## 📄 许可证
+## 许可证
 本项目采用 MIT 许可证。
