@@ -1,69 +1,87 @@
-# AI Roommate Survival Game (大学室友生存模拟)
+# AI Roommate Survival Game (大学室友生存模拟 - 重筑版)
 
 [English](README_EN.md) | [中文](README.md)
 
-## 项目简介
+## 🌟 项目简介
 
-本项目是一个结合了大语言模型（LLM）的文字冒险与生存模拟游戏。玩家将在游戏中扮演一名大学生，与具有不同性格和独特背景设定的 AI 室友进行长周期的互动。
+本项目是一个融合了大语言模型（LLM）的**高保真文字冒险与生存模拟游戏**。玩家将在大一至大四的校园周期中，与多位性格迥异、身怀秘密的 AI 室友深度互动，在学业、人际与社交中通过决策生存下去。
 
-游戏内置了强大的 **AI 角色记忆系统**，支持多角色长期记忆、结构化档案管理和动态剧情生成。后端模型会根据角色性格推演剧情走向，并在每次互动中结算对玩家属性（如：SAN值、资金、GPA等）及时间流逝的影响。
+**核心特色：**
+- **🧠 记忆链系统**：基于 ChromaDB 处理多角色长期记忆，AI 室友能记住你曾经的冒犯、帮助与承诺，并在对话中动态回溯。
+- **🎮 自动化剧本引擎**：支持动态推演玩家行为对数值（SAN、GPA、资金、名誉等）的深度影响，并实时重构后续剧情。
+- **📦 创意模组编辑器 (Mod Editor)**：内置强大的可视化配置工具，支持零代码修改角色档案、剧情时间轴、系统逻辑提示词 (Skill)。
+- **🌐 全端 Web 体验**：采用现代化 React + Vite 架构，提供高审美、玻璃拟态风格的 UI 交互，支持 WebAdmin 监控后台。
 
-## 项目结构
+## 📂 项目结构
 
-整个项目呈前后端分离的架构，主要由 **Client (Unity 客户端)** 和 **Server (Python 接口服务)** 组成。
-
-```
+```text
 AI_Dialogue/
-├── Client/       # Unity 客户端前端，处理游戏 UI 展现、动画及与玩家的直接交互
-├── Server/       # Python FastAPI 后端服务，处理 LLM 调用、游戏状态逻辑和记忆管理
-├── README.md     # 项目整体中文引导文档
-└── README_EN.md  # 项目整体英文引导文档
+├── WebClient/    # React 现代化前端（基于 Vite/Tailwind/Lucide），包含游戏核心与模组编辑器
+├── Server/       # FastAPI 后端服务，处理 LLM 调用、RAG 记忆存储、存档管理与模组打包
+├── README.md     # 本项目中文引导文档
+└── README_EN.md  # 项目英文引导文档
 ```
 
-### 1. 后端服务 (Server)
-包含游戏核心逻辑引擎，基于 Python FastAPI 构建：
-- **AI 动态能力**：通过 `/api/get_options` 和 `/api/perform_action` 接口，根据角色人设、口头禅与禁忌词，动态生成符合逻辑的玩家备选项及剧情发展。
-- **长期记忆检索 (RAG)**：通过 ChromaDB 本地向量数据库管理多角色的过往剧情与观察想法，解决上下文碎片化问题，在每次对话时动态引入过往内容进行参考。
-- **智能反思与记录**：角色可以进行自我反思更新心情或人际关系，形成带有时间维度的每日日志。
-- **Web 系统控制台**：运行后可通过 `http://127.0.0.1:8000/admin` 访问管理后台，提供实时监控、记忆修改、好感度篡改、存档快照管理及剧本热重载功能。
+### 1. 现代化前端 (WebClient)
+- **游戏主对局**：流式打字机演出、微信群聊模拟、实时好感度反馈。
+- **创意编辑器**：
+  - **角色管理**：可视化配置角色档案、立绘上传与身世设定。
+  - **剧情时间轴**：拖拽式编排学年剧情步进与事件池优先级。
+  - **系统逻辑 (Skill)**：支持 AI 一键生成复杂的系统插件 Prompts，并动态挂载至 DM 逻辑中枢。
+- **监控终端**：上帝视角实时查看 AI 决策链、检索到的记忆节点以及底层推理逻辑。
 
-*详情请参考 [Server/README.md](Server/README.md) 用于进一步开发与深入。*
+### 2. 后端服务 (Server)
+- **src/app.py**：核心 API 网关，支持热重载模组及存档快照。
+- **src/core/game_engine.py**：游戏主控大脑，负责异步推演、分支剪枝及数值结算。
+- **src/core/agent_system.py**：实现 NPC 的反思机制与独立的性格驱动模型。
+- **scripts/run_ai_test.py**：全自动压力测试脚本，可模拟真实玩家进行全周期（大一至大四）的逻辑校验。
 
-### 2. 前端客户端 (Client)
-基于 Unity 引擎开发，构筑前端视听体验：
-- 负责 2D/UI 场景的界面视觉展现（包含 FlatKit, ProPixelizer 等视觉插件基础支持）。
-- 扩展丰富的游戏演出体验：支持**角色动作旁白渲染**与真实的**微信群聊界面模拟**显示。
-- 管理前端网络连接服务逻辑 (`NetworkService`)，主要通过 HTTP `POST` 请求向 `http://127.0.0.1:8000` 通信驱动游戏运转。
+## 🚀 快速启动
 
-## 运行与开发指南
-
-游戏跑起来需要分别启动 Server 和 Client，建议按照以下步骤进行：
-
-### 第一步：启动后端服务 (Server)
-1. 进入服务器目录并安装依赖环境：
+### 第一步：后端环境配置 (Server)
+1. 进入 `Server` 目录并安装依赖：
    ```bash
    cd Server
    pip install -r requirements.txt
-   # 若提示找不到 fastapi 环境，可单独再运行 pip install fastapi uvicorn
    ```
-2. 需要将你的 LLM 服务（OpenRouter / OpenAI 等）的鉴权密钥配置在 `.env` 文件中。
-3. 运行后端服务：
+2. 配置 `.env` 文件，填入你的大模型鉴权：
+   ```env
+   OPENAI_API_KEY=your_key_here
+   OPENAI_BASE_URL=https://api.yourprovider.com/v1
+   MODEL_NAME=gpt-4o-mini
+   ```
+3. 启动后端服务：
    ```bash
    python src/app.py
    ```
-后端服务启动成功后默认监听本地 `127.0.0.1:8000` 端口。
+   *默认监听地址: `http://127.0.0.1:8000`*
 
-### 第二步：启动前端游戏环境 (Client)
-1. 使用 **Unity Hub** 添加并打开 `Client` 目录作为项目。
-2. 在 Unity Editor 中定位到游戏主场景，并且确保在启动游戏前，后端的 `http://127.0.0.1:8000` 确实可访问。
-3. 点击 Unity Editor 中的 **Play(播放)** 按钮，开始生存试炼。
+### 第二步：前端环境配置 (WebClient)
+1. 进入 `WebClient` 目录并安装包：
+   ```bash
+   cd WebClient
+   npm install
+   ```
+2. 启动开发服务器：
+   ```bash
+   npm run dev
+   ```
+   *默认通过浏览器访问控制台中显示的本地端口*
 
-## 技术栈与依赖库
-- **后端框架**: Python, FastAPI, uvicorn
-- **大语言模型与 AI**: OpenAI SDK (支持各类兼容接口), ChromaDB (向量数据库)
-- **数据与配置管理**: Pydantic, python-dotenv
-- **游戏客户端**: Unity C# Engine
+## 🛠️ 模组开发与测试
 
-## 许可证
+### 如何本地测试我的模组？
+我们提供了一套严密的自动测试流水线，避免模组上线后出现剧情死循环或数值崩溃：
+```bash
+# 在 Server 目录下运行
+python scripts/run_ai_test.py
+```
+该脚本将生成详细的测试报告 `Server/data/test_report.md`，供您分析 AI 的逻辑一致性。
 
-本项目采用 MIT 许可证 - 查看 [Server/LICENSE](Server/LICENSE) 文件或者各核心组件包含的开源许可了解详情。
+## 🎨 技术栈
+- **Frontend**: React 18, Vite, Tailwind CSS, Lucide React, Framer Motion
+- **Backend**: FastAPI (Python), ChromaDB (Vector DB), Pydantic
+- **AI Engine**: GPT-4o-mini / DeepSeek (兼容 OpenAI 协议)
+
+## 📄 许可证
+本项目采用 MIT 许可证。

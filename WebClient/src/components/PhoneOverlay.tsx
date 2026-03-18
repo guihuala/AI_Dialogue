@@ -31,44 +31,32 @@ export const PhoneOverlay = () => {
 
   return (
     <div className={`fixed inset-y-0 right-0 z-[1000] flex items-center justify-end p-4 md:p-10 pointer-events-none transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${isPhoneOpen ? 'translate-x-0' : 'translate-x-[150%]'}`}>
-      <div className="w-[400px] h-[820px] bg-slate-900 rounded-[4rem] p-4 shadow-[-40px_0_80px_rgba(0,0,0,0.6)] border-[14px] border-slate-800 relative z-10 pointer-events-auto ring-1 ring-white/10 ring-inset">
+      <div className="w-[380px] h-[780px] bg-slate-900 rounded-[3.5rem] p-3 shadow-2xl border border-slate-700 relative z-10 pointer-events-auto ring-8 ring-slate-800">
         
-        {/* Power Button */}
-        <button 
-          onClick={() => togglePhone(false)}
-          className="absolute top-1/2 -right-4 translate-x-3.5 w-4 h-24 bg-slate-800 rounded-full border border-white/10 hover:bg-rose-500 transition-colors shadow-2xl z-50 group pointer-events-auto"
-        >
-          <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-full blur-sm" />
-        </button>
-
-        {/* Dynamic Island */}
-        <div className="absolute top-8 left-1/2 -translate-x-1/2 w-32 h-8 bg-black rounded-full z-[1100] border border-white/5 shadow-inner flex items-center justify-center gap-2">
-            <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
-            <div className="w-3 h-3 bg-slate-900 rounded-full border border-white/5" />
-        </div>
+        {/* Dynamic Island / Earpiece Decoration */}
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 w-28 h-6 bg-black rounded-full z-[1100] border border-white/5 flex items-center justify-center shadow-inner" />
 
         {/* Status Bar */}
-        <div className="absolute top-8 inset-x-12 h-8 flex justify-between items-center z-[1050] px-4 select-none">
-            <div className="text-[12px] font-black text-white/90 font-mono tracking-tighter">
+        <div className="absolute top-6 inset-x-10 h-8 flex justify-between items-center z-[1050] px-6 select-none">
+            <div className="text-[12px] font-bold text-slate-800 font-sans tracking-tight">
                 {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </div>
-            <div className="flex items-center space-x-2">
-                <div className="w-6 h-[10px] rounded-[2px] border border-white/30 relative flex items-center p-[1px]">
-                    <div className="h-full bg-white/90 rounded-[1px]" style={{ width: '85%' }} />
-                    <div className="absolute -right-1 w-0.5 h-1 bg-white/30 rounded-full" />
+            <div className="flex items-center space-x-1.5 opacity-80 scale-90 text-slate-800">
+                <div className="w-5 h-[10px] rounded-[2px] border border-current relative flex items-center p-[1px]">
+                    <div className="h-full bg-current rounded-[1px]" style={{ width: '85%' }} />
                 </div>
             </div>
         </div>
 
         {/* SCREEN CONTAINER */}
-        <div className="w-full h-full rounded-[3rem] overflow-hidden relative flex flex-col shadow-inner bg-black ring-1 ring-white/5">
-            {/* Wallpaper Overlay */}
-            <div className="absolute inset-0 z-0">
+        <div className="w-full h-full rounded-[2.8rem] overflow-hidden relative flex flex-col bg-slate-50 shadow-inner">
+            {/* Minimalist Wallpaper */}
+            <div className="absolute inset-0 z-0 overflow-hidden">
                 <div 
-                    className={`absolute inset-0 bg-cover bg-center transition-all duration-[2000ms] ${currentApp ? 'scale-105 blur-2xl opacity-60' : 'scale-100 blur-0 opacity-100'}`} 
-                    style={{ backgroundImage: "url('https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2029&auto=format&fit=crop')" }}
+                    className={`absolute inset-0 bg-cover bg-center transition-all duration-1000 ${currentApp ? 'scale-110 blur-2xl opacity-40' : 'scale-100 opacity-100'}`} 
+                    style={{ backgroundImage: "url('https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=2070&auto=format&fit=crop')" }}
                 />
-                <div className="absolute inset-0 bg-white/10 backdrop-blur-[2px]" />
+                {!currentApp && <div className="absolute inset-0 bg-white/30 backdrop-blur-[1px]" />}
             </div>
 
             <div className="relative z-10 flex-1 flex flex-col overflow-hidden">
@@ -100,26 +88,24 @@ export const PhoneOverlay = () => {
                 )}
             </div>
 
-            {/* HOME INDICATOR */}
-            <div className="absolute bottom-4 inset-x-0 h-14 flex items-center justify-center z-[1500] pointer-events-none">
+            {/* HOME INDICATOR (Minimalist Flat) */}
+            <div className="absolute bottom-3 inset-x-0 h-10 flex items-center justify-center z-[1500] pointer-events-none">
               <button 
                   onClick={handleHomeClick}
-                  className="w-40 h-2.5 bg-white/80 hover:bg-white rounded-full transition-all duration-300 pointer-events-auto hover:h-4 hover:scale-105 active:scale-90 shadow-[0_0_25px_rgba(0,0,0,0.8),0_0_10px_rgba(255,255,255,0.4)] group relative overflow-hidden ring-1 ring-black/20"
+                  className="w-32 h-1.5 bg-slate-800/10 hover:bg-slate-800/20 rounded-full transition-all duration-300 pointer-events-auto active:scale-95"
                   title="回到桌面"
-              >
-                  <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/50 to-transparent" />
-              </button>
+              />
             </div>
         </div>
 
-        {/* Close Button */}
+        {/* Floating Side Button (Power/Exit) */}
         <button 
             onClick={() => togglePhone(false)}
-            className="absolute top-1/2 -left-20 w-14 h-14 bg-black group hover:bg-[var(--color-cyan-main)] backdrop-blur-md rounded-[1.2rem] border border-white/10 text-white flex items-center justify-center shadow-2xl transition-all scale-100 hover:scale-110 active:scale-95 pointer-events-auto"
+            className="absolute top-1/2 -left-20 w-14 h-14 bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200 text-slate-600 flex items-center justify-center shadow-lg transition-all hover:scale-110 hover:text-rose-500 active:scale-95 pointer-events-auto group"
             title="关闭手机"
         >
             <X size={28} className="group-hover:rotate-90 transition-transform duration-500" />
-            <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[9px] font-black uppercase text-white/40 tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity">Exit</span>
+            <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[9px] font-bold uppercase text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">Exit</span>
         </button>
 
       </div>

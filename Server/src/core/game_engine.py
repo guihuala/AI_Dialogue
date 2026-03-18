@@ -115,6 +115,21 @@ class GameEngine:
                 self.director.used_events = []
                 
             next_evt = self.director.get_next_event(player_stats, selected_chars, affinity)
+            if not next_evt:
+                # 游戏全流程已结束 (毕业)
+                return {
+                    "is_game_over": True,
+                    "display_text": "**[大学生活圆满结束]** 你完成了四年的大学生活，走向了人生的新阶段。恭喜毕业！",
+                    "chapter": chapter,
+                    "turn": turn,
+                    "san": san,
+                    "money": money,
+                    "gpa": gpa,
+                    "is_end": True,
+                    "next_options": ["查看我的结局", "重新开始"],
+                    "dialogue_sequence": [{"speaker": "系统提示", "content": "全剧终。", "mood": "happy"}]
+                }
+
             if next_evt.chapter > chapter:
                 money -= 800  
                 gpa = max(0.0, min(4.0, 3.0 - (arg_count * 0.05)))

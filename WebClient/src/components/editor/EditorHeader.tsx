@@ -1,4 +1,4 @@
-import { Layout, Sparkles, Eye, Code, UploadCloud, Save } from 'lucide-react';
+import { Layout, Sparkles, Eye, Code, UploadCloud, Save, HelpCircle } from 'lucide-react';
 
 interface EditorHeaderProps {
     sidebarCollapsed: boolean;
@@ -9,6 +9,7 @@ interface EditorHeaderProps {
     isSaving: boolean;
     onSave: () => void;
     onPublish: () => void;
+    onShowGuide: () => void;
 }
 
 export const EditorHeader = ({
@@ -19,7 +20,8 @@ export const EditorHeader = ({
     setEditMode,
     isSaving,
     onSave,
-    onPublish
+    onPublish,
+    onShowGuide
 }: EditorHeaderProps) => {
     return (
         <div className="flex items-center justify-between px-8 py-6 bg-white/40 border-b border-white/20 shrink-0">
@@ -59,6 +61,13 @@ export const EditorHeader = ({
                         </button>
                     </div>
                 )}
+                <button
+                    onClick={onShowGuide}
+                    className="w-12 h-12 rounded-full bg-white/60 text-[var(--color-cyan-main)] flex items-center justify-center hover:bg-[var(--color-cyan-main)] hover:text-white transition-all border border-[var(--color-cyan-main)]/20 shadow-sm mr-2"
+                    title="查看编辑器说明文档"
+                >
+                    <HelpCircle size={22} />
+                </button>
                 <button
                     onClick={onPublish}
                     className="flex items-center px-8 py-4 bg-[var(--color-yellow-main)] hover:bg-[var(--color-yellow-light)] text-[var(--color-cyan-dark)] rounded-3xl font-black transition-all text-xs shadow-xl shadow-yellow-900/10 active:scale-95 group"

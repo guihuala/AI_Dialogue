@@ -1,66 +1,130 @@
-import { Plus, Trash2, ScrollText } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, Trash2, ScrollText, X, Search, Filter, ArrowLeft } from 'lucide-react';
 
 interface EventEditorProps {
     parsedCsv: { headers: string[], rows: Record<string, string>[] } | null;
     onUpdateRow: (rowIndex: number, field: string, value: string) => void;
     onAddNew: () => void;
     onDeleteRow: (index: number, name: string) => void;
+    onBack?: () => void;
+    filter?: { chapter?: string, type?: string };
+    setFilter?: (filter: { chapter?: string, type?: string } | undefined) => void;
 }
 
 export const EventEditor = ({
     parsedCsv,
     onUpdateRow,
     onAddNew,
-    onDeleteRow
+    onDeleteRow,
+    onBack,
+    filter,
+    setFilter
 }: EventEditorProps) => {
+    const [searchTerm, setSearchTerm] = useState('');
+    
+    const filteredRows = useMemo(() => {
+        if (!parsedCsv) return [];
+        return parsedCsv.rows.map((row, index) => ({ ...row, originalIndex: index }))
+            .filter(rowItem => {
+               const row = rowItem as any;
+               const values = Object.values(row).map(v => String(v).toLowerCase());
+               const matchesSearch = searchTerm === '' || 
+                  values.some(val => val.includes(searchTerm.toLowerCase()));
+               
+               const matchesChapter = !filter?.chapter || 
+                  String(row['所属章节']) === filter.chapter;
+               
+               const matchesType = !filter?.type || 
+                  (filter.type === 'Boss' ? row['是否Boss'] === 'TRUE' : 
+                   filter.type === 'General' ? (row['事件类型'] === '随机池' || row['事件类型'] === '通用池') :
+                   filter.type === 'Persona' ? row['事件类型'] === '专属池' :
+                   (typeof row['事件类型'] === 'string' && String(row['事件类型']).includes(filter.type)) || filter.type === 'ANY');
+               
+               return matchesSearch && matchesChapter && matchesType;
+            });
+    }, [parsedCsv, searchTerm, filter]);
+
     return (
-        <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between shrink-0 bg-slate-50/30">
-                <div>
-                    <h4 className="text-xl font-black text-[var(--color-cyan-dark)] tracking-tight">剧情事件管理</h4>
+        <div className="flex-1 flex flex-col overflow-hidden bg-[var(--color-warm-bg)]">
+            <div className="px-8 py-6 border-b border-[var(--color-soft-border)] flex flex-col md:flex-row md:items-center justify-between shrink-0 bg-white shadow-sm gap-4">
+                <div className="flex items-center space-x-4">
+                    {onBack && (
+                        <button 
+                            onClick={onBack}
+                            className="p-2 hover:bg-[var(--color-cyan-light)] rounded-xl text-[var(--color-cyan-main)] transition-all border border-[var(--color-soft-border)]"
+                        >
+                            <ArrowLeft size={18} />
+                        </button>
+                    )}
+                    <div className="text-left">
+                        <h4 className="text-xl font-black text-[var(--color-cyan-dark)] tracking-tight leading-none mb-1">剧情事件池</h4>
+                        {filter && (
+                             <div className="flex items-center text-[var(--color-cyan-main)]/60 text-[10px] font-black uppercase tracking-widest">
+                                 <span>{filter.chapter ? `学年 ${filter.chapter}` : '跨学年'}</span>
+                                 <span className="mx-2 opacity-30">•</span>
+                                 <span>{filter.type || '所有类型'}</span>
+                             </div>
+                        )}
+                    </div>
                 </div>
-                <button
-                    onClick={onAddNew}
-                    className="px-6 py-3 bg-[var(--color-cyan-dark)] text-white rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center hover:bg-[var(--color-cyan-main)] transition-all shadow-xl shadow-cyan-900/20"
-                >
-                    <Plus size={16} className="mr-2" /> 新增剧情事件
-                </button>
+                
+                <div className="flex items-center space-x-3">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-cyan-main)]/30" size={14} />
+                        <input 
+                            type="text"
+                            placeholder="搜索事件..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-9 pr-4 py-2 bg-[var(--color-cyan-light)]/30 rounded-xl border border-transparent text-[var(--color-cyan-dark)] text-xs font-bold outline-none focus:bg-white focus:border-[var(--color-cyan-main)] transition-all w-48"
+                        />
+                    </div>
+                    <button
+                        onClick={onAddNew}
+                        className="px-6 py-2.5 bg-[var(--color-cyan-dark)] text-white rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center hover:bg-[var(--color-cyan-main)] transition-all shadow-xl shadow-cyan-900/20"
+                    >
+                        <Plus size={14} className="mr-2" /> 新增项
+                    </button>
+                </div>
             </div>
             <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
                 <div className="grid grid-cols-1 gap-6">
-                    {parsedCsv?.rows.map((row, idx) => (
-                        <div key={idx} className="bg-white/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-100 hover:border-[var(--color-cyan-main)]/30 transition-all group/card relative shadow-sm hover:shadow-md">
-                            <button
-                                onClick={() => onDeleteRow(idx, (parsedCsv?.headers && row[parsedCsv.headers[0]]) || `行 ${idx + 1}`)}
-                                className="absolute top-4 right-4 p-2 text-[var(--color-yellow-main)] hover:text-[var(--color-yellow-dark)] opacity-0 group-hover/card:opacity-100 transition-all"
-                            >
-                                <Trash2 size={14} />
-                            </button>
-
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                                {parsedCsv?.headers?.map((h, hIdx) => (
-                                    <div key={h} className={hIdx === (parsedCsv?.headers?.length || 0) - 1 ? "md:col-span-3 space-y-1" : "space-y-1"}>
-                                        <label className="text-[10px] font-bold text-[var(--color-cyan-main)]/50 ml-1 uppercase">{h}</label>
-                                        <textarea
-                                            value={row[h]}
-                                            onChange={(e) => onUpdateRow(idx, h, e.target.value)}
-                                            className="w-full px-4 py-2 bg-white/80 rounded-xl border border-[var(--color-cyan-main)]/10 text-sm font-medium text-[var(--color-cyan-dark)] focus:border-[var(--color-cyan-main)] outline-none transition-all resize-none overflow-hidden"
-                                            rows={1}
-                                            onInput={(e) => {
-                                                const target = e.target as HTMLTextAreaElement;
-                                                target.style.height = 'auto';
-                                                target.style.height = target.scrollHeight + 'px';
-                                            }}
-                                        />
-                                    </div>
-                                ))}
+                    {filteredRows.map((rowItem) => {
+                        const row = rowItem as any;
+                        return (
+                            <div key={row.originalIndex} className="bg-white rounded-2xl p-6 border border-[var(--color-soft-border)] hover:border-[var(--color-cyan-main)]/30 transition-all group/card relative shadow-sm hover:shadow-md">
+                                <button
+                                    onClick={() => onDeleteRow(row.originalIndex, (parsedCsv?.headers && row[parsedCsv.headers[0]]) || `行 ${row.originalIndex + 1}`)}
+                                    className="absolute top-4 right-4 p-2 text-[var(--color-yellow-main)] hover:bg-[var(--color-yellow-light)] rounded-xl opacity-0 group-hover/card:opacity-100 transition-all"
+                                >
+                                    <Trash2 size={14} />
+                                </button>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-left">
+                                    {parsedCsv?.headers?.map((h, hIdx) => (
+                                        <div key={h} className={hIdx === (parsedCsv?.headers?.length || 0) - 1 ? "md:col-span-3 space-y-1" : "space-y-1"}>
+                                            <label className="text-[10px] font-black text-[var(--color-cyan-main)]/50 ml-1 uppercase tracking-widest leading-none">{h}</label>
+                                            <textarea
+                                                value={row[h]}
+                                                onChange={(e) => onUpdateRow(row.originalIndex, h, e.target.value)}
+                                                className="w-full px-4 py-3 bg-[var(--color-cyan-light)]/20 rounded-xl border border-transparent text-sm font-bold text-[var(--color-cyan-dark)] focus:bg-white focus:border-[var(--color-cyan-main)] outline-none transition-all resize-none overflow-hidden"
+                                                rows={1}
+                                                onInput={(e) => {
+                                                    const target = e.target as HTMLTextAreaElement;
+                                                    target.style.height = 'auto';
+                                                    target.style.height = target.scrollHeight + 'px';
+                                                }}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    ))}
-                    {parsedCsv?.rows.length === 0 && (
+                        );
+                    })}
+                    {filteredRows.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-20 opacity-20">
-                            <ScrollText size={48} className="mb-4" />
-                            <p className="text-sm font-black uppercase tracking-widest">暂无事件数据</p>
+                            <ScrollText size={48} className="mb-4 text-[var(--color-cyan-main)]" />
+                            <p className="text-sm font-black uppercase tracking-widest text-[var(--color-cyan-dark)]">暂无匹配事件数据</p>
                         </div>
                     )}
                 </div>

@@ -17,23 +17,20 @@ export const SettingsPanel = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState('');
     const [saves, setSaves] = useState<any[]>([]);
-    const [activeTab, setActiveTab] = useState<'ai' | 'archives'>('ai');
-    const loadSaveAction = useGameStore(state => state.loadSave);
-    const setTypewriterSpeed = useGameStore(state => state.setTypewriterSpeed);
+    const [activeTab, setActiveTab] = useState<'ai' | 'preferences'>('ai');
+    
+    // Store values
+    const { 
+        audioVolume, setAudioVolume, 
+        isMuted, setMuted, 
+        uiTransparency, setUiTransparency,
+        resetGame,
+        setTypewriterSpeed 
+    } = useGameStore();
 
     useEffect(() => {
         loadSettings();
-        loadSaves();
     }, []);
-
-    const loadSaves = async () => {
-        try {
-            const data = await gameApi.getSavesInfo();
-            setSaves(data.slots || []);
-        } catch (error) {
-            console.error('Failed to load saves:', error);
-        }
-    };
 
     const loadSettings = async () => {
         setIsLoading(true);
@@ -81,7 +78,7 @@ export const SettingsPanel = () => {
                     </div>
                     <div>
                         <h2 className="text-2xl font-black text-[var(--color-cyan-dark)] tracking-wider">系统设置</h2>
-                        <p className="text-sm font-bold text-[var(--color-cyan-dark)]/60">调整大语言模型网关配置与生成策略</p>
+                        <p className="text-sm font-bold text-[var(--color-cyan-dark)]/60">个性化调整您的室友生存体验</p>
                     </div>
                 </div>
                 {message && (
@@ -97,19 +94,38 @@ export const SettingsPanel = () => {
                     onClick={() => setActiveTab('ai')}
                     className={`px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${activeTab === 'ai' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
                 >
-                    AI配置
+                    AI网关
                 </button>
                 <button
-                    onClick={() => setActiveTab('archives')}
-                    className={`px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${activeTab === 'archives' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
+                    onClick={() => setActiveTab('preferences')}
+                    className={`px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${activeTab === 'preferences' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
                 >
-                    存档管理
+                    偏好设置
                 </button>
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-4 space-y-6">
                 {activeTab === 'ai' ? (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        {/* Current Model Status Header */}
+                        <div className="mb-6 p-4 bg-gradient-to-r from-[var(--color-cyan-main)]/10 to-[var(--color-yellow-main)]/5 rounded-2xl border border-[var(--color-cyan-main)]/20 flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                                <div className="p-2 bg-white rounded-lg shadow-sm">
+                                    <Cpu className="text-[var(--color-cyan-main)]" size={18} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-[var(--color-cyan-dark)]/40 uppercase tracking-widest">当前活跃模型</p>
+                                    <p className="font-black text-[var(--color-cyan-dark)] tracking-tight">
+                                        {settings.model_name || '未检测到模型'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                <span className="text-[10px] font-bold text-green-600 uppercase tracking-tighter">API 连接正常</span>
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="bg-white p-5 rounded-2xl border-2 border-[var(--color-cyan-main)]/10 shadow-sm flex flex-col transition-all hover:border-[var(--color-yellow-main)]/50 group">
                                 <label className="text-sm font-black text-[var(--color-cyan-main)] uppercase tracking-wider mb-3 flex items-center">
@@ -151,7 +167,7 @@ export const SettingsPanel = () => {
                             <div className="bg-white p-5 rounded-2xl border-2 border-[var(--color-cyan-main)]/10 shadow-sm flex flex-col transition-all hover:border-[var(--color-yellow-main)]/50 group">
                                 <div className="flex justify-between items-center mb-3">
                                     <label className="text-sm font-black text-[var(--color-cyan-main)] uppercase tracking-wider flex items-center">
-                                        <Thermometer size={16} className="mr-2" /> 温度
+                                        <Thermometer size={16} className="mr-2" /> 创意温度
                                     </label>
                                     <span className="font-black text-[var(--color-yellow-main)] bg-[var(--color-cyan-dark)] px-2 py-0.5 rounded-lg text-xs">
                                         {settings.temperature}
@@ -168,7 +184,7 @@ export const SettingsPanel = () => {
 
                             <div className="bg-white p-5 rounded-2xl border-2 border-[var(--color-cyan-main)]/10 shadow-sm flex flex-col transition-all hover:border-[var(--color-yellow-main)]/50 group">
                                 <label className="text-sm font-black text-[var(--color-cyan-main)] uppercase tracking-wider mb-3 flex items-center">
-                                    <Database size={16} className="mr-2" /> Max Tokens
+                                    <Database size={16} className="mr-2" /> 多样性惩罚
                                 </label>
                                 <input
                                     type="number"
@@ -177,25 +193,6 @@ export const SettingsPanel = () => {
                                     onChange={(e) => setSettings({ ...settings, max_tokens: parseInt(e.target.value) })}
                                     className="bg-[var(--color-cyan-light)]/50 text-[var(--color-cyan-dark)] font-bold p-3 rounded-xl border border-[var(--color-cyan-main)]/20 outline-none focus:ring-2 focus:ring-[var(--color-yellow-main)] transition-shadow w-full"
                                 />
-                            </div>
-
-                            <div className="bg-white p-5 rounded-2xl border-2 border-[var(--color-cyan-main)]/10 shadow-sm flex flex-col transition-all hover:border-[var(--color-yellow-main)]/50 group md:col-span-2">
-                                <div className="flex justify-between items-center mb-3">
-                                    <label className="text-sm font-black text-[var(--color-cyan-main)] uppercase tracking-wider flex items-center">
-                                        <Type size={16} className="mr-2" /> 打字机速度
-                                    </label>
-                                    <span className="font-black text-[var(--color-yellow-main)] bg-[var(--color-cyan-dark)] px-2 py-0.5 rounded-lg text-xs">
-                                        {settings.typewriter_speed} ms/字
-                                    </span>
-                                </div>
-                                <input
-                                    type="range"
-                                    min="5" max="100" step="5"
-                                    value={settings.typewriter_speed}
-                                    onChange={(e) => setSettings({ ...settings, typewriter_speed: parseInt(e.target.value) })}
-                                    className="w-full h-2 bg-[var(--color-cyan-main)]/20 rounded-lg appearance-none cursor-pointer accent-[var(--color-cyan-main)] transition-colors hover:accent-[var(--color-yellow-main)]"
-                                />
-                                <p className="mt-2 text-[10px] text-[var(--color-cyan-dark)]/40 font-bold uppercase tracking-tighter">数值越小，文字显示越快</p>
                             </div>
                         </div>
 
@@ -206,67 +203,110 @@ export const SettingsPanel = () => {
                                 className="flex items-center px-8 py-4 bg-[var(--color-cyan-main)] text-white font-black rounded-xl shadow-lg shadow-[var(--color-cyan-main)]/30 hover:bg-[var(--color-cyan-dark)] hover:scale-105 transition-all disabled:opacity-50 disabled:scale-100 uppercase tracking-widest text-sm"
                             >
                                 {isSaving ? <RefreshCcw className="animate-spin mr-2" size={20} /> : <Save className="mr-2" size={20} />}
-                                {isSaving ? '正在保存...' : '保存'}
+                                {isSaving ? '正在应用...' : '应用更改'}
                             </button>
                         </div>
                     </div>
                 ) : (
-                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <div className="flex items-center space-x-3 mb-6">
-                            <Milestone className="text-[var(--color-yellow-main)]" />
-                            <h3 className="text-xl font-black text-[var(--color-cyan-dark)] uppercase">存档管理</h3>
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
+                        {/* Audio Settings */}
+                        <div className="bg-white p-6 rounded-3xl border-2 border-[var(--color-cyan-main)]/10 shadow-sm">
+                            <div className="flex items-center space-x-3 mb-6">
+                                <div className="p-2 bg-[var(--color-cyan-light)] rounded-xl text-[var(--color-cyan-main)]">
+                                    <Milestone size={20} />
+                                </div>
+                                <h3 className="text-lg font-black text-[var(--color-cyan-dark)] uppercase">音视频偏好</h3>
+                            </div>
+                            
+                            <div className="space-y-6">
+                                <div className="flex flex-col">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <label className="text-sm font-black text-[var(--color-cyan-dark)]/60 uppercase">主音量 (Master Volume)</label>
+                                        <span className="font-black text-[var(--color-cyan-main)]">{audioVolume}%</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="0" max="100"
+                                        value={audioVolume}
+                                        onChange={(e) => setAudioVolume(parseInt(e.target.value))}
+                                        className="w-full h-2 bg-[var(--color-cyan-main)]/10 rounded-lg appearance-none cursor-pointer accent-[var(--color-cyan-main)]"
+                                    />
+                                </div>
+                                
+                                <div className="flex items-center justify-between p-4 bg-[var(--color-cyan-light)]/30 rounded-2xl">
+                                    <div>
+                                        <p className="font-black text-[var(--color-cyan-dark)] text-sm">静音模式</p>
+                                        <p className="text-[10px] font-bold text-[var(--color-cyan-dark)]/40">关闭所有环境音效与背景音乐</p>
+                                    </div>
+                                    <button 
+                                        onClick={() => setMuted(!isMuted)}
+                                        className={`w-14 h-8 rounded-full transition-all relative ${isMuted ? 'bg-red-500' : 'bg-[var(--color-cyan-main)]'}`}
+                                    >
+                                        <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all shadow-sm ${isMuted ? 'left-7' : 'left-1'}`} />
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {saves.map((slot) => (
-                                <div key={slot.slot_id} className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 ${slot.is_empty ? 'border-dashed border-[var(--color-cyan-main)]/20 bg-transparent opacity-60' : 'border-[var(--color-cyan-main)]/10 bg-white hover:border-[var(--color-yellow-main)]/50 shadow-sm'}`}>
-                                    <div className="absolute top-4 right-4 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        {!slot.is_empty && (
-                                            <button
-                                                onClick={async () => {
-                                                    if (confirm('确认要抹除此存档位吗？此操作不可撤销。')) {
-                                                        await gameApi.deleteSave(slot.slot_id);
-                                                        loadSaves();
-                                                    }
-                                                }}
-                                                className="p-1.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all"
-                                                title="抹除存档"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    <div className="mb-4">
-                                        <span className="text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.2em]">SLOT 0{slot.slot_id}</span>
-                                        <h4 className="text-lg font-black text-[var(--color-cyan-dark)] truncate mt-1">
-                                            {slot.is_empty ? '空' : slot.chapter_info}
-                                        </h4>
-                                    </div>
-
-                                    {!slot.is_empty ? (
-                                        <>
-                                            <div className="text-[10px] font-bold text-[var(--color-cyan-dark)]/40 uppercase mb-6 flex items-center">
-                                                <RefreshCcw size={10} className="mr-1" /> 最后修改: {slot.timestamp}
-                                            </div>
-                                            <button
-                                                onClick={() => {
-                                                    if (confirm(`准备加载存档 [${slot.chapter_info}]？当前进度将被覆盖。`)) {
-                                                        loadSaveAction(slot.slot_id);
-                                                    }
-                                                }}
-                                                className="w-full py-2 bg-[var(--color-cyan-light)] hover:bg-[var(--color-yellow-main)] text-[var(--color-cyan-dark)] font-black rounded-lg text-xs uppercase tracking-widest transition-all"
-                                            >
-                                                读取
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <div className="h-[76px] flex items-center justify-center text-[10px] font-black text-[var(--color-cyan-main)]/30 uppercase tracking-[0.3em]">
-                                            等待写入...
-                                        </div>
-                                    )}
+                        {/* UI Settings */}
+                        <div className="bg-white p-6 rounded-3xl border-2 border-[var(--color-cyan-main)]/10 shadow-sm">
+                            <div className="flex items-center space-x-3 mb-6">
+                                <div className="p-2 bg-[var(--color-cyan-light)] rounded-xl text-[var(--color-cyan-main)]">
+                                    <Type size={20} />
                                 </div>
-                            ))}
+                                <h3 className="text-lg font-black text-[var(--color-cyan-dark)] uppercase">显示与文本</h3>
+                            </div>
+                            
+                            <div className="space-y-6">
+                                <div className="flex flex-col">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <label className="text-sm font-black text-[var(--color-cyan-dark)]/60 uppercase">打字机速度</label>
+                                        <span className="font-black text-[var(--color-cyan-main)]">{settings.typewriter_speed}ms</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="5" max="100" step="5"
+                                        value={settings.typewriter_speed}
+                                        onChange={(e) => setSettings({ ...settings, typewriter_speed: parseInt(e.target.value) })}
+                                        className="w-full h-2 bg-[var(--color-cyan-main)]/10 rounded-lg appearance-none cursor-pointer accent-[var(--color-cyan-main)]"
+                                    />
+                                </div>
+
+                                <div className="flex flex-col">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <label className="text-sm font-black text-[var(--color-cyan-dark)]/60 uppercase">界面透明度</label>
+                                        <span className="font-black text-[var(--color-cyan-main)]">{uiTransparency}%</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="50" max="100"
+                                        value={uiTransparency}
+                                        onChange={(e) => setUiTransparency(parseInt(e.target.value))}
+                                        className="w-full h-2 bg-[var(--color-cyan-main)]/10 rounded-lg appearance-none cursor-pointer accent-[var(--color-cyan-main)]"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Dangerous Zone */}
+                        <div className="bg-red-50/50 p-6 rounded-3xl border-2 border-red-100 shadow-sm">
+                            <div className="flex items-center space-x-3 mb-4 text-red-600">
+                                <Trash2 size={20} />
+                                <h3 className="text-lg font-black uppercase">危险区域</h3>
+                            </div>
+                            <p className="text-xs font-bold text-red-600/60 mb-6 uppercase tracking-wider">以下操作将影响后端数据存储，请谨慎操作</p>
+                            
+                            <button 
+                                onClick={() => {
+                                    if(confirm('警告：这将重置后台所有记忆缓存并强制结束当前进程。继续吗？')) {
+                                        resetGame();
+                                    }
+                                }}
+                                className="w-full py-4 bg-white border-2 border-red-200 hover:bg-red-500 hover:border-red-500 hover:text-white text-red-500 font-black rounded-2xl transition-all shadow-sm flex items-center justify-center space-x-2 text-sm uppercase tracking-widest"
+                            >
+                                <RefreshCcw size={18} />
+                                <span>重置后端记忆与当前进度</span>
+                            </button>
                         </div>
                     </div>
                 )}

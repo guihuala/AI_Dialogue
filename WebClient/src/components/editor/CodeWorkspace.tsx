@@ -1,32 +1,44 @@
-import { FileText, Database } from 'lucide-react';
+import { FileText, Database, ArrowLeft } from 'lucide-react';
 
 interface CodeWorkspaceProps {
     selectedFile: { type: 'md' | 'csv', name: string } | null;
     fileContent: string;
     setFileContent: (content: string) => void;
     isLoading: boolean;
+    onBack?: () => void;
 }
 
 export const CodeWorkspace = ({
     selectedFile,
     fileContent,
     setFileContent,
-    isLoading
+    isLoading,
+    onBack
 }: CodeWorkspaceProps) => {
     return (
-        <div className="flex-1 flex flex-col h-full overflow-hidden">
-            <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between shrink-0 bg-slate-50/20">
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-[var(--color-warm-bg)]">
+            <div className="px-8 py-6 border-b border-[var(--color-soft-border)] flex items-center justify-between shrink-0 bg-white shadow-sm">
                 <div className="flex items-center overflow-hidden">
-                    <div className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center mr-4 text-slate-300 shrink-0 shadow-sm">
+                    {onBack && (
+                        <button 
+                            onClick={onBack}
+                            className="p-2 mr-4 hover:bg-[var(--color-cyan-light)] rounded-xl text-[var(--color-cyan-main)] transition-all border border-[var(--color-soft-border)]"
+                        >
+                            <ArrowLeft size={18} />
+                        </button>
+                    )}
+                    <div className="w-10 h-10 rounded-xl bg-white border border-[var(--color-soft-border)] flex items-center justify-center mr-4 text-[var(--color-cyan-main)]/30 shrink-0 shadow-sm">
                         {selectedFile?.type === 'md' ? <FileText size={18} /> : <Database size={18} />}
                     </div>
                     <div className="flex-1 min-w-0">
-                        <h4 className="text-base font-black text-[var(--color-cyan-dark)] truncate tracking-tight">{selectedFile?.name}</h4>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5 whitespace-nowrap overflow-hidden opacity-60">物理链接 // 节点编辑模式</p>
+                        <h4 className="text-base font-black text-[var(--color-cyan-dark)] truncate tracking-tight">{selectedFile?.name?.split('/').pop()}</h4>
+                        <p className="text-[10px] font-black text-[var(--color-life-text)]/40 uppercase tracking-widest mt-0.5 whitespace-nowrap overflow-hidden">
+                            底层数据 // {onBack ? '专注编辑' : '全局同步模式'}
+                        </p>
                     </div>
                 </div>
                 {isLoading && (
-                    <span className="text-[8px] font-black text-[var(--color-cyan-main)] animate-pulse px-3 py-1.5 bg-cyan-50 rounded-full uppercase tracking-widest border border-cyan-100">
+                    <span className="text-[8px] font-black text-[var(--color-cyan-main)] animate-pulse px-3 py-1.5 bg-[var(--color-cyan-light)] rounded-full uppercase tracking-widest border border-[var(--color-cyan-main)]/10">
                         正在同步...
                     </span>
                 )}
@@ -45,8 +57,8 @@ export const CodeWorkspace = ({
                 placeholder="输入源代码或文本指令..."
             />
 
-            <div className="px-8 py-4 border-t border-slate-50 text-[10px] font-black text-slate-300 uppercase tracking-widest items-center justify-between flex bg-slate-50/30">
-                <div className="flex items-center space-x-10">
+            <div className="px-8 py-4 border-t border-[var(--color-soft-border)] text-[10px] font-black text-[var(--color-life-text)]/30 uppercase tracking-widest items-center justify-between flex bg-white/50">
+                <div className="flex items-center space-x-10 text-left">
                     <span className="flex items-center"><div className="w-2.5 h-2.5 mr-3 rounded-full bg-[var(--color-cyan-main)]" /> 安全同步</span>
                     <span>体积: {fileContent.length} 字节</span>
                     <span>类型: {selectedFile?.type.toUpperCase()}</span>

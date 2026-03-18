@@ -106,5 +106,15 @@ export const gameApi = {
   deleteSave: async (slotId: number) => {
     const res = await axios.delete(`${API_BASE}/game/save/${slotId}`);
     return res.data;
+  },
+
+  resetGame: async () => {
+    const res = await axios.post(`${API_BASE}/game/reset`);
+    return res.data;
+  },
+
+  generateSkillPrompt: async (concept: string) => {
+    const res = await axios.post(`${API_BASE}/admin/generate_skill_prompt`, { concept });
+    return res.data;
   }
 };

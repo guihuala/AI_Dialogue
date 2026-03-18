@@ -15,7 +15,7 @@ export interface SystemSettings {
 export const settingsApi = {
     getSettings: async (): Promise<SystemSettings> => {
         const response = await axios.get(`${API_BASE_URL}/settings`);
-        return response.data;
+        return response.data.data;
     },
 
     updateSettings: async (settings: Partial<SystemSettings>): Promise<void> => {

@@ -18,11 +18,26 @@ class PromptManager:
             "slang_dict": self._skill_slang_dict,
             "academic_world": self._skill_academic_world,
             "character_roster": self._skill_character_roster, 
-            "relationship_matrix": self._skill_relationship_matrix 
+            "relationship_matrix": self._skill_relationship_matrix,
+            "user_skills": self._skill_user_defined_loader # 指向动态加载逻辑
         }
 
         # 动态角色文件映射
         self.char_file_map = self._load_char_file_map()
+
+    def _skill_user_defined_loader(self, context: dict) -> str:
+        """动态加载 skills/ 目录下除系统保留文件以外的所有 .md 技能块"""
+        user_skills = []
+        if os.path.exists(self.skills_dir):
+            for file in os.listdir(self.skills_dir):
+                # 排除系统内置或专有逻辑处理的文件（如 slang_chapter_x.md）
+                if file.endswith(".md") and not file.startswith("slang_chapter_"):
+                    content = self._read_md(f"skills/{file}")
+                    if content:
+                        # 自动解析 ID 描述，通过文件名的首行或备注
+                        user_skills.append(f"【系统扩展插件: {file}】\n{content}")
+        
+        return "\n\n".join(user_skills) if user_skills else ""
 
     def _load_char_file_map(self) -> dict:
         default_map = {

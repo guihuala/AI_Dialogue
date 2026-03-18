@@ -27,6 +27,9 @@ interface GameState {
   wechatNotifications: Array<{sender: string, message: string}>;
   isPhoneOpen: boolean;
   typewriterSpeed: number;
+  audioVolume: number;
+  isMuted: boolean;
+  uiTransparency: number;
 
   // actions
   startGame: (roommates?: string[], modId?: string) => Promise<void>;
@@ -34,6 +37,10 @@ interface GameState {
   saveGame: (slotId: number) => Promise<void>;
   loadSave: (slotId: number) => Promise<void>;
   setTypewriterSpeed: (speed: number) => void;
+  setAudioVolume: (volume: number) => void;
+  setMuted: (muted: boolean) => void;
+  setUiTransparency: (transparency: number) => void;
+  resetGame: () => Promise<void>;
   clearWechatNotifications: () => void;
   togglePhone: (open?: boolean) => void;
 }
@@ -58,6 +65,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   wechatNotifications: [],
   isPhoneOpen: false,
   typewriterSpeed: 30,
+  audioVolume: 80,
+  isMuted: false,
+  uiTransparency: 90,
 
   startGame: async (roommates = [], modId?: string) => {
     set({ isLoading: true });
@@ -198,6 +208,32 @@ export const useGameStore = create<GameState>((set, get) => ({
           });
       } catch (e) {
           console.error('Failed to save game:', e);
+      }
+  },
+
+  setAudioVolume: (volume: number) => set({ audioVolume: volume }),
+  setMuted: (muted: boolean) => set({ isMuted: muted }),
+  setUiTransparency: (transparency: number) => set({ uiTransparency: transparency }),
+  
+  resetGame: async () => {
+      try {
+          await gameApi.resetGame();
+          set({
+              isPlaying: false,
+              san: 100,
+              money: 2000,
+              gpa: 4.0,
+              hygiene: 100,
+              reputation: 100,
+              chapter: 1,
+              turn: 0,
+              current_evt_id: '',
+              history: [],
+              wechatNotifications: [],
+              displayText: ''
+          });
+      } catch (e) {
+          console.error('Failed to reset game:', e);
       }
   }
 }));

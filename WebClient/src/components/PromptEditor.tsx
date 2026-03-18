@@ -7,7 +7,10 @@ import { EditorSidebar } from './editor/EditorSidebar';
 import { CharacterEditor } from './editor/CharacterEditor';
 import { EventEditor } from './editor/EventEditor';
 import { CodeWorkspace } from './editor/CodeWorkspace';
+import { TimelineView } from './editor/TimelineView';
+import { TopicExplorer } from './editor/TopicExplorer';
 import { EditorModals } from './editor/EditorModals';
+import { EditorGuide } from './editor/EditorGuide';
 
 import { Category } from './editor/types';
 
@@ -20,11 +23,13 @@ export const PromptEditor = () => {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [showExplorer, setShowExplorer] = useState(true);
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
+    const [eventFilter, setEventFilter] = useState<{ chapter?: string, type?: string } | undefined>(undefined);
 
     const [message, setMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [showPublishModal, setShowPublishModal] = useState(false);
+    const [showGuide, setShowGuide] = useState(false);
     const [publishMetadata, setPublishMetadata] = useState({
         name: '我的自定义模组',
         author: '佚名',
@@ -39,7 +44,7 @@ export const PromptEditor = () => {
     } | null>(null);
 
     const [newItemModal, setNewItemModal] = useState<{
-        type: 'char' | 'event',
+        type: 'char' | 'event' | 'skill',
         name: string,
         archetype?: string,
         description: string
@@ -71,10 +76,21 @@ export const PromptEditor = () => {
                 setShowExplorer(false);
                 setEditMode('visual');
             }
+        } else if (activeCategory === 'event') {
+            const timeline = files.csv.find(f => f === 'timeline.json');
+            if (timeline) {
+                setSelectedFile({ type: 'csv', name: timeline });
+                setShowExplorer(false);
+                setEditMode('visual');
+            }
+        } else if (activeCategory === 'world' || activeCategory === 'skills') {
+            setShowExplorer(false);
+            setEditMode('visual');
+            setSelectedFile(null); // Clear selected file to show explorer by default
         } else {
             setShowExplorer(true);
         }
-    }, [activeCategory, files.md]);
+    }, [activeCategory, files]);
 
     useEffect(() => {
         fetchFiles();
@@ -225,9 +241,44 @@ export const PromptEditor = () => {
 
     const removeCsvRow = (index: number) => {
         if (!parsedCsv) return;
-        const newRows = parsedCsv.rows.filter((_, i) => i !== index);
+        const newRows = [...parsedCsv.rows];
+        newRows.splice(index, 1);
         saveCsv(parsedCsv.headers, newRows);
         setDeleteConfirm(null);
+    };
+
+    const addSkillItem = async (data: { name: string, target: string, content: string }) => {
+        const fileName = `skills/${data.name}.md`;
+        setIsLoading(true);
+        try {
+            const fullContent = `---
+target: ${data.target}
+created_at: ${new Date().toISOString()}
+---
+
+${data.content}`;
+            await gameApi.saveAdminFile('md', fileName, fullContent);
+            fetchFiles();
+            setNewItemModal(null);
+            setMessage('自定义 Skill 已成功装载');
+        } catch (e) {
+            setMessage('Skill 部署失败');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleGenerateSkillPrompt = async (concept: string) => {
+        try {
+            const res = await gameApi.generateSkillPrompt(concept);
+            if (res.status === 'success') {
+                return res.prompt;
+            }
+            throw new Error(res.message || 'AI generate failed');
+        } catch (e: any) {
+            setMessage('AI 生成失败，请检查网络或 API 配置');
+            throw e;
+        }
     };
 
     const saveCsv = (headers: string[], rows: Record<string, string>[]) => {
@@ -248,13 +299,71 @@ export const PromptEditor = () => {
         if (mdFile) {
             setSelectedFile({ type: 'md', name: mdFile });
             setEditMode('code');
-            setShowExplorer(true);
+            setShowExplorer(false); // Hide explorer for character settings too
         } else {
             setMessage(`未找到文件: ${fileName}`);
         }
     };
 
+    const backToRoster = () => {
+        const roster = files.md.find(f => f.endsWith('roster.json'));
+        if (roster) {
+            setSelectedFile({ type: 'md', name: roster });
+            setEditMode('visual');
+            setShowExplorer(false);
+        }
+    };
+
+    const handleSelectPool = (chapter: string, poolType: string) => {
+        setEventFilter({ chapter, type: poolType });
+        
+        // Determine which file to open based on poolType
+        let targetFile = '02_通用随机池.csv';
+        if (poolType === 'Boss') targetFile = '01_固定剧情.csv';
+        if (poolType === '条件') targetFile = '04_条件触发.csv';
+        if (poolType === '专属' || poolType.includes('专属')) targetFile = '03_角色专属.csv';
+        
+        const file = files.csv.find(f => f.includes(targetFile));
+        if (file) {
+            setSelectedFile({ type: 'csv', name: file });
+            setEditMode('visual');
+            setShowExplorer(false); // Hide explorer as requested for specific event editing
+        } else {
+            // If specific file not found, just open the first CSV
+            const firstCsv = files.csv.find(f => f.endsWith('.csv'));
+            if (firstCsv) {
+                setSelectedFile({ type: 'csv', name: firstCsv });
+                setShowExplorer(false);
+            }
+        }
+    };
+
+    const backToTimeline = () => {
+        const timeline = files.csv.find(f => f === 'timeline.json');
+        if (timeline) {
+            setSelectedFile({ type: 'csv', name: timeline });
+            setEditMode('visual');
+            setShowExplorer(false); // Timeline also hides explorer for immersive view
+        }
+    };
+
+    const handleSelectTopic = (fileName: string) => {
+        const file = files.md.find(f => f === fileName || f.endsWith(fileName));
+        if (file) {
+            setSelectedFile({ type: 'md', name: file });
+            setEditMode('code');
+            setShowExplorer(false);
+        }
+    };
+
+    const backToExplorer = () => {
+        setSelectedFile(null);
+        setEditMode('visual');
+        setShowExplorer(false);
+    };
+
     return (
+        <>
         <div
             onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY }); }}
             className="flex-1 flex flex-col h-full bg-[var(--color-cyan-light)]/40 backdrop-blur-3xl rounded-3xl border border-white/50 shadow-2xl animate-fade-in relative transition-all duration-700 overflow-hidden"
@@ -314,6 +423,7 @@ export const PromptEditor = () => {
                 isSaving={isSaving}
                 onSave={() => handleSave()}
                 onPublish={() => setShowPublishModal(true)}
+                onShowGuide={() => setShowGuide(true)}
             />
 
             <div className="flex flex-1 overflow-hidden bg-white/10">
@@ -339,14 +449,21 @@ export const PromptEditor = () => {
                         </div>
                     )}
 
-                    {!selectedFile ? (
+                    {(!selectedFile && activeCategory !== 'world' && activeCategory !== 'skills') ? (
                         <div className="flex-1 flex flex-col items-center justify-center opacity-10">
                             <Sparkles size={80} className="text-slate-300 mb-6" />
                             <p className="text-xl font-black text-[var(--color-cyan-main)] uppercase tracking-widest">请选择操作节点</p>
                         </div>
                     ) : (
                         <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-[var(--color-cyan-main)]/10 overflow-hidden relative group transition-all">
-                            {activeCategory === 'char' && selectedFile?.name.endsWith('roster.json') && editMode === 'visual' ? (
+                            {(activeCategory === 'world' || activeCategory === 'skills') && !selectedFile ? (
+                                <TopicExplorer
+                                    category={activeCategory as any}
+                                    files={activeCategory === 'world' ? files.md : [...files.md, 'main_system.md']}
+                                    onSelectTopic={handleSelectTopic}
+                                    onAddNew={activeCategory === 'skills' ? () => setNewItemModal({ type: 'skill', name: '', description: '' }) : undefined}
+                                />
+                            ) : activeCategory === 'char' && selectedFile?.name.endsWith('roster.json') && editMode === 'visual' ? (
                                 <CharacterEditor
                                     parsedRoster={parsedRoster}
                                     onUpdateItem={updateRosterItem}
@@ -355,12 +472,21 @@ export const PromptEditor = () => {
                                     onAddNew={() => setNewItemModal({ type: 'char', name: '', archetype: '', description: '' })}
                                     onDelete={(id, name) => setDeleteConfirm({ type: 'char', id, name })}
                                 />
+                            ) : activeCategory === 'event' && selectedFile?.name === 'timeline.json' && editMode === 'visual' ? (
+                                <TimelineView
+                                    content={fileContent}
+                                    onSave={(c) => handleSave(c)}
+                                    onSelectPool={handleSelectPool}
+                                />
                             ) : activeCategory === 'event' && selectedFile?.type === 'csv' && editMode === 'visual' ? (
                                 <EventEditor
                                     parsedCsv={parsedCsv}
                                     onUpdateRow={updateCsvRow}
                                     onAddNew={() => setNewItemModal({ type: 'event', name: '', description: '' })}
                                     onDeleteRow={(idx, name) => setDeleteConfirm({ type: 'csv-row', id: `${idx}`, index: idx, name })}
+                                    onBack={backToTimeline}
+                                    filter={eventFilter}
+                                    setFilter={setEventFilter}
                                 />
                             ) : (
                                 <CodeWorkspace
@@ -368,14 +494,16 @@ export const PromptEditor = () => {
                                     fileContent={fileContent}
                                     setFileContent={setFileContent}
                                     isLoading={isLoading}
+                                    onBack={(activeCategory === 'world' || activeCategory === 'skills') ? backToExplorer : activeCategory === 'char' ? backToRoster : undefined}
                                 />
                             )}
                         </div>
                     )}
                 </div>
             </div>
+        </div>
 
-            <EditorModals
+        <EditorModals
                 showPublishModal={showPublishModal}
                 setShowPublishModal={setShowPublishModal}
                 publishMetadata={publishMetadata}
@@ -386,10 +514,17 @@ export const PromptEditor = () => {
                 setDeleteConfirm={setDeleteConfirm}
                 onAddRosterItem={addRosterItem}
                 onAddCsvRow={addCsvRow}
+                onAddSkillItem={addSkillItem}
                 onRemoveRosterItem={removeRosterItem}
                 onRemoveCsvRow={removeCsvRow}
+                onGenerateSkillPrompt={handleGenerateSkillPrompt}
                 parsedCsvHeaders={parsedCsv?.headers || []}
             />
-        </div>
+
+            <EditorGuide
+                isOpen={showGuide}
+                onClose={() => setShowGuide(false)}
+            />
+        </>
     );
 };

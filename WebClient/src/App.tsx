@@ -12,6 +12,7 @@ import { Header } from './components/layout/Header';
 import { GlobalContextMenu } from './components/layout/GlobalContextMenu';
 import { Toast } from './components/layout/Toast';
 import { CustomCursor } from './components/layout/CustomCursor';
+import { LoadingScreen } from './components/layout/LoadingScreen';
 
 function App() {
   const [activeTab, setActiveTab] = useState<'game' | 'workshop' | 'mods' | 'settings' | 'editor' | 'admin'>('game');
@@ -19,6 +20,7 @@ function App() {
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
   const [showUI, setShowUI] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Close context menu on click anywhere
   useEffect(() => {
@@ -28,8 +30,6 @@ function App() {
         setActiveTab('admin');
       }
     };
-    checkAdminRoute();
-
     const handleClick = () => setContextMenu(null);
     const handleChangeTab = (e: any) => {
       if (e.detail) setActiveTab(e.detail);
@@ -69,6 +69,7 @@ function App() {
       className="w-full flex h-screen text-[var(--color-cyan-dark)] bg-[var(--color-cyan-light)] overflow-hidden relative selection:bg-[var(--color-cyan-main)] selection:text-white"
       onContextMenu={handleContextMenu}
     >
+      {isLoading && <LoadingScreen onFinished={() => setIsLoading(false)} />}
       <CustomCursor />
 
       {/* Toast Notification */}

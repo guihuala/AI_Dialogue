@@ -81,6 +81,10 @@ class EventDirector:
                 elif k_lower in ['gpa']: actual_val = player_stats.get('gpa', 3.0)
                 elif k_lower in ['hygiene']: actual_val = player_stats.get('hygiene', 100)
                 elif k_lower in ['reputation', 'rep']: actual_val = player_stats.get('reputation', 50) 
+                elif (k_lower in ['affinity', '好感度', '好感']) and hasattr(event, 'exclusive_char') and event.exclusive_char:
+                    # 如果是角色专属事件，Affinity 代指该角色的好感度
+                    first_char = [c.strip() for c in event.exclusive_char.replace('，', ',').split(',') if c.strip()][0]
+                    actual_val = affinity.get(first_char, 50)
                 elif key in affinity: actual_val = affinity[key]
                 else: 
                     print(f"⚠️ [条件引擎警告] 未知变量 '{key}'，已拦截事件: {event.id}")

@@ -160,6 +160,9 @@ class AgentChatRequest(BaseModel):
     event_context: str
     player_action: str
 
+class GenerateSkillPromptReq(BaseModel):
+    concept: str
+
 # --- 路由与接口 ---
 
 @app.post("/api/game/start")
@@ -805,6 +808,41 @@ def override_stats(req: StatsOverrideReq):
         LATEST_GAME_STATE_CACHE["response"]["reputation"] = req.reputation
         return {"status": "success", "message": "数值已强制同步"}
     return {"status": "error", "message": "当前没有运行中的游戏实例"}
+
+@app.post("/api/admin/generate_skill_prompt")
+def generate_skill_prompt(req: GenerateSkillPromptReq):
+    """调用 AI 一键生成 Skill 提示词"""
+    if not engine or not engine.llm:
+        raise HTTPException(status_code=500, detail="LLM service not available")
+    
+    system_prompt = """你是一个专业的 AI 跑团游戏策划。
+你的任务是将玩家模糊的“设想”转化为具体的“系统插件指令 (Skill Prompt)”。
+
+要求：
+1. 输出内容必须是直接发给 AI 跑团 DM 的系统指令。
+2. 语言要专业、严谨、具有强约束力，能够被大模型精准执行。
+3. 如果玩家设想涉及数值（如好感度、金钱、SAN值），请给出明确的判定规则或计算公式。
+4. 使用 Markdown 格式（可以包含二级标题、列表等）增强条理性。
+5. 不要包含 JSON 格式，直接输出 Markdown 指令正文。
+"""
+    
+    user_prompt = f"玩家的原始设想：{req.concept}\n\n请以此生成一段高质量的系统逻辑提示词，用于扩展游戏功能："
+    
+    try:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        completion = engine.llm.client.chat.completions.create(
+            model=engine.llm.model,
+            messages=messages,
+            temperature=0.8,
+            max_tokens=1500
+        )
+        content = completion.choices[0].message.content
+        return {"status": "success", "prompt": content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI 生成失败: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
