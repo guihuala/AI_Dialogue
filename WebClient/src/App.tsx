@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { GameView } from './components/GameView';
-import { WorkshopBrowser } from './components/WorkshopBrowser';
-import { LocalMods } from './components/LocalMods';
+import { ModManager } from './components/ModManager';
 import { SettingsPanel } from './components/SettingsPanel';
 import { PromptEditor } from './components/PromptEditor';
 import { PhoneOverlay } from './components/PhoneOverlay';
@@ -109,8 +108,8 @@ function App() {
 
         <div className={`flex-1 relative flex flex-col items-stretch justify-center w-full h-full custom-scrollbar transition-all duration-500 ${activeTab === 'game' ? (showUI ? 'p-4 md:px-4 md:py-6 overflow-hidden' : 'p-0 overflow-hidden') : 'p-4 md:px-8 md:py-8 pb-20 overflow-auto'}`}>
           {activeTab === 'game' && <GameView onTabChange={setActiveTab} />}
-          {activeTab === 'workshop' && <WorkshopBrowser />}
-          {activeTab === 'mods' && <LocalMods />}
+          {activeTab === 'mods' && <ModManager onTabChange={setActiveTab} />}
+          {activeTab === 'workshop' && <ModManager onTabChange={setActiveTab} />}
           {activeTab === 'editor' && <PromptEditor />}
           {activeTab === 'settings' && <SettingsPanel />}
           {activeTab === 'admin' && <AdminDashboard />}

@@ -11,6 +11,7 @@ import { TimelineView } from './editor/TimelineView';
 import { TopicExplorer } from './editor/TopicExplorer';
 import { EditorModals } from './editor/EditorModals';
 import { EditorGuide } from './editor/EditorGuide';
+import { CharacterDetailModal } from './editor/CharacterDetailModal';
 
 import { Category } from './editor/types';
 
@@ -48,6 +49,12 @@ export const PromptEditor = () => {
         name: string,
         archetype?: string,
         description: string
+    } | null>(null);
+
+    const [editingCharDetail, setEditingCharDetail] = useState<{
+        id: string,
+        char: any,
+        content: string
     } | null>(null);
 
     const fetchFiles = async () => {
@@ -148,7 +155,17 @@ export const PromptEditor = () => {
 
     const updateRosterItem = (id: string, field: string, value: any) => {
         if (!parsedRoster) return;
-        const newRoster = { ...parsedRoster, [id]: { ...parsedRoster[id], [field]: value } };
+        let newRoster = { ...parsedRoster, [id]: { ...parsedRoster[id], [field]: value } };
+        
+        // Ensure only one protagonist
+        if (field === 'is_player' && value === true) {
+            Object.keys(newRoster).forEach(key => {
+                if (key !== id) {
+                    newRoster[key] = { ...newRoster[key], is_player: false };
+                }
+            });
+        }
+        
         handleSave(JSON.stringify(newRoster, null, 4));
     };
 
@@ -211,9 +228,17 @@ export const PromptEditor = () => {
             if (lines.length === 0) return { headers: [], rows: [] };
             const headers = lines[0].split(',');
             const rows = lines.slice(1).map(line => {
-                const values = line.split(',');
+                // Robust CSV splitting that handles commas inside quotes
+                const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
                 const row: Record<string, string> = {};
-                headers.forEach((h, i) => row[h] = values[i] || '');
+                headers.forEach((h, i) => {
+                    let val = (values[i] || '').trim();
+                    // Remove surrounding quotes if present
+                    if (val.startsWith('"') && val.endsWith('"')) {
+                        val = val.substring(1, val.length - 1);
+                    }
+                    row[h] = val;
+                });
                 return row;
             });
             return { headers, rows };
@@ -289,19 +314,54 @@ ${data.content}`;
         handleSave(csvContent);
     };
 
-    const editCharacterSettings = (char: any) => {
+    const editCharacterSettings = async (char: any) => {
         if (!char.file) {
             setMessage('此角色未关联设定文件');
             return;
         }
         const fileName = char.file.startsWith('characters/') ? char.file : `characters/${char.file}`;
-        const mdFile = files.md.find(f => f === fileName || f.endsWith(fileName));
-        if (mdFile) {
-            setSelectedFile({ type: 'md', name: mdFile });
-            setEditMode('code');
-            setShowExplorer(false); // Hide explorer for character settings too
-        } else {
-            setMessage(`未找到文件: ${fileName}`);
+        setIsLoading(true);
+        try {
+            const res = await gameApi.getAdminFile('md', fileName);
+            if (res.status === 'success') {
+                // Find ID (the key in the roster object)
+                const id = Object.keys(parsedRoster).find(key => parsedRoster[key] === char) || 
+                           Object.keys(parsedRoster).find(key => parsedRoster[key].name === char.name) || '';
+                
+                setEditingCharDetail({
+                    id,
+                    char: { ...char, id },
+                    content: res.content || ''
+                });
+            }
+        } catch (e) {
+            setMessage('读取角色设定失败');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const saveCharacterDetail = async (id: string, updates: any, mdContent: string) => {
+        if (!parsedRoster || !selectedFile) return;
+        setIsLoading(true);
+        try {
+            // 1. Update Roster
+            const newRoster = { ...parsedRoster, [id]: { ...parsedRoster[id], ...updates } };
+            await gameApi.saveAdminFile('md', selectedFile.name, JSON.stringify(newRoster, null, 4));
+            
+            // 2. Update MD file
+            const char = parsedRoster[id];
+            const fileName = char.file.startsWith('characters/') ? char.file : `characters/${char.file}`;
+            await gameApi.saveAdminFile('md', fileName, mdContent);
+            
+            // 3. Refresh local state
+            setFileContent(JSON.stringify(newRoster, null, 4));
+            setEditingCharDetail(null);
+            setMessage('档案同步成功');
+        } catch (e) {
+            setMessage('同步失败!');
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -526,6 +586,16 @@ ${data.content}`;
                 isOpen={showGuide}
                 onClose={() => setShowGuide(false)}
             />
+
+            {editingCharDetail && (
+                <CharacterDetailModal
+                    char={editingCharDetail.char}
+                    charContent={editingCharDetail.content}
+                    onClose={() => setEditingCharDetail(null)}
+                    onSave={saveCharacterDetail}
+                    onUploadAvatar={handleAvatarUpload}
+                />
+            )}
         </>
     );
 };

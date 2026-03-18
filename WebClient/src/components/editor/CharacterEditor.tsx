@@ -1,4 +1,4 @@
-import { Plus, Trash2, UploadCloud, Edit3 } from 'lucide-react';
+import { Plus, Trash2, UploadCloud, Edit3, Star } from 'lucide-react';
 
 interface CharacterEditorProps {
     parsedRoster: any;
@@ -63,46 +63,37 @@ export const CharacterEditor = ({
                                             }}
                                         />
                                     </div>
-                                    <div className="px-3 py-1 bg-[var(--color-cyan-light)] rounded-lg text-[8px] font-black text-[var(--color-cyan-main)] uppercase tracking-widest">
-                                        ID: {id.slice(0, 8)}
-                                    </div>
+                                    <button 
+                                        onClick={() => onUpdateItem(id, 'is_player', !char.is_player)}
+                                        className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center transition-all ${char.is_player ? 'bg-[var(--color-yellow-main)] text-white shadow-lg' : 'bg-[var(--color-soft-border)] text-slate-400 opacity-40 hover:opacity-100'}`}
+                                    >
+                                        <Star size={10} className={`mr-1 ${char.is_player ? 'fill-white' : ''}`} />
+                                        {char.is_player ? '主角 / MC' : '设为主角'}
+                                    </button>
                                 </div>
 
                                 <div className="flex-1 space-y-4 text-left">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-[var(--color-cyan-main)] ml-1 uppercase tracking-widest">角色姓名</label>
-                                            <input
-                                                value={char.name}
-                                                onChange={(e) => onUpdateItem(id, 'name', e.target.value)}
-                                                className="w-full px-4 py-2.5 bg-[var(--color-cyan-light)]/30 rounded-xl border border-transparent text-sm font-bold text-[var(--color-cyan-dark)] focus:bg-white focus:border-[var(--color-cyan-main)] outline-none transition-all"
-                                                placeholder="例: 林飒"
-                                            />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-[var(--color-cyan-main)] ml-1 uppercase tracking-widest">身份标签</label>
-                                            <input
-                                                value={char.archetype}
-                                                onChange={(e) => onUpdateItem(id, 'archetype', e.target.value)}
-                                                className="w-full px-4 py-2.5 bg-[var(--color-cyan-light)]/30 rounded-xl border border-transparent text-sm font-bold text-[var(--color-cyan-dark)] focus:bg-white focus:border-[var(--color-cyan-main)] outline-none transition-all"
-                                                placeholder="例: 高冷学姐"
-                                            />
+                                    <div className="flex flex-col space-y-1">
+                                        <label className="text-[10px] font-black text-[var(--color-cyan-main)] ml-1 uppercase tracking-widest">
+                                            {char.is_player ? '主角姓名' : '角色姓名'}
+                                        </label>
+                                        <div className="text-xl font-black text-[var(--color-cyan-dark)] tracking-tight px-1">
+                                            {char.name}
                                         </div>
                                     </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-[var(--color-cyan-main)] ml-1 uppercase tracking-widest">立绘资源路径</label>
-                                        <input
-                                            value={char.avatar}
-                                            onChange={(e) => onUpdateItem(id, 'avatar', e.target.value)}
-                                            className="w-full px-4 py-2.5 bg-[var(--color-soft-border)]/20 rounded-xl border border-transparent text-[10px] font-mono text-[var(--color-life-text)] focus:bg-white focus:border-[var(--color-cyan-main)] outline-none transition-all"
-                                        />
+                                    <div className="flex flex-col space-y-1">
+                                        <label className="text-[10px] font-black text-[var(--color-cyan-main)] ml-1 uppercase tracking-widest">核心属性</label>
+                                        <div className="text-xs font-bold text-[var(--color-life-text)] bg-[var(--color-cyan-light)]/50 px-4 py-2 rounded-xl inline-block">
+                                            {char.archetype}
+                                        </div>
                                     </div>
+                                    
                                     <div className="pt-2">
                                         <button
                                             onClick={() => onEditSettings(char)}
-                                            className="w-full py-3 bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center hover:bg-[var(--color-cyan-main)] hover:text-white transition-all border border-[var(--color-cyan-main)]/10"
+                                            className="w-full py-3 bg-white border-2 border-[var(--color-cyan-main)]/10 text-[var(--color-cyan-dark)] rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center hover:bg-[var(--color-cyan-light)] transition-all"
                                         >
-                                            <Edit3 size={14} className="mr-2" /> 编辑详细设定文件
+                                            <Edit3 size={14} className="mr-2 text-[var(--color-cyan-main)]" /> 具体信息 & 详细设定
                                         </button>
                                     </div>
                                 </div>

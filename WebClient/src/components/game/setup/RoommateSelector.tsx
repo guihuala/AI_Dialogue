@@ -23,11 +23,9 @@ export const RoommateSelector = ({
             404寝室需要 <span className="text-[var(--color-cyan-main)] px-2 bg-white rounded shadow-sm">3</span> 位性格迥异的舍友
           </p>
         </div>
-        <div className="flex items-center gap-6">
-          <div className="text-right">
-            <div className="text-3xl font-black text-[var(--color-cyan-dark)]">{selectedRoommates.length}<span className="text-[var(--color-cyan-main)]/30">/3</span></div>
-            <div className="text-[8px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.1em]">已选员额</div>
-          </div>
+        <div className="text-right">
+          <div className="text-3xl font-black text-[var(--color-cyan-dark)]">{selectedRoommates.length}<span className="text-[var(--color-cyan-main)]/30">/3</span></div>
+          <div className="text-[8px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.1em]">已选员额</div>
         </div>
       </div>
 

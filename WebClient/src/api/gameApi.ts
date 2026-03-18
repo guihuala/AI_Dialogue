@@ -43,21 +43,7 @@ export const gameApi = {
     return res.data;
   },
 
-  getWorkshopList: async () => {
-    const res = await apiClient.get(`/workshop/list`);
-    return res.data;
-  },
-
-  downloadWorkshopItem: async (itemId: string) => {
-    const res = await apiClient.get(`/workshop/download/${itemId}`);
-    return res.data;
-  },
-
-  uploadWorkshopItem: async (payload: any) => {
-    const res = await apiClient.post(`/workshop/upload`, payload);
-    return res.data;
-  },
-
+  // Admin/Editor Management
   getAdminFiles: async () => {
     const res = await apiClient.get(`/admin/files`);
     return res.data;
@@ -73,6 +59,38 @@ export const gameApi = {
     return res.data;
   },
 
+  // Library Management
+  getLibraryList: async () => {
+    const res = await apiClient.get(`/library/list`);
+    return res.data;
+  },
+
+  saveToLibrary: async (name: string, description: string) => {
+    const res = await apiClient.post(`/library/save_current`, { name, description });
+    return res.data;
+  },
+
+  applyFromLibrary: async (itemId: string) => {
+    const res = await apiClient.post(`/library/apply/${itemId}`);
+    return res.data;
+  },
+
+  deleteFromLibrary: async (itemId: string) => {
+    const res = await apiClient.delete(`/library/${itemId}`);
+    return res.data;
+  },
+
+  // Workshop Management
+  getWorkshopList: async () => {
+    const res = await apiClient.get(`/workshop/list`);
+    return res.data;
+  },
+
+  downloadWorkshopItem: async (itemId: string) => {
+    const res = await apiClient.post(`/workshop/download/${itemId}`);
+    return res.data;
+  },
+
   publishCurrentMod: async (metadata: { name: string, author: string, description: string }) => {
     const res = await apiClient.post(`/workshop/publish_current`, metadata);
     return res.data;
@@ -83,12 +101,12 @@ export const gameApi = {
     return res.data;
   },
 
-  deleteWorkshopMod: async (id: string) => {
+  deleteWorkshopItem: async (id: string) => {
     const res = await apiClient.delete(`/workshop/${id}`);
     return res.data;
   },
 
-  updateWorkshopMod: async (id: string, metadata: { name?: string, author?: string, description?: string }) => {
+  updateWorkshopItem: async (id: string, metadata: { name?: string, author?: string, description?: string }) => {
     const res = await apiClient.patch(`/workshop/${id}`, metadata);
     return res.data;
   },

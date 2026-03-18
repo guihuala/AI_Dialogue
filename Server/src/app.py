@@ -19,23 +19,28 @@ from src.core.game_engine import GameEngine
 from datetime import datetime
 from src.core.config import (
     PROMPTS_DIR, ROSTER_PATH, DATA_ROOT, SAVES_DIR, EVENTS_DIR,
-    get_user_saves_dir, get_user_chroma_path
+    DEFAULT_PROMPTS_DIR, DEFAULT_EVENTS_DIR,
+    get_user_saves_dir, get_user_chroma_path,
+    get_user_prompts_dir, get_user_events_dir, get_user_library_dir
 )
 
 # --- 动态列表管理器 ---
 # Paths are now managed in src.core.config
 
-def get_current_roster():
+def get_current_roster(user_id: str = "default"):
     """动态获取当前角色档案库集"""
-    # 1. 如果存在 roster.json，优先使用
-    if os.path.exists(ROSTER_PATH):
+    user_prompts_dir = get_user_prompts_dir(user_id)
+    user_roster_path = os.path.join(user_prompts_dir, "characters", "roster.json")
+    
+    # 1. 如果存在用户专属 roster.json，优先使用
+    if os.path.exists(user_roster_path):
         try:
-            with open(ROSTER_PATH, 'r', encoding='utf-8') as f:
+            with open(user_roster_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Error loading roster.json: {e}")
+            print(f"Error loading user roster.json ({user_id}): {e}")
             
-    # 2. 如果不存在，从汇编好的 presets 中提取并生成一个基础版
+    # 2. 如果不存在，从汇编好的 presets 中提取并生成一个基础版存入用户目录
     roster = {}
     for cid, profile in CANDIDATE_POOL.items():
         roster[cid] = {
@@ -43,13 +48,14 @@ def get_current_roster():
             "archetype": profile.Core_Archetype,
             "tags": profile.Tags,
             "description": profile.Background_Secret[:40] + "...",
-            "file": f"{cid}.md"
+            "file": f"{cid}.md",
+            "is_player": profile.Name == "陆陈安然"
         }
     
-    # 将其写入磁盘，使之后的 MOD 能够直接覆盖它而不需要修改 Python 代码
+    # 将其写入用户磁盘，使之后的 MOD 能够直接覆盖它
     try:
-        os.makedirs(os.path.dirname(ROSTER_PATH), exist_ok=True)
-        with open(ROSTER_PATH, 'w', encoding='utf-8') as f:
+        os.makedirs(os.path.dirname(user_roster_path), exist_ok=True)
+        with open(user_roster_path, 'w', encoding='utf-8') as f:
             json.dump(roster, f, ensure_ascii=False, indent=4)
     except: pass
     
@@ -84,20 +90,24 @@ def get_engine(user_id: str) -> GameEngine:
     return engines[user_id]
 
 @app.get("/api/game/candidates")
-def get_candidates():
-    """获取所有可选的室友角色基本信息 (动态加载)"""
-    roster = get_current_roster()
-    data = []
+def get_candidates(user_id: str = Depends(get_user_id)):
+    """获取所有可用角色（室友候选人）"""
+    roster = get_current_roster(user_id)
+    candidates = []
     for cid, info in roster.items():
-        data.append({
+        # 过滤掉主角 (陆陈安然)，只返回室友候选人
+        if info.get("is_player") or info.get("name") == "陆陈安然":
+            continue
+            
+        candidates.append({
             "id": cid,
-            "name": info.get("name", "未知"),
-            "avatar": info.get("avatar", ""),
-            "archetype": info.get("archetype", "未知"),
+            "name": info.get("name"),
+            "archetype": info.get("archetype"),
             "tags": info.get("tags", []),
-            "description": info.get("description", "")
+            "description": info.get("description"),
+            "is_player": False # 候选人肯定不是玩家
         })
-    return {"status": "success", "data": data}
+    return {"status": "success", "data": candidates}
 
 
 app.add_middleware(
@@ -506,38 +516,46 @@ class AdminFileSaveReq(BaseModel):
     name: str
     content: str
 
-PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "prompts")
-EVENTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "events")
+# Paths are now resolved dynamically per user
 
 @app.get("/api/admin/files")
-def get_admin_files():
+def get_admin_files(user_id: str = Depends(get_user_id)):
     """获取所有剧情配置文件列表"""
+    user_prompts_dir = get_user_prompts_dir(user_id)
+    user_events_dir = get_user_events_dir(user_id)
+    
     md_files = []
-    if os.path.exists(PROMPTS_DIR):
-        for root, dirs, files in os.walk(PROMPTS_DIR):
+    if os.path.exists(user_prompts_dir):
+        for root, dirs, files in os.walk(user_prompts_dir):
             for file in files:
                 if file.endswith((".md", ".json")):
-                    # 统一路径分隔符，方便前端解析
-                    md_files.append(os.path.relpath(os.path.join(root, file), PROMPTS_DIR).replace("\\", "/"))
+                    md_files.append(os.path.relpath(os.path.join(root, file), user_prompts_dir).replace("\\", "/"))
     
-    csv_files = [f for f in os.listdir(EVENTS_DIR) if f.endswith((".csv", ".json"))] if os.path.exists(EVENTS_DIR) else []
+    csv_files = [f for f in os.listdir(user_events_dir) if f.endswith((".csv", ".json"))] if os.path.exists(user_events_dir) else []
     return {"status": "success", "md": sorted(md_files), "csv": sorted(csv_files)}
 
 @app.get("/api/admin/file")
-def read_admin_file(type: str, name: str):
+def read_admin_file(type: str, name: str, user_id: str = Depends(get_user_id)):
     """读取单个文件内容"""
-    base_dir = PROMPTS_DIR if type == "md" else EVENTS_DIR
+    base_dir = get_user_prompts_dir(user_id) if type == "md" else get_user_events_dir(user_id)
     file_path = os.path.join(base_dir, name)
+    
+    # 如果用户目录没有该文件，尝试从默认目录读取
+    if not os.path.exists(file_path):
+        default_base = DEFAULT_PROMPTS_DIR if type == "md" else DEFAULT_EVENTS_DIR
+        file_path = os.path.join(default_base, name)
+        
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
     with open(file_path, "r", encoding="utf-8") as f:
         return {"status": "success", "content": f.read()}
 
 @app.post("/api/admin/file")
-def save_admin_file(req: AdminFileSaveReq):
-    """保存单个文件内容"""
-    base_dir = PROMPTS_DIR if req.type == "md" else EVENTS_DIR
+def save_admin_file(req: AdminFileSaveReq, user_id: str = Depends(get_user_id)):
+    """保存单个文件内容 (保存到用户私有目录)"""
+    base_dir = get_user_prompts_dir(user_id) if req.type == "md" else get_user_events_dir(user_id)
     file_path = os.path.join(base_dir, req.name)
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
     try:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(req.content)
@@ -587,8 +605,9 @@ def trigger_reflection(req: ReflectionRequest, user_id: str = Depends(get_user_i
     try:
         from src.core.agent_system import ReflectionSystem
         
-        # 1. 修复初始化：需要传入 prompts_dir
-        rs = ReflectionSystem(engine.llm, PROMPTS_DIR) 
+        # 1. 修复初始化：需要传入该用户的 prompts_dir
+        user_prompts_dir = get_user_prompts_dir(user_id)
+        rs = ReflectionSystem(engine.llm, user_prompts_dir) 
         
         # 2. 修复函数名与参数：调用 trigger_night_reflection，并补全 chapter
         current_chapter = getattr(engine.director, 'current_chapter', 1)
@@ -614,7 +633,7 @@ async def agent_chat(req: AgentChatRequest, user_id: str = Depends(get_user_id))
         from src.core.prompt_manager import PromptManager
         import csv
         
-        pm = PromptManager()
+        pm = PromptManager(user_id)
         char_file = pm.char_file_map.get(req.character, "")
         profile_text = pm._read_md(f"characters/{char_file}") if char_file else ""
         rel_text = ""
@@ -636,6 +655,128 @@ async def agent_chat(req: AgentChatRequest, user_id: str = Depends(get_user_id))
         raise HTTPException(status_code=500, detail=str(e))
     
 # ==========================================
+# ==========================================
+# 个人模组库 Library 接口
+# ==========================================
+
+class LibrarySaveReq(BaseModel):
+    name: str
+    description: str
+
+def _package_mod(user_id: str):
+    """助手函数：将用户当前的 active 目录打包为 Content 字典"""
+    prompts_dir = get_user_prompts_dir(user_id)
+    events_dir = get_user_events_dir(user_id)
+    pack_content = {"md": {}, "csv": {}}
+    
+    # 1. 扫描 Prompts
+    if os.path.exists(prompts_dir):
+        for root, dirs, files in os.walk(prompts_dir):
+            for file in files:
+                if file.endswith((".md", ".json")):
+                    rel_path = os.path.relpath(os.path.join(root, file), prompts_dir)
+                    with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
+                        pack_content["md"][rel_path] = f.read()
+
+    # 2. 扫描 Events
+    if os.path.exists(events_dir):
+        for file in os.listdir(events_dir):
+            if file.endswith((".csv", ".json")):
+                with open(os.path.join(events_dir, file), 'r', encoding='utf-8-sig') as f:
+                    pack_content["csv"][file] = f.read()
+    return pack_content
+
+def _apply_mod_content(user_id: str, content: dict):
+    """助手函数：将 Content 字典解包到用户的 active 目录"""
+    prompts_dir = get_user_prompts_dir(user_id)
+    events_dir = get_user_events_dir(user_id)
+    
+    # 1. 应用 MD
+    md_files = content.get("md", {})
+    for rp, text in md_files.items():
+        abs_p = os.path.join(prompts_dir, rp)
+        os.makedirs(os.path.dirname(abs_p), exist_ok=True)
+        with open(abs_p, 'w', encoding='utf-8') as f:
+            f.write(text)
+            
+    # 2. 应用 CSV/JSON
+    csv_files = content.get("csv", {})
+    for fn, text in csv_files.items():
+        abs_p = os.path.join(events_dir, fn)
+        os.makedirs(os.path.dirname(abs_p), exist_ok=True)
+        with open(abs_p, 'w', encoding='utf-8') as f:
+            f.write(text)
+
+@app.post("/api/library/save_current")
+def save_to_library(req: LibrarySaveReq, user_id: str = Depends(get_user_id)):
+    """将当前活动配置另存为库中的一个模组包"""
+    content = _package_mod(user_id)
+    import uuid
+    item_id = str(uuid.uuid4())[:8]
+    data = {
+        "id": item_id,
+        "name": req.name,
+        "author": f"User_{user_id[:4]}",
+        "description": req.description,
+        "content": content,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    lib_dir = get_user_library_dir(user_id)
+    file_path = os.path.join(lib_dir, f"{item_id}.json")
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return {"status": "success", "id": item_id}
+
+@app.get("/api/library/list")
+def list_library(user_id: str = Depends(get_user_id)):
+    """列出当前用户库中所有的模组包"""
+    lib_dir = get_user_library_dir(user_id)
+    items = []
+    if os.path.exists(lib_dir):
+        for fn in os.listdir(lib_dir):
+            if fn.endswith(".json"):
+                try:
+                    with open(os.path.join(lib_dir, fn), 'r', encoding='utf-8') as f:
+                        d = json.load(f)
+                        items.append({
+                            "id": d.get("id"),
+                            "name": d.get("name"),
+                            "description": d.get("description"),
+                            "timestamp": d.get("timestamp")
+                        })
+                except: pass
+    return {"status": "success", "data": sorted(items, key=lambda x: x.get('timestamp', ''), reverse=True)}
+
+@app.post("/api/library/apply/{item_id}")
+def apply_from_library(item_id: str, user_id: str = Depends(get_user_id)):
+    """从个人库中选择一个模组包并应用到当前活动环境"""
+    lib_dir = get_user_library_dir(user_id)
+    file_path = os.path.join(lib_dir, f"{item_id}.json")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Mod not found in library")
+    
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    _apply_mod_content(user_id, data.get("content", {}))
+    
+    # 热重载
+    engine = get_engine(user_id)
+    if engine:
+        if hasattr(engine, 'director'): engine.director.reload_timeline()
+        if hasattr(engine, 'pm'): engine.pm.__init__(user_id)
+        
+    return {"status": "success", "message": f"模组 [{data.get('name')}] 已成功应用"}
+
+@app.delete("/api/library/{item_id}")
+def delete_from_library(item_id: str, user_id: str = Depends(get_user_id)):
+    lib_dir = get_user_library_dir(user_id)
+    file_path = os.path.join(lib_dir, f"{item_id}.json")
+    if os.path.exists(file_path):
+        os.remove(file_path)
+    return {"status": "success"}
+
+# ==========================================
 # 创意工坊 Workshop 接口
 # ==========================================
 
@@ -649,27 +790,11 @@ class WorkshopPublishReq(BaseModel):
     description: str
 
 @app.post("/api/workshop/publish_current")
-def publish_current_mod(req: WorkshopPublishReq):
-    """把当前服务端的 data/prompts 和 data/events 物理文件打包存入工坊仓库"""
-    print(f"📦 [Workshop] Start packaging mod: {req.name} by {req.author}")
-    pack_content = {"md": {}, "csv": {}}
+def publish_current_mod(req: WorkshopPublishReq, user_id: str = Depends(get_user_id)):
+    """将该玩家当前的活动模组打包并在工坊发布"""
+    print(f"📦 [Workshop] User {user_id} publishing mod: {req.name}")
+    pack_content = _package_mod(user_id)
     
-    # 读取 MD 文件
-    if os.path.exists(PROMPTS_DIR):
-        for root, dirs, files in os.walk(PROMPTS_DIR):
-            for file in files:
-                if file.endswith((".md", ".json")):
-                    rel_path = os.path.relpath(os.path.join(root, file), PROMPTS_DIR)
-                    with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
-                        pack_content["md"][rel_path] = f.read()
-
-    # 读取 CSV 文件
-    if os.path.exists(EVENTS_DIR):
-        for file in os.listdir(EVENTS_DIR):
-            if file.endswith(".csv"):
-                with open(os.path.join(EVENTS_DIR, file), 'r', encoding='utf-8-sig') as f:
-                    pack_content["csv"][file] = f.read()
-
     import uuid
     item_id = str(uuid.uuid4())[:8]
     data = {
@@ -687,74 +812,59 @@ def publish_current_mod(req: WorkshopPublishReq):
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     
-    print(f"✅ [Workshop] Mod package created: {item_id}")
     return {"status": "success", "id": item_id}
 
 @app.get("/api/workshop/list")
 def get_workshop_list():
+    """列出工坊中所有已发布的模组"""
     items = []
     if os.path.exists(WORKSHOP_DIR):
-        for filename in os.listdir(WORKSHOP_DIR):
+        for filename in sorted(os.listdir(WORKSHOP_DIR), reverse=True):
             if filename.endswith(".json"):
                 try:
                     with open(os.path.join(WORKSHOP_DIR, filename), 'r', encoding='utf-8') as f:
                         data = json.load(f)
                         items.append({
                             "id": data.get("id"),
-                            "type": data.get("type"),
+                            "type": data.get("type", "prompt_pack"),
                             "name": data.get("name"),
                             "author": data.get("author"),
                             "description": data.get("description"),
-                            "downloads": data.get("downloads", 0)
+                            "downloads": data.get("downloads", 0),
+                            "timestamp": data.get("timestamp")
                         })
                 except Exception as e:
-                    print(f"Error reading workshop file {filename}: {e}")
+                    print(f"[Workshop] Error reading {filename}: {e}")
     return {"status": "success", "data": items}
+
+@app.post("/api/workshop/download/{item_id}")
+def download_workshop_mod(item_id: str, user_id: str = Depends(get_user_id)):
+    """将工坊模组下载到个人模组库"""
+    workshop_path = os.path.join(WORKSHOP_DIR, f"{item_id}.json")
+    if not os.path.exists(workshop_path):
+        raise HTTPException(status_code=404, detail="Item not found")
+        
+    lib_dir = get_user_library_dir(user_id)
+    lib_path = os.path.join(lib_dir, f"{item_id}.json")
+    
+    shutil.copy2(workshop_path, lib_path)
+    
+    # 增加下载计数
+    try:
+        with open(workshop_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        data["downloads"] = data.get("downloads", 0) + 1
+        with open(workshop_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except: pass
+    
+    return {"status": "success", "message": "模组已成功添加到您的收藏库"}
 
 @app.post("/api/workshop/apply/{item_id}")
 def apply_workshop_mod(item_id: str, user_id: str = Depends(get_user_id)):
-    """从工坊解包并重写当前服务端的物理配置文件"""
-    print(f"🚀 [Workshop] Applying mod: {item_id}")
-    file_path = os.path.join(WORKSHOP_DIR, f"{item_id}.json")
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Item not found")
-        
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        content = data.get("content", {})
-        
-        # 1. 应用 MD 与 JSON (由其 RP 决定)
-        md_files = content.get("md", {})
-        for rp, text in md_files.items():
-            abs_p = os.path.join(PROMPTS_DIR, rp)
-            os.makedirs(os.path.dirname(abs_p), exist_ok=True)
-            with open(abs_p, 'w', encoding='utf-8') as f:
-                f.write(text)
-        
-        # 2. 应用 CSV
-        csv_files = content.get("csv", {})
-        for fn, text in csv_files.items():
-            abs_p = os.path.join(EVENTS_DIR, fn)
-            with open(abs_p, 'w', encoding='utf-8') as f:
-                f.write(text)
-
-        # 3. 自动触发该用户引擎的热重载
-        try:
-            from src.core.build_knowledge import build_knowledge
-            build_knowledge()
-            engine = get_engine(user_id)
-            if engine:
-                if hasattr(engine, 'director'): engine.director.reload_timeline()
-                if hasattr(engine, 'pm'): engine.pm.__init__()
-        except Exception as re_e:
-            print(f"Mod Apply Rebuild Warning: {re_e}")
-        
-        print(f"✅ [Workshop] Mod applied successfully.")
-        return {"status": "success", "message": f"模组 [{data.get('name')}] 已成功部署并完成实时热重载。"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    """从工坊直接应用 (内部包含下载到库的步骤)"""
+    download_workshop_mod(item_id, user_id)
+    return apply_from_library(item_id, user_id)
 
 @app.delete("/api/workshop/{item_id}")
 def delete_workshop_item(item_id: str):

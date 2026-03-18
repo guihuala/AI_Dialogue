@@ -12,7 +12,7 @@ from src.models.schema import CharacterProfile
 from src.services.llm_service import LLMService
 from src.core.memory_manager import MemoryManager
 from src.core.event_director import EventDirector
-from src.core.event_script import EVENT_DATABASE
+from src.core.event_script import load_user_events
 from src.core.prompt_manager import PromptManager
 from src.core.agent_system import NPCAgent
 from src.core.tool_manager import ToolManager
@@ -41,8 +41,8 @@ class GameEngine:
         user_profile_path = os.path.join(user_profile_dir, "profile.json")
         
         self.mm = MemoryManager(user_profile_path, user_chroma_path, self.llm)
-        self.director = EventDirector()
-        self.pm = PromptManager()
+        self.director = EventDirector(user_id)
+        self.pm = PromptManager(user_id)
         self.tm = ToolManager()
 
         self.event_completion_count = 0  # 记录已完成的事件数
@@ -150,7 +150,7 @@ class GameEngine:
             turn = 1
             event_context = f"【系统指令】开始以下事件，不要写任何开场白或过场旁白。\n【新事件】:{next_evt.name}\n【场景描述】:{next_evt.description}"
         else:
-            next_evt = EVENT_DATABASE.get(current_evt_id)
+            next_evt = self.director.event_database.get(current_evt_id)
             if not next_evt:
                 return {"error": "事件丢失，请重置游戏。"}
             turn += 1

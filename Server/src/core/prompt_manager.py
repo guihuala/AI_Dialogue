@@ -1,14 +1,19 @@
 import os
 import csv
 
+from src.core.config import get_user_prompts_dir, DEFAULT_PROMPTS_DIR
+
 class PromptManager:
-    def __init__(self):
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        self.prompts_dir = os.path.join(base_dir, "data", "prompts")
+    def __init__(self, user_id: str = "default"):
+        self.user_id = user_id
+        self.prompts_dir = get_user_prompts_dir(user_id)
+        self.default_prompts_dir = DEFAULT_PROMPTS_DIR
+        
         self.skills_dir = os.path.join(self.prompts_dir, "skills")
         self.world_dir = os.path.join(self.prompts_dir, "world")
         self.chars_dir = os.path.join(self.prompts_dir, "characters") 
         
+        # Ensure user directories exist
         os.makedirs(self.skills_dir, exist_ok=True)
         os.makedirs(self.world_dir, exist_ok=True)
         os.makedirs(self.chars_dir, exist_ok=True)
@@ -19,7 +24,7 @@ class PromptManager:
             "academic_world": self._skill_academic_world,
             "character_roster": self._skill_character_roster, 
             "relationship_matrix": self._skill_relationship_matrix,
-            "user_skills": self._skill_user_defined_loader # 指向动态加载逻辑
+            "user_skills": self._skill_user_defined_loader 
         }
 
         # 动态角色文件映射
@@ -73,9 +78,20 @@ class PromptManager:
 
     def _read_md(self, relative_path: str) -> str:
         if not relative_path: return ""
-        file_path = os.path.join(self.prompts_dir, relative_path)
-        if not os.path.exists(file_path) or os.path.isdir(file_path): return ""
-        with open(file_path, 'r', encoding='utf-8') as f: return f.read().strip()
+        
+        # 1. 优先尝试用户专属路径
+        user_path = os.path.join(self.prompts_dir, relative_path)
+        if os.path.exists(user_path) and not os.path.isdir(user_path):
+            with open(user_path, 'r', encoding='utf-8') as f:
+                return f.read().strip()
+                
+        # 2. 回退到默认公共路径
+        default_path = os.path.join(self.default_prompts_dir, relative_path)
+        if os.path.exists(default_path) and not os.path.isdir(default_path):
+            with open(default_path, 'r', encoding='utf-8') as f:
+                return f.read().strip()
+                
+        return ""
 
     def _skill_slang_dict(self, context: dict) -> str:
         chapter = context.get("chapter", 1)

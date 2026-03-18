@@ -2,16 +2,19 @@ import random
 import json
 import os
 import re
-from src.core.event_script import EVENT_DATABASE
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-TIMELINE_PATH = os.path.join(BASE_DIR, "data", "events", "timeline.json")
+from src.core.event_script import load_user_events
+from src.core.config import get_user_events_dir
 
 class EventDirector:
-    def __init__(self):
+    def __init__(self, user_id: str = "default"):
+        self.user_id = user_id
+        self.events_dir = get_user_events_dir(user_id)
+        self.timeline_path = os.path.join(self.events_dir, "timeline.json")
+        
         self.used_events = []
         self.current_chapter = 1
         self.chapter_progress = 0
+        self.event_database = load_user_events(user_id)
         self.timeline_config = self._load_timeline()
         
     def reset(self):
@@ -21,12 +24,13 @@ class EventDirector:
         
     def reload_timeline(self):
         """支持热更新读取"""
+        self.event_database = load_user_events(self.user_id)
         self.timeline_config = self._load_timeline()
 
     def _load_timeline(self):
-        if os.path.exists(TIMELINE_PATH):
+        if os.path.exists(self.timeline_path):
             try:
-                with open(TIMELINE_PATH, 'r', encoding='utf-8') as f:
+                with open(self.timeline_path, 'r', encoding='utf-8') as f:
                     return json.load(f)
             except Exception as e:
                 print(f"❌ Timeline 读取失败: {e}")
@@ -38,8 +42,8 @@ class EventDirector:
             "4": ["随机或专属", "通用", "Boss"]
         }
         
-        os.makedirs(os.path.dirname(TIMELINE_PATH), exist_ok=True)
-        with open(TIMELINE_PATH, 'w', encoding='utf-8') as f:
+        os.makedirs(os.path.dirname(self.timeline_path), exist_ok=True)
+        with open(self.timeline_path, 'w', encoding='utf-8') as f:
             json.dump(default_timeline, f, ensure_ascii=False, indent=4)
             
         return default_timeline
@@ -116,7 +120,7 @@ class EventDirector:
         self.chapter_progress += 1
         
         # 初筛：拿出当前章节的所有未触发事件
-        available_events = [e for e in EVENT_DATABASE.values() if e.chapter == self.current_chapter and e.id not in self.used_events]
+        available_events = [e for e in self.event_database.values() if e.chapter == self.current_chapter and e.id not in self.used_events]
         
         valid_pool = []
         for e in available_events:
