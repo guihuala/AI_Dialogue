@@ -13,6 +13,7 @@ class LLMService:
         
         self.client = OpenAI(base_url=self.base_url, api_key=self.api_key)
         self.async_client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
+        self.typewriter_speed = 30
 
     def update_config(self, api_key: str, base_url: str, model: str):
         if not api_key:

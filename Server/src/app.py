@@ -149,6 +149,7 @@ class SettingsRequest(BaseModel):
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     model_name: Optional[str] = None
+    typewriter_speed: Optional[int] = None
 
 class ReflectionRequest(BaseModel):
     active_roommates: List[str]
@@ -395,7 +396,8 @@ def get_settings():
                 "base_url": engine.llm.base_url or "",
                 "model_name": engine.llm.model or "",
                 "temperature": getattr(engine.llm, 'temperature', 0.7),
-                "max_tokens": getattr(engine.llm, 'max_tokens', 800)
+                "max_tokens": getattr(engine.llm, 'max_tokens', 800),
+                "typewriter_speed": getattr(engine.llm, 'typewriter_speed', 30)
             }
         }
     return {"status": "error", "message": "Engine not ready"}
@@ -406,6 +408,7 @@ def update_settings(req: SettingsRequest):
     if getattr(engine, 'llm', None):
         if req.temperature is not None: engine.llm.temperature = req.temperature
         if req.max_tokens is not None: engine.llm.max_tokens = req.max_tokens
+        if req.typewriter_speed is not None: engine.llm.typewriter_speed = req.typewriter_speed
         
         current_api = req.api_key if req.api_key else engine.llm.api_key
         current_url = req.base_url if req.base_url else engine.llm.base_url
@@ -676,6 +679,31 @@ def delete_workshop_item(item_id: str):
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
     raise HTTPException(status_code=404, detail="Not found")
+
+class WorkshopUpdateReq(BaseModel):
+    name: Optional[str] = None
+    author: Optional[str] = None
+    description: Optional[str] = None
+
+@app.patch("/api/workshop/{item_id}")
+def update_workshop_item(item_id: str, req: WorkshopUpdateReq):
+    """更新工坊条目的基础元数据"""
+    file_path = os.path.join(WORKSHOP_DIR, f"{item_id}.json")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Item not found")
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        if req.name is not None: data["name"] = req.name
+        if req.author is not None: data["author"] = req.author
+        if req.description is not None: data["description"] = req.description
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
 # 系统干预专属接口

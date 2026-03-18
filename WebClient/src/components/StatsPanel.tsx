@@ -62,7 +62,7 @@ export const StatsPanel = () => {
             </div>
             <div className="bg-white/90 px-2 py-1.5 rounded-lg border border-[var(--color-cyan-light)] shadow-sm flex flex-col items-center">
                 <span className="text-[10px] text-[var(--color-cyan-dark)]/70 font-black tracking-widest uppercase">¥</span>
-                <span className="text-sm font-black text-emerald-500">{money}</span>
+                <span className="text-sm font-black text-cyan-500">{money}</span>
             </div>
             <div className="bg-white/90 px-2 py-1.5 rounded-lg border border-[var(--color-cyan-light)] shadow-sm flex flex-col items-center">
                 <span className="text-[10px] text-[var(--color-cyan-dark)]/70 font-black tracking-widest uppercase">GPA</span>

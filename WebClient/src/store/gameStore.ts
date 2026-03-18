@@ -26,10 +26,14 @@ interface GameState {
   history: Array<{turn: number, text: string}>;
   wechatNotifications: Array<{sender: string, message: string}>;
   isPhoneOpen: boolean;
+  typewriterSpeed: number;
 
   // actions
   startGame: (roommates?: string[], modId?: string) => Promise<void>;
   performTurn: (choice: string) => Promise<void>;
+  saveGame: (slotId: number) => Promise<void>;
+  loadSave: (slotId: number) => Promise<void>;
+  setTypewriterSpeed: (speed: number) => void;
   clearWechatNotifications: () => void;
   togglePhone: (open?: boolean) => void;
 }
@@ -53,6 +57,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   history: [],
   wechatNotifications: [],
   isPhoneOpen: false,
+  typewriterSpeed: 30,
 
   startGame: async (roommates = [], modId?: string) => {
     set({ isLoading: true });
@@ -137,5 +142,62 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   togglePhone: (open?: boolean) => {
       set((state) => ({ isPhoneOpen: open !== undefined ? open : !state.isPhoneOpen }));
+  },
+
+  setTypewriterSpeed: (speed: number) => {
+      set({ typewriterSpeed: speed });
+  },
+
+  loadSave: async (slotId: number) => {
+      set({ isLoading: true });
+      try {
+          const res = await gameApi.loadGame(slotId);
+          const data = res; // app.py returns the state directly in data if wrapped or just the state
+          // res is {"status": "success", "data": state}
+          const gameState = res.data;
+          set({
+              isPlaying: true,
+              isLoading: false,
+              san: gameState.san,
+              money: gameState.money,
+              gpa: gameState.gpa,
+              // Note: some fields might be slightly different in SaveGameRequest vs GameTurnRequest
+              // but app.py SaveGameRequest has what we need
+              chapter: gameState.chapter,
+              turn: gameState.turn,
+              current_evt_id: gameState.current_evt_id,
+              active_roommates: gameState.active_roommates,
+              // affinity, hygiene, etc should ideally be in save too
+              displayText: "存档已成功加载，您可以继续之前的进度。",
+              nextOptions: ["继续剧情..."],
+              isEnd: false,
+              history: gameState.history || [],
+              wechatNotifications: []
+          });
+      } catch (e) {
+          console.error(e);
+          set({ isLoading: false });
+      }
+  },
+
+  saveGame: async (slotId: number) => {
+      const state = get();
+      try {
+          await gameApi.saveGame({
+              slot_id: slotId,
+              active_roommates: state.active_roommates,
+              current_evt_id: state.current_evt_id,
+              chapter: state.chapter,
+              turn: state.turn,
+              san: state.san,
+              money: state.money,
+              gpa: state.gpa,
+              arg_count: 0, // Should be in state
+              wechat_data_list: [], // Should be in state if we want to save wechat
+              history: state.history // Custom field for loading
+          });
+      } catch (e) {
+          console.error('Failed to save game:', e);
+      }
   }
 }));

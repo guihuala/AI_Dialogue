@@ -9,6 +9,7 @@ export interface SystemSettings {
     model_name: string;
     temperature: number;
     max_tokens: number;
+    typewriter_speed: number;
 }
 
 export const settingsApi = {

@@ -74,12 +74,37 @@ export const gameApi = {
     return res.data;
   },
 
+  updateWorkshopMod: async (id: string, metadata: { name?: string, author?: string, description?: string }) => {
+    const res = await axios.patch(`${API_BASE}/workshop/${id}`, metadata);
+    return res.data;
+  },
+
   uploadPortrait: async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     const res = await axios.post(`${API_BASE}/admin/upload_portrait`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
+    return res.data;
+  },
+
+  saveGame: async (saveData: any) => {
+    const res = await axios.post(`${API_BASE}/game/save`, saveData);
+    return res.data;
+  },
+
+  getSavesInfo: async () => {
+    const res = await axios.get(`${API_BASE}/game/saves_info`);
+    return res.data;
+  },
+
+  loadGame: async (slotId: number) => {
+    const res = await axios.get(`${API_BASE}/game/load/${slotId}`);
+    return res.data;
+  },
+
+  deleteSave: async (slotId: number) => {
+    const res = await axios.delete(`${API_BASE}/game/save/${slotId}`);
     return res.data;
   }
 };
