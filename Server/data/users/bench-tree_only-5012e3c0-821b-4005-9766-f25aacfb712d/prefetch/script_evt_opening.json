@@ -1,0 +1,162 @@
+{
+  "event_id": "evt_opening",
+  "event_name": "大学生活开启",
+  "description": "2022年9月，江城传媒大学新生报到日。疫情管控刚刚放开，校园里弥漫着久违的活力与躁动。宿舍楼3栋401室，一个四人间，阳光透过半开的窗户洒进来，空气中飘着消毒水和香水混合的味道。四个性格迥异的女生第一次聚在这个即将成为她们“家”的地方。",
+  "turns": [
+    {
+      "turn_num": 1,
+      "scene": "宿舍401室，刚整理完行李的混乱状态",
+      "dialogue_sequence": [
+        {
+          "speaker": "唐梦琪",
+          "content": "（对着手机前置摄像头调整角度）家人们谁懂啊，这宿舍也太小了吧！我三个行李箱都放不下，真的会谢！不过这个光线拍ootd倒是绝绝子～",
+          "mood": "抱怨中带着自恋"
+        },
+        {
+          "speaker": "林飒",
+          "content": "（靠在阳台门边，点燃一支烟）知足吧姐妹，我刚从隔离酒店出来，那才叫一个憋屈。诶，你们谁玩原神？我uid发你们，带我刷本啊！",
+          "mood": "慵懒随意"
+        },
+        {
+          "speaker": "李一诺",
+          "content": "（推了推眼镜，正在贴课程表）我建议我们制定一个宿舍公约。第一，早上7点前不准发出噪音；第二，每周轮流值日；第三，晚上11点后必须关灯。同意的举手。",
+          "mood": "严肃认真"
+        },
+        {
+          "speaker": "陆陈安然",
+          "content": "（默默整理着床铺，听到李一诺的话后动作顿了顿）",
+          "mood": "犹豫观察"
+        }
+      ],
+      "player_choices": [
+        {
+          "text": "附和唐梦琪，转移话题到拍照",
+          "leads_to_turn": 2,
+          "immediate_outcome_dialogue": [
+            {
+              "speaker": "陆陈安然",
+              "content": "那个...梦琪你美甲真好看，是最近流行的款式吗？",
+              "mood": "温和试探"
+            },
+            {
+              "speaker": "唐梦琪",
+              "content": "（眼睛一亮）哎呀安然你真有眼光！这是我在小红书刷到的爆款，花了三百多呢！来来来我教你摆pose～",
+              "mood": "兴奋热情"
+            },
+            {
+              "speaker": "李一诺",
+              "content": "（重重叹了口气）三百多够买三本四级真题了...",
+              "mood": "不赞同"
+            }
+          ],
+          "stat_changes": {
+            "san_delta": 0,
+            "money_delta": 0,
+            "affinity_changes": {
+              "唐梦琪": 3,
+              "李一诺": -1
+            }
+          }
+        },
+        {
+          "text": "支持李一诺的公约建议",
+          "leads_to_turn": 3,
+          "immediate_outcome_dialogue": [
+            {
+              "speaker": "陆陈安然",
+              "content": "我觉得...一诺说得有道理，有个规矩大家相处起来会更方便...",
+              "mood": "小心翼翼"
+            },
+            {
+              "speaker": "李一诺",
+              "content": "看吧，还是有人懂事的。不像某些人就知道臭美。",
+              "mood": "得意中带着讽刺"
+            },
+            {
+              "speaker": "林飒",
+              "content": "（吐了个烟圈）哎哟喂，这就开始CPU我们了？我晚上要直播打游戏，关灯是不可能关灯的～",
+              "mood": "戏谑挑衅"
+            }
+          ],
+          "stat_changes": {
+            "san_delta": -3,
+            "money_delta": 0,
+            "affinity_changes": {
+              "李一诺": 2,
+              "林飒": -2,
+              "唐梦琪": -1
+            }
+          }
+        },
+        {
+          "text": "提议先一起吃饭熟悉一下",
+          "leads_to_turn": 4,
+          "immediate_outcome_dialogue": [
+            {
+              "speaker": "陆陈安然",
+              "content": "那个...大家饿不饿？要不我们先去食堂吃饭？我听说二食堂的麻辣香锅还不错...",
+              "mood": "试图缓和气氛"
+            },
+            {
+              "speaker": "林飒",
+              "content": "食堂？nonono，姐带你们去后街那家新开的火锅店，我请客！就当庆祝我们401天团成立～",
+              "mood": "豪爽大方"
+            },
+            {
+              "speaker": "唐梦琪",
+              "content": "火锅？！那我得补个妆！等等我五分钟！",
+              "mood": "雀跃"
+            }
+          ],
+          "stat_changes": {
+            "san_delta": 2,
+            "money_delta": 0,
+            "affinity_changes": {
+              "林飒": 3,
+              "唐梦琪": 2,
+              "李一诺": 1
+            }
+          }
+        }
+      ],
+      "is_end": false
+    },
+    {
+      "turn_num": 2,
+      "scene": "宿舍内，唐梦琪正在教安然拍照姿势",
+      "dialogue_sequence": [
+        {
+          "speaker": "唐梦琪",
+          "content": "对！头再歪一点！诶安然你皮肤好好啊，就是穿搭太保守了，明天我带你去逛街改造一下！",
+          "mood": "热情洋溢"
+        },
+        {
+          "speaker": "李一诺",
+          "content": "（大声翻着四级词汇书）abandon, abandon, abandon...某些人能不能小点声？",
+          "mood": "烦躁"
+        },
+        {
+          "speaker": "林飒",
+          "content": "（从阳台探进头）诶，我刚刷到学校表白墙，有个学长在捞穿碎花裙的女生，是不是你啊梦琪？",
+          "mood": "八卦调侃"
+        },
+        {
+          "speaker": "唐梦琪",
+          "content": "真的假的？！（抢过手机）啊！真的是我！这个学长好帅！我要去加他微信！",
+          "mood": "激动到破音"
+        }
+      ],
+      "player_choices": [
+        {
+          "text": "提醒唐梦琪小心网络交友",
+          "leads_to_turn": 5,
+          "immediate_outcome_dialogue": [
+            {}
+          ]
+        }
+      ]
+    }
+  ],
+  "timestamp": 1773926394.463561,
+  "quality": "full"
+}

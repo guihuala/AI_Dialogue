@@ -1,5 +1,5 @@
 import { GraduationCap, Trophy, BookOpen, LineChart } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface JMUAppProps {
   gpa: number;
@@ -8,7 +8,7 @@ interface JMUAppProps {
 
 export const JMUApp = ({ gpa, history }: JMUAppProps) => {
   // Mock trend data or derived from history if possible
-  const gpaTrend = history.map((h, i) => ({
+  const gpaTrend = history.map((h) => ({
     name: `T${h.turn}`,
     val: parseFloat((gpa - (Math.random() * 0.2)).toFixed(2)) // Simulating some variance for the chart
   })).slice(-10);
@@ -50,7 +50,7 @@ export const JMUApp = ({ gpa, history }: JMUAppProps) => {
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
                 <YAxis hide domain={[0, 4.0]} />
                 <Tooltip
-                  contentStyle={{ borderRadius: '1rem', border: 'none', shadow: 'none', backgroundColor: '#0f172a', color: '#fff', fontSize: '10px' }}
+                  contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: 'none', backgroundColor: '#0f172a', color: '#fff', fontSize: '10px' }}
                 />
                 <Area type="monotone" dataKey="val" stroke="#004b97" strokeWidth={3} fillOpacity={1} fill="url(#colorGpa)" />
               </AreaChart>

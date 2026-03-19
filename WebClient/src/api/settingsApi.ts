@@ -3,6 +3,18 @@ import axios from 'axios';
 // 使用与 gameApi 相同的基础地址
 const API_BASE_URL = 'http://127.0.0.1:8000/api/system';
 
+const apiClient = axios.create({
+    baseURL: API_BASE_URL
+});
+
+apiClient.interceptors.request.use((config) => {
+    const visitorId = localStorage.getItem('visitor_id');
+    if (visitorId) {
+        config.headers['X-Visitor-Id'] = visitorId;
+    }
+    return config;
+});
+
 export interface SystemSettings {
     base_url: string;
     api_key: string;
@@ -10,15 +22,17 @@ export interface SystemSettings {
     temperature: number;
     max_tokens: number;
     typewriter_speed: number;
+    latency_mode: 'balanced' | 'fast' | 'story';
+    dialogue_mode: 'single_dm' | 'npc_dm';
 }
 
 export const settingsApi = {
     getSettings: async (): Promise<SystemSettings> => {
-        const response = await axios.get(`${API_BASE_URL}/settings`);
+        const response = await apiClient.get(`/settings`);
         return response.data.data;
     },
 
     updateSettings: async (settings: Partial<SystemSettings>): Promise<void> => {
-        await axios.post(`${API_BASE_URL}/settings`, settings);
+        await apiClient.post(`/settings`, settings);
     }
 };

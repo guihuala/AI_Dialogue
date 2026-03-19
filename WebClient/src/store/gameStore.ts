@@ -32,6 +32,7 @@ interface GameState {
   uiTransparency: number;
   currentSaveId: string;
   visitorId: string;
+  pendingChoice: string | null;
 
   eventScript: any | null;
 
@@ -77,18 +78,20 @@ export const useGameStore = create<GameState>((set, get) => ({
   currentSaveId: 'slot_0',
   eventScript: null,
   visitorId: (() => {
-    let id = localStorage.getItem('visitor_id');
-    if (!id) {
-        id = (crypto as any).randomUUID?.() || Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-        localStorage.setItem('visitor_id', id);
-    }
-    return id as string;
+    const existingId = localStorage.getItem('visitor_id');
+    if (existingId) return existingId;
+    const generatedId =
+      (crypto as any).randomUUID?.() ||
+      Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('visitor_id', generatedId);
+    return generatedId;
   })(),
+  pendingChoice: null,
 
   setEventScript: (script: any) => set({ eventScript: script }),
 
   startGame: async (roommates = [], modId?: string) => {
-    set({ isLoading: true });
+    set({ isLoading: true, pendingChoice: null });
     try {
       if (modId) {
         await gameApi.applyWorkshopMod(modId);
@@ -98,6 +101,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         currentSaveId: 'slot_0',
         isPlaying: true,
         isLoading: false,
+        pendingChoice: null,
         san: data.san,
         money: data.money,
         gpa: data.gpa,
@@ -166,7 +170,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
     
     // --- [BACKEND FALLBACK / TRANSITION] ---
-    set({ isLoading: true });
+    set({ isLoading: true, pendingChoice: choice });
     try {
       const isTransition = choice === "继续剧情..." || state.isEnd;
       const turnReq = {
@@ -188,6 +192,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const data = await gameApi.performTurn(turnReq, undefined, state.currentSaveId);
       set((prev) => ({
         isLoading: false,
+        pendingChoice: null,
         san: data.san,
         money: data.money,
         gpa: data.gpa,
@@ -211,7 +216,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     } catch (e) {
       console.error(e);
-      set({ isLoading: false });
+      set({ isLoading: false, pendingChoice: null });
     }
   },
 
@@ -260,6 +265,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               currentSaveId: `slot_${slotId}`,
               isPlaying: true,
               isLoading: false,
+              pendingChoice: null,
               san: gameState.san,
               money: gameState.money,
               gpa: gameState.gpa,
@@ -278,7 +284,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           });
       } catch (e) {
           console.error(e);
-          set({ isLoading: false });
+          set({ isLoading: false, pendingChoice: null });
       }
   },
 
@@ -312,6 +318,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           await gameApi.resetGame();
           set({
               isPlaying: false,
+              pendingChoice: null,
               san: 100,
               money: 2000,
               gpa: 4.0,

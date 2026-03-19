@@ -116,6 +116,13 @@ class ScriptedEvent(BaseModel):
     potential_conflicts: List[str] = []
     mandatory_participants: List[str] = []
     next_event_id: Optional[str] = None
+    event_weight: float = 1.0
+    cooldown_turns: int = 2
+    min_turn_for_end: int = 5
+    max_turn_for_end: int = 10
+    progress_beats: List[str] = []
+    end_signals: List[str] = []
+    allow_repeat: bool = False
     
     options: Dict[str, str] = {}  # 例如 {"A": "少数服从多数", "B": "独裁"}
     outcomes: Dict[str, str] = {} # 例如 {"A": "输的一方叹气掉SAN", "B": "得罪一半人"}

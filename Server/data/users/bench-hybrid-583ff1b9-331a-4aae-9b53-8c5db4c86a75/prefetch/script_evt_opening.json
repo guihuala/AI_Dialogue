@@ -1,0 +1,163 @@
+{
+  "event_id": "evt_opening",
+  "event_name": "大学生活开启",
+  "description": "2022年9月，江城传媒大学新生报到日。疫情管控刚刚放开，校园里弥漫着久违的活力与混乱。陆陈安然拖着行李箱站在女生宿舍楼下，看着来来往往的新生和家长，内心既期待又不安。她即将见到未来四年的室友们，这个小小的寝室会成为她新的‘家’吗？",
+  "turns": [
+    {
+      "turn_num": 1,
+      "scene": "女生宿舍3号楼502室门口",
+      "dialogue_sequence": [
+        {
+          "speaker": "陆陈安然",
+          "content": "（深吸一口气，推开宿舍门）你们好...我是陆陈安然。",
+          "mood": "拘谨、观察"
+        },
+        {
+          "speaker": "唐梦琪",
+          "content": "哇！终于来齐了！我是唐梦琪～（放下正在涂的指甲油，热情地挥手）我早上六点就起来化妆了，结果等到现在，我真的会谢！",
+          "mood": "兴奋、略带抱怨"
+        },
+        {
+          "speaker": "林飒",
+          "content": "（从阳台探出头，嘴里叼着根没点的烟）哟，最后一个室友。我是林飒，本地人。（打量了一下安然）你这行李箱挺能装啊。",
+          "mood": "随意、好奇"
+        },
+        {
+          "speaker": "李一诺",
+          "content": "（从书桌前转过身，推了推眼镜）陆陈安然同学，我是李一诺。根据宿舍管理条例，我们需要在今晚前完成床位分配和值日表制定。我已经草拟了一份方案。",
+          "mood": "严肃、效率至上"
+        }
+      ],
+      "player_choices": [
+        {
+          "text": "对唐梦琪说：‘你的美甲真好看，是自己做的吗？’",
+          "leads_to_turn": 2,
+          "immediate_outcome_dialogue": [
+            {
+              "speaker": "陆陈安然",
+              "content": "（轻声）你的美甲真好看，是自己做的吗？",
+              "mood": "温和、试图找话题"
+            },
+            {
+              "speaker": "唐梦琪",
+              "content": "啊！你注意到了！（开心地伸出手）是我在小红书学的渐变款！要不要我帮你做？我带了全套工具！",
+              "mood": "雀跃、热情"
+            }
+          ],
+          "stat_changes": {
+            "san_delta": 5,
+            "money_delta": 0,
+            "affinity_changes": {
+              "唐梦琪": 3
+            }
+          }
+        },
+        {
+          "text": "对林飒说：‘阳台风景怎么样？’",
+          "leads_to_turn": 3,
+          "immediate_outcome_dialogue": [
+            {
+              "speaker": "陆陈安然",
+              "content": "（看向阳台）那边...风景怎么样？",
+              "mood": "试探性、转移话题"
+            },
+            {
+              "speaker": "林飒",
+              "content": "（咧嘴笑）还行，能看到男生宿舍楼。不过提醒你啊，我偶尔在这儿抽烟，受不了的话提前说。",
+              "mood": "直率、略带警告"
+            }
+          ],
+          "stat_changes": {
+            "san_delta": 0,
+            "money_delta": 0,
+            "affinity_changes": {
+              "林飒": 2
+            }
+          }
+        },
+        {
+          "text": "对李一诺说：‘值日表...我能先看看吗？’",
+          "leads_to_turn": 4,
+          "immediate_outcome_dialogue": [
+            {
+              "speaker": "陆陈安然",
+              "content": "（犹豫地）值日表...我能先看看吗？",
+              "mood": "谨慎、不想冲突"
+            },
+            {
+              "speaker": "李一诺",
+              "content": "当然。（递过一张打印纸）我参考了高中宿舍的管理经验，采用轮换制，每人负责一周。",
+              "mood": "认真、期待认可"
+            }
+          ],
+          "stat_changes": {
+            "san_delta": -3,
+            "money_delta": 0,
+            "affinity_changes": {
+              "李一诺": 2
+            }
+          }
+        }
+      ],
+      "is_end": false
+    },
+    {
+      "turn_num": 2,
+      "scene": "宿舍内，唐梦琪正在展示她的美甲工具",
+      "dialogue_sequence": [
+        {
+          "speaker": "唐梦琪",
+          "content": "我跟你说，我前男友就是因为嫌我美甲太长分手了，哼，这种直男审美真的CPU我！",
+          "mood": "愤愤不平、寻求共鸣"
+        },
+        {
+          "speaker": "林飒",
+          "content": "（从阳台走进来）得了吧，你那个前男友我见过，长得跟个发面馒头似的，分了是福气。",
+          "mood": "毒舌、调侃"
+        },
+        {
+          "speaker": "李一诺",
+          "content": "（头也不抬地整理书桌）恋爱会影响学习效率。我建议大家在大学期间以学业为重。",
+          "mood": "说教、不合时宜"
+        },
+        {
+          "speaker": "唐梦琪",
+          "content": "（翻了个白眼）李一诺你真是...算了算了，安然，晚上要不要一起去食堂？听说二食堂新开了个网红窗口！",
+          "mood": "转移话题、期待"
+        }
+      ],
+      "player_choices": [
+        {
+          "text": "答应一起去食堂：‘好啊，我也想去看看。’",
+          "leads_to_turn": 5,
+          "immediate_outcome_dialogue": [
+            {
+              "speaker": "陆陈安然",
+              "content": "（轻轻点头）好啊，我也想去看看。",
+              "mood": "顺从、不想扫兴"
+            },
+            {
+              "speaker": "唐梦琪",
+              "content": "太好了！那我们五点半出发，我要先补个妆～",
+              "mood": "开心、计划中"
+            }
+          ],
+          "stat_changes": {
+            "san_delta": 5,
+            "money_delta": -15,
+            "affinity_changes": {
+              "唐梦琪": 3,
+              "林飒": 1
+            }
+          }
+        },
+        {
+          "text": "婉拒邀请：‘我...想先整理一下行李。’",
+          "leads_to_turn": 6
+        }
+      ]
+    }
+  ],
+  "timestamp": 1773925229.722386,
+  "quality": "full"
+}

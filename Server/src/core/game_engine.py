@@ -26,6 +26,8 @@ from src.core.config import (
 class GameEngine:
     def __init__(self, user_id: str = "default"):
         self.user_id = user_id
+        self.latency_mode = "balanced"  # balanced | fast | story
+        self.dialogue_mode = "single_dm"   # single_dm | hybrid | tree_only | npc_dm
         self.candidate_pool = {}
         for key, obj in vars(presets_module).items():
             if isinstance(obj, CharacterProfile) and obj.Name != "陆陈安然": 
@@ -50,11 +52,57 @@ class GameEngine:
         self.event_completion_count = 0
         self.recent_event_ids = []
         self.prefetch_futures = {}
+        self.event_repeat_state = {}
 
     def reset(self):
         self.director.reset()
         self.event_completion_count = 0
         self.recent_event_ids = []
+        self.event_repeat_state = {}
+
+    def _get_latency_profile(self, event_obj) -> dict:
+        """
+        按事件类型返回性能策略：
+        - 关键剧情：质量优先（full + 更长超时）
+        - 常规剧情：速度优先（fast + 更短超时）
+        """
+        # 用户手动模式优先
+        if self.latency_mode == "fast":
+            return {
+                "prefetch_mode_current": "fast",
+                "prefetch_mode_next": "fast",
+                "llm_timeout_sec": 14.0,
+                "llm_max_tokens": 600
+            }
+        if self.latency_mode == "story":
+            return {
+                "prefetch_mode_current": "full",
+                "prefetch_mode_next": "full",
+                "llm_timeout_sec": 24.0,
+                "llm_max_tokens": 1400
+            }
+
+        evt_type = str(getattr(event_obj, "event_type", "") or "")
+        is_key_event = (
+            getattr(event_obj, "is_boss", False)
+            or "开局" in evt_type
+            or "固定" in evt_type
+            or "条件" in evt_type
+            or getattr(event_obj, "is_cg", False)
+        )
+        if is_key_event:
+            return {
+                "prefetch_mode_current": "full",
+                "prefetch_mode_next": "full",
+                "llm_timeout_sec": 18.0,
+                "llm_max_tokens": 1200
+            }
+        return {
+            "prefetch_mode_current": "fast",
+            "prefetch_mode_next": "fast",
+            "llm_timeout_sec": 16.0,
+            "llm_max_tokens": 700
+        }
 
     def parse_and_repair_json(self, raw_text):
         raw_text = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL)
@@ -92,8 +140,60 @@ class GameEngine:
                 "is_end": False
             }
 
+    def _normalize_options(self, raw_options, next_evt=None):
+        """
+        容错解析 next_options，处理模型把多个选项粘成一个字符串的情况。
+        """
+        options = []
+        if isinstance(raw_options, list):
+            options = [str(o).strip() for o in raw_options if o is not None and str(o).strip()]
+        elif isinstance(raw_options, str):
+            text = raw_options.strip()
+            # 常规分隔符：换行、逗号、分号、竖线、顿号
+            chunks = re.split(r'[\n,，;；|、]+', text)
+            chunks = [c.strip(" -•\t") for c in chunks if c and c.strip(" -•\t")]
+            # 如果拆不出来，再按 A:/B:/C: 之类模式切
+            if len(chunks) <= 1:
+                labeled = re.split(r'(?=(?:^|[\s])(?:[A-Da-d]|[1-4])[\.:\：、])', text)
+                chunks = [c.strip(" -•\t") for c in labeled if c and c.strip(" -•\t")]
+            options = chunks
+
+        # 进一步处理单个长字符串里粘了多个标签的情况
+        if len(options) == 1:
+            one = options[0]
+            labeled = re.findall(r'(?:[A-Da-d]|[1-4])[\.:\：、]\s*[^A-Da-d1-4]{2,80}', one)
+            if len(labeled) >= 2:
+                options = [x.strip() for x in labeled]
+
+        # 去重保序
+        dedup = []
+        seen = set()
+        for opt in options:
+            opt = re.sub(r'^\s*(?:[A-Da-d]|[1-4])[\.:\：、]\s*', '', opt).strip()
+            key = re.sub(r'\s+', ' ', opt)
+            if key not in seen:
+                seen.add(key)
+                dedup.append(opt)
+
+        if dedup:
+            return dedup[:4]
+
+        if next_evt is not None:
+            evt_options = []
+            raw_evt_options = getattr(next_evt, "options", {})
+            if isinstance(raw_evt_options, dict):
+                evt_options = [str(v).strip() for v in raw_evt_options.values() if str(v).strip()]
+            if evt_options:
+                return evt_options[:4]
+
+        return ["【深呼吸】", "【继续观察】", "【转移话题】"]
+
     def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, hygiene, reputation, arg_count, chapter, turn, affinity, wechat_data_dict, is_prefetch=False, custom_prompts=None):
         self.llm.update_config(api_key=api_key, base_url=base_url, model=model)
+        effective_dialogue_mode = self.dialogue_mode
+        if effective_dialogue_mode in ["tree_only", "hybrid"]:
+            effective_dialogue_mode = "single_dm"
+        use_branch_tree = False
         
         # --- 动态映射逻辑 ---
         roster_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "prompts", "characters", "roster.json")
@@ -151,26 +251,72 @@ class GameEngine:
             turn = 1
             
             # --- [DEEP PREFETCH CONSUMPTION: OPENING] ---
+            # 尽早触发当前事件剧本预取，提升后续选项秒回命中率。
             prefetcher = self.prefetch_mgr.get_prefetcher(self.user_id, self.llm, self.pm)
-            cached_script = prefetcher.get_cached_script()
-            if cached_script and cached_script.get("event_id") == next_evt.id and not is_prefetch:
+            latency_profile = self._get_latency_profile(next_evt)
+            if use_branch_tree and not getattr(next_evt, 'is_cg', False):
+                prefetcher.generate_script_async({
+                    "chapter": chapter,
+                    "turn": turn,
+                    "active_chars": selected_chars,
+                    "custom_prompts": custom_prompts,
+                    "event_name": next_evt.name,
+                    "event_id": next_evt.id,
+                    "event_description": next_evt.description,
+                    "generation_mode": latency_profile["prefetch_mode_current"]
+                })
+
+            # 开局首回合优先播放人工固定剧情；普通事件优先尝试命中事件级剧本缓存。
+            cached_script = prefetcher.get_cached_script(next_evt.id) if use_branch_tree else None
+            if (
+                not cached_script
+                and not is_prefetch
+                and not getattr(next_evt, 'is_cg', False)
+                and effective_dialogue_mode == "tree_only"
+            ):
+                cached_script = prefetcher.generate_script_blocking({
+                    "chapter": chapter,
+                    "turn": turn,
+                    "active_chars": selected_chars,
+                    "custom_prompts": custom_prompts,
+                    "event_name": next_evt.name,
+                    "event_id": next_evt.id,
+                    "event_description": next_evt.description,
+                    "generation_mode": "fast",
+                    "max_attempts": 2
+                })
+            if cached_script and not is_prefetch and not getattr(next_evt, 'is_cg', False):
                 print(f"🚀 [Prefetch] HIT: Using deep script for {next_evt.name}")
+                prefetcher.mark_non_fallback()
                 runner = ScriptRunner(cached_script)
                 first_turn = runner.get_turn(1)
                 if first_turn:
+                    next_options = [opt.get("text") for opt in first_turn.get("player_choices", []) if isinstance(opt, dict) and opt.get("text")]
                     return {
                         "narrator_transition": cached_script.get("description", f"🎬 **{next_evt.name}**\n---"),
                         "current_scene": first_turn.get("scene", "宿舍"),
                         "dialogue_sequence": first_turn.get("dialogue_sequence", []),
-                        "next_options": [opt.get("text") for opt in first_turn.get("player_choices", [])],
+                        "next_options": next_options if next_options else ["继续剧情..."],
                         "stat_changes": {}, # Initial entry usually no changes
                         "is_end": first_turn.get("is_end", False),
                         "event_id": next_evt.id,
                         "turn": 1,
                         "event_script": cached_script # Return full script to frontend
                     }
+            elif not is_prefetch and not getattr(next_evt, 'is_cg', False):
+                prefetcher.mark_fallback()
 
-            event_context = f"【系统指令】开始以下事件，不要写任何开场白或过场旁白。\n【新事件】:{next_evt.name}\n【场景描述】:{next_evt.description}"
+            opening_conflicts = "、".join((getattr(next_evt, "potential_conflicts", []) or [])[:3])
+            opening_conflicts = opening_conflicts or "无"
+            opening_beats = getattr(next_evt, "progress_beats", []) or []
+            opening_beat_hint = f"\n【建议推进节点】{opening_beats[0]}" if opening_beats else ""
+            event_context = (
+                f"【系统指令】开始以下事件，不要写任何开场白或过场旁白。"
+                f"\n【新事件】:{next_evt.name}"
+                f"\n【场景描述】:{next_evt.description}"
+                f"\n【潜在冲突参考】:{opening_conflicts}"
+                f"{opening_beat_hint}"
+            )
         else:
             next_evt = self.director.event_database.get(current_evt_id)
             if not next_evt:
@@ -178,9 +324,42 @@ class GameEngine:
             
             # --- [DEEP PREFETCH CONSUMPTION: IN-EVENT TURN] ---
             prefetcher = self.prefetch_mgr.get_prefetcher(self.user_id, self.llm, self.pm)
-            cached_script = prefetcher.get_cached_script()
+            latency_profile = self._get_latency_profile(next_evt)
+            cached_script = prefetcher.get_cached_script(next_evt.id) if use_branch_tree else None
+            # 给后台预取一个很短的“追赶窗口”，避免用户点击过快直接跌回慢路径。
+            if not cached_script and not is_prefetch and not getattr(next_evt, 'is_cg', False):
+                for _ in range(4):
+                    time.sleep(0.2)
+                    cached_script = prefetcher.get_cached_script(next_evt.id)
+                    if cached_script:
+                        break
+            if not cached_script and not is_prefetch and not getattr(next_evt, 'is_cg', False) and effective_dialogue_mode == "tree_only":
+                cached_script = prefetcher.generate_script_blocking({
+                    "chapter": chapter,
+                    "turn": turn,
+                    "active_chars": selected_chars,
+                    "custom_prompts": custom_prompts,
+                    "event_name": next_evt.name,
+                    "event_id": next_evt.id,
+                    "event_description": next_evt.description,
+                    "generation_mode": "fast",
+                    "max_attempts": 2
+                })
             if cached_script and not is_prefetch:
                 print(f"🚀 [Prefetch] HIT: Executing choice '{action_text}' from script")
+                prefetcher.mark_non_fallback()
+                # 如果当前是 fast 剧本，后台升级为 full 版本，不阻塞本轮返回
+                if str(cached_script.get("quality", "fast")).lower() != "full":
+                    prefetcher.generate_script_async({
+                        "chapter": chapter,
+                        "turn": turn,
+                        "active_chars": selected_chars,
+                        "custom_prompts": custom_prompts,
+                        "event_name": next_evt.name,
+                        "event_id": next_evt.id,
+                        "event_description": next_evt.description,
+                        "generation_mode": "full"
+                    })
                 runner = ScriptRunner(cached_script)
                 res_data = runner.get_next_turn_data(turn, action_text)
                 
@@ -208,7 +387,7 @@ class GameEngine:
 
                     # 如果事件结束，清理缓存
                     if res_data.get("is_end"):
-                        prefetcher.clear_cache()
+                        prefetcher.clear_cache(next_evt.id)
 
                     return {
                         "is_game_over": False,
@@ -230,11 +409,34 @@ class GameEngine:
                         "dialogue_sequence": res_data.get("dialogue_sequence", []),
                         "narrator_transition": res_data.get("narrator_transition", "")
                     }
+            elif not is_prefetch:
+                prefetcher.mark_fallback()
 
             turn += 1
-            # 将 turn >= 6 改为 turn >= 10
-            pacing = "【节奏：结局】事件已充分发展，请明确收尾，将 is_end 置为 true。" if turn >= 10 else "【节奏：激化】冲突升级，引发新的讨论。"
-            event_context = f"【事件】: {next_evt.name}\n【回合】: {turn}/10\n{pacing}\n【玩家选择意图】: {action_text}"
+            evt_min_turn = max(2, min(12, int(getattr(next_evt, "min_turn_for_end", 6) or 6)))
+            evt_max_turn = max(evt_min_turn + 1, min(16, int(getattr(next_evt, "max_turn_for_end", 10) or 10)))
+            if turn < evt_min_turn:
+                pacing = "【节奏：发展】继续推进冲突，不要重复上回合同义表达。"
+            elif turn >= evt_max_turn:
+                pacing = "【节奏：收束】事件信息已充分，明确给出阶段性结论并结束事件。"
+            else:
+                pacing = "【节奏：推进】根据玩家动作产生新信息、新立场或新代价。"
+
+            beats = getattr(next_evt, "progress_beats", []) or []
+            beat_hint = ""
+            if beats:
+                beat_idx = min(max(turn - 1, 0), len(beats) - 1)
+                beat_hint = f"\n【本回合建议推进节点】{beats[beat_idx]}"
+            end_signals = "、".join((getattr(next_evt, "end_signals", []) or [])[:3])
+            end_hint = f"\n【收束参考】{end_signals}" if end_signals else ""
+
+            event_context = (
+                f"【事件】: {next_evt.name}"
+                f"\n【回合】: {turn}/{evt_max_turn}"
+                f"\n{pacing}"
+                f"{beat_hint}{end_hint}"
+                f"\n【玩家选择意图】: {action_text}"
+            )
 
         try:
             relevant_docs = self.mm.vector_store.search(f"{next_evt.name} {action_text}", n_results=6)
@@ -278,7 +480,8 @@ class GameEngine:
         npc_chars = [c for c in selected_chars if c != "陆陈安然"]
         reactions_str = ""
         
-        if npc_chars and not getattr(next_evt, 'is_cg', False):
+        # 仅在 npc_dm 模式启用多智能体并行反应。single_dm/hybrid/tree_only 均走单一 DM。
+        if effective_dialogue_mode == "npc_dm" and npc_chars and not getattr(next_evt, 'is_cg', False):
             agents = []
             for char_name in npc_chars:
                 char_file = self.pm.char_file_map.get(char_name, "")
@@ -344,9 +547,8 @@ class GameEngine:
                 cg_dialogue = getattr(next_evt, 'fixed_dialogue', [])
                 if not cg_dialogue:
                     cg_dialogue = [{"speaker": "系统提示", "content": "（剧情触发成功，但CSV对应行没有对话内容。）", "mood": "neutral"}]
-                
-                cg_options_dict = getattr(next_evt, 'options', {})
-                cg_options = list(cg_options_dict.values()) if cg_options_dict else ["继续剧情..."]
+                # 固定剧情统一走“继续剧情...”进入下一事件，避免在开场阶段被误判为终局遮罩。
+                cg_options = ["继续剧情..."]
 
                 parsed = {
                     "narrator_transition": f"🎬 **[剧情演出] {next_evt.name}**\n---", 
@@ -360,10 +562,41 @@ class GameEngine:
                 }
                 res_text = json.dumps(parsed, ensure_ascii=False)
             else:
-                t2 = time.time()
-                res_text = self.llm.generate_response(system_prompt=sys_prm, user_input=user_prm, temperature=tmp, top_p=top_p, max_tokens=max_t, presence_penalty=pres_p, frequency_penalty=freq_p)
-                print(f"🛑 [耗时监控] DM 主大脑生成 JSON 耗时: {time.time() - t2:.2f} 秒")
-                parsed = self.parse_and_repair_json(res_text)
+                if use_branch_tree and effective_dialogue_mode == "tree_only":
+                    parsed = {
+                        "narrator_transition": "（系统提示：该事件以分支树模式运行。）",
+                        "current_scene": "宿舍",
+                        "dialogue_sequence": [{"speaker": "系统提示", "content": "请使用选项推进剧情。", "mood": "neutral"}],
+                        "next_options": ["继续剧情..."],
+                        "stat_changes": {},
+                        "wechat_notifications": [],
+                        "npc_background_actions": [],
+                        "is_end": False
+                    }
+                    res_text = json.dumps(parsed, ensure_ascii=False)
+                else:
+                    t2 = time.time()
+                    llm_max_tokens = min(max_t, latency_profile["llm_max_tokens"])
+                    try:
+                        res_text = self.llm.generate_response(
+                            system_prompt=sys_prm,
+                            user_input=user_prm,
+                            context="",
+                            temperature=tmp,
+                            top_p=top_p,
+                            max_tokens=llm_max_tokens,
+                            presence_penalty=pres_p,
+                            frequency_penalty=freq_p
+                        )
+                        print(f"🛑 [耗时监控] DM 主大脑生成 JSON 耗时: {time.time() - t2:.2f} 秒")
+                        parsed = self.parse_and_repair_json(res_text)
+                        prefetcher.mark_non_fallback()
+                    except Exception as e:
+                        print(f"⚠️ [LLM Error] 实时生成异常，返回解析兜底: {e}", flush=True)
+                        prefetcher.mark_fallback()
+                        safe_err = str(e).replace('"', "'").replace("\n", " ")
+                        parsed = self.parse_and_repair_json(json.dumps({"error": safe_err}, ensure_ascii=False))
+                        res_text = json.dumps(parsed, ensure_ascii=False)
 
             stats_data = parsed.get("stat_changes", {})
             if not isinstance(stats_data, dict): stats_data = {} 
@@ -393,6 +626,15 @@ class GameEngine:
                         
             if dialogue_lines:
                 display_text += "\n\n".join(dialogue_lines)
+
+            # 反重复保护：同一事件若连续输出高度相同的对话，强制推进，避免死循环。
+            current_sig = re.sub(r'\s+', ' ', " | ".join(dialogue_lines[:4])).strip()
+            rep = self.event_repeat_state.get(next_evt.id, {"sig": "", "count": 0})
+            if current_sig and current_sig == rep.get("sig"):
+                rep["count"] = int(rep.get("count", 0)) + 1
+            else:
+                rep = {"sig": current_sig, "count": 0}
+            self.event_repeat_state[next_evt.id] = rep
             
             acts = parsed.get("npc_background_actions", [])
             if isinstance(acts, dict): acts = [acts]
@@ -436,7 +678,27 @@ class GameEngine:
                     if "gpa_delta" in tool_res: gpa = max(0.0, min(4.0, gpa + tool_res["gpa_delta"]))
                     if "money_delta" in tool_res: money += tool_res["money_delta"]
             
-            is_end = True if getattr(next_evt, 'is_cg', False) or turn >= 10 else parsed.get("is_end", False)
+            # 防止事件过早结束：按事件定义控制收尾窗口。
+            min_turn_for_end = max(2, min(12, int(getattr(next_evt, "min_turn_for_end", 6) or 6)))
+            max_turn_for_end = max(min_turn_for_end + 1, min(16, int(getattr(next_evt, "max_turn_for_end", 10) or 10)))
+            if getattr(next_evt, 'is_cg', False):
+                is_end = True
+            elif turn < min_turn_for_end:
+                is_end = False
+            elif turn >= max_turn_for_end:
+                is_end = True
+            else:
+                is_end = bool(parsed.get("is_end", False))
+
+            # 若连续重复输出，直接收束当前事件，切到下一事件，避免玩家困在同一话题循环。
+            beats = getattr(next_evt, "progress_beats", []) or []
+            repeat_limit = 3 if beats else 2
+            if not getattr(next_evt, 'is_cg', False) and rep.get("count", 0) >= repeat_limit:
+                is_end = True
+                if "僵局" not in display_text:
+                    display_text += "\n\n（话题陷入重复僵局，你决定先结束这轮争论。）"
+            if is_end and next_evt.id in self.event_repeat_state:
+                self.event_repeat_state.pop(next_evt.id, None)
 
             if not getattr(next_evt, 'is_cg', False) and action_text and "（时间推移..." not in action_text and not is_prefetch:
                 self.mm.save_interaction(user_input=action_text, ai_response=" ".join(dialogue_lines), user_name="陆陈安然")
@@ -472,15 +734,11 @@ class GameEngine:
                     w["chat_name"] = c_name 
                     valid_notifs.append(w)
 
-            extracted_options = parsed.get("next_options", [])
-            if isinstance(extracted_options, str):
-                extracted_options = [o.strip() for o in extracted_options.split(",") if o.strip()]
-                
-            if not isinstance(extracted_options, list) or not extracted_options:
-                if getattr(next_evt, 'is_cg', False):
-                    extracted_options = ["继续剧情..."]
-                else:
-                    extracted_options = ["【深呼吸】", "【继续观察】", "【转移话题】", "【沉默】", "【叹气】"]
+            extracted_options = self._normalize_options(parsed.get("next_options", []), next_evt)
+            if getattr(next_evt, 'is_cg', False):
+                extracted_options = ["继续剧情..."]
+            elif is_end:
+                extracted_options = ["继续剧情..."]
 
             # --- [START PREFETCH FOR NEXT EVENT] ---
             prefetch_ctx = {
@@ -490,30 +748,33 @@ class GameEngine:
                 "custom_prompts": custom_prompts
             }
             # 如果是事件开头且没命中的话，尝试补刷当前事件剧本
-            if turn <= 1:
+            if use_branch_tree and turn <= 1:
                 print(f"📡 [Prefetch] Triggering prefetch for CURRENT event: {next_evt.name}", flush=True)
                 prefetch_ctx["event_name"] = next_evt.name
                 prefetch_ctx["event_id"] = next_evt.id
                 prefetch_ctx["event_description"] = next_evt.description
+                prefetch_ctx["generation_mode"] = latency_profile["prefetch_mode_current"]
                 self.prefetch_mgr.get_prefetcher(self.user_id, self.llm, self.pm).generate_script_async(prefetch_ctx)
             # 如果当前事件结束，尝试预取下一个阶段
-            elif parsed.get("is_end", False):
+            elif use_branch_tree and parsed.get("is_end", False):
                 next_predicted = self.director.get_next_event(
                     {"money": money, "san": san, "hygiene": hygiene, "gpa": gpa, "reputation": reputation},
                     selected_chars, affinity
                 )
                 if next_predicted:
+                    next_profile = self._get_latency_profile(next_predicted)
                     print(f"📡 [Prefetch] Triggering prefetch for NEXT event: {next_predicted.name}", flush=True)
                     prefetch_ctx["event_name"] = next_predicted.name
                     prefetch_ctx["event_id"] = next_predicted.id
                     prefetch_ctx["event_description"] = next_predicted.description
+                    prefetch_ctx["generation_mode"] = next_profile["prefetch_mode_next"]
                     self.prefetch_mgr.get_prefetcher(self.user_id, self.llm, self.pm).generate_script_async(prefetch_ctx)
 
             # --- [ALWAYS PROVIDE SCRIPT IF AVAILABLE] ---
             prefetcher = self.prefetch_mgr.get_prefetcher(self.user_id, self.llm, self.pm)
-            script_in_cache = prefetcher.get_cached_script()
+            script_in_cache = prefetcher.get_cached_script(next_evt.id) if use_branch_tree else None
             final_script = None
-            if script_in_cache and script_in_cache.get("event_id") == next_evt.id:
+            if script_in_cache:
                 final_script = script_in_cache
 
             return {

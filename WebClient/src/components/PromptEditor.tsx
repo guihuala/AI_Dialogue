@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Globe, Users, ScrollText, Layers, Terminal, Sparkles, Save, RefreshCw, Code, UploadCloud } from 'lucide-react';
+import { Globe, Users, ScrollText, Terminal, Sparkles, GitGraph, Zap } from 'lucide-react';
 import { gameApi } from '../api/gameApi';
 
 import { EditorHeader } from './editor/EditorHeader';
@@ -12,6 +12,7 @@ import { TopicExplorer } from './editor/TopicExplorer';
 import { EditorModals } from './editor/EditorModals';
 import { EditorGuide } from './editor/EditorGuide';
 import { CharacterDetailModal } from './editor/CharacterDetailModal';
+import { RelationshipMatrix } from './editor/RelationshipMatrix';
 
 import { Category } from './editor/types';
 
@@ -22,8 +23,8 @@ export const PromptEditor = () => {
     const [fileContent, setFileContent] = useState('');
     const [editMode, setEditMode] = useState<'visual' | 'code'>('visual');
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const [stableRoster, setStableRoster] = useState<any>(null);
     const [showExplorer, setShowExplorer] = useState(true);
-    const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
     const [eventFilter, setEventFilter] = useState<{ chapter?: string, type?: string } | undefined>(undefined);
 
     const [message, setMessage] = useState('');
@@ -76,15 +77,22 @@ export const PromptEditor = () => {
     };
 
     useEffect(() => {
+        console.log('[PromptEditor] Active Category:', activeCategory);
+        if (files.md.length === 0 && files.csv.length === 0) {
+            console.log('[PromptEditor] Waiting for files...');
+            return;
+        }
+
         if (activeCategory === 'char') {
-            const roster = files.md.find(f => f.endsWith('roster.json'));
+            const roster = files.md.find(f => f.includes('roster.json'));
             if (roster) {
                 setSelectedFile({ type: 'md', name: roster });
                 setShowExplorer(false);
                 setEditMode('visual');
             }
         } else if (activeCategory === 'event') {
-            const timeline = files.csv.find(f => f === 'timeline.json');
+            const timeline = files.csv.find(f => f.includes('timeline.json'));
+            console.log('[PromptEditor] Event category, found timeline:', timeline);
             if (timeline) {
                 setSelectedFile({ type: 'csv', name: timeline });
                 setShowExplorer(false);
@@ -93,9 +101,10 @@ export const PromptEditor = () => {
         } else if (activeCategory === 'world' || activeCategory === 'skills') {
             setShowExplorer(false);
             setEditMode('visual');
-            setSelectedFile(null); // Clear selected file to show explorer by default
+            setSelectedFile(null); 
         } else if (activeCategory === 'relation') {
-            const rel = files.md.find(f => f.endsWith('relationship.csv'));
+            const rel = files.md.find(f => f.includes('relationship.csv'));
+            console.log('[PromptEditor] Relation category, found rel:', rel);
             if (rel) {
                 setSelectedFile({ type: 'md', name: rel });
                 setShowExplorer(false);
@@ -109,6 +118,24 @@ export const PromptEditor = () => {
     useEffect(() => {
         fetchFiles();
     }, []);
+
+    useEffect(() => {
+        if (files.md.length > 0 && !stableRoster) {
+                const rosterFile = files.md.find(f => f.includes('roster.json'));
+                if (rosterFile) {
+                    console.log('[PromptEditor] Fetching roster from:', rosterFile);
+                gameApi.getAdminFile('md', rosterFile).then((res) => {
+                    try {
+                        if (res?.status === 'success') {
+                            setStableRoster(JSON.parse(res.content || '{}'));
+                        }
+                    } catch (e) {
+                        console.error("Failed to parse roster:", e);
+                    }
+                });
+            }
+        }
+    }, [files, stableRoster]);
 
     useEffect(() => {
         if (!selectedFile) return;
@@ -137,6 +164,9 @@ export const PromptEditor = () => {
             await gameApi.saveAdminFile(selectedFile.type, selectedFile.name, contentToSave);
             setMessage('同步成功');
             setFileContent(contentToSave);
+            if (selectedFile.name.endsWith('roster.json')) {
+                try { setStableRoster(JSON.parse(contentToSave)); } catch(e) {}
+            }
         } catch (e) {
             setMessage('保存失败!');
         } finally {
@@ -148,9 +178,9 @@ export const PromptEditor = () => {
     const categories = [
         { id: 'world', name: '世界设定', icon: Globe },
         { id: 'char', name: '角色管理', icon: Users },
-        { id: 'relation', name: '人物关系', icon: Layers }, // Using Layers for matrix-like icon
+        { id: 'relation', name: '人物关系', icon: GitGraph }, 
         { id: 'event', name: '剧情编排', icon: ScrollText },
-        { id: 'skills', name: '系统逻辑', icon: Layers },
+        { id: 'skills', name: '系统逻辑', icon: Zap },
         { id: 'all', name: '底层文件', icon: Terminal },
     ];
 
@@ -158,8 +188,8 @@ export const PromptEditor = () => {
         if (selectedFile?.name.endsWith('roster.json')) {
             try { return JSON.parse(fileContent); } catch (e) { return null; }
         }
-        return null;
-    }, [fileContent, selectedFile]);
+        return stableRoster;
+    }, [fileContent, selectedFile, stableRoster]);
 
     const updateRosterItem = (id: string, field: string, value: any) => {
         if (!parsedRoster) return;
@@ -231,16 +261,32 @@ export const PromptEditor = () => {
     };
 
     const parsedCsv = useMemo(() => {
+        if (!selectedFile || !fileContent) return null;
+        console.log('[PromptEditor] Parsing file:', selectedFile.name, 'type:', selectedFile.type);
+
+        if (selectedFile.name.endsWith('.json')) {
+            try {
+                const data = JSON.parse(fileContent);
+                return { headers: ['JSON'], rows: [{ 'Data': JSON.stringify(data) }] };
+            } catch (e) { return null; }
+        }
+
         if (selectedFile?.type === 'csv' || selectedFile?.name.endsWith('.csv')) {
             const lines = fileContent.split('\n').filter(l => l.trim());
             if (lines.length === 0) return { headers: [], rows: [] };
-            const headers = lines[0].split(',');
+            // Normalize headers to avoid BOM/CRLF issues (e.g. "﻿评价者")
+            const headers = lines[0]
+                .split(',')
+                .map((h, idx) => {
+                    const clean = h.replace(/\r/g, '').trim();
+                    return idx === 0 ? clean.replace(/^\uFEFF/, '') : clean;
+                });
             const rows = lines.slice(1).map(line => {
                 // Robust CSV splitting that handles commas inside quotes
                 const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
                 const row: Record<string, string> = {};
                 headers.forEach((h, i) => {
-                    let val = (values[i] || '').trim();
+                    let val = (values[i] || '').replace(/\r/g, '').trim();
                     // Remove surrounding quotes if present
                     if (val.startsWith('"') && val.endsWith('"')) {
                         val = val.substring(1, val.length - 1);
@@ -253,6 +299,43 @@ export const PromptEditor = () => {
         }
         return null;
     }, [fileContent, selectedFile]);
+
+    const relationCsv = useMemo(() => {
+        if (activeCategory !== 'relation' || !selectedFile?.name?.includes('relationship.csv')) {
+            return parsedCsv;
+        }
+        if (!parsedCsv || !parsedRoster) return parsedCsv;
+
+        const characterNames = Object.values(parsedRoster)
+            .map((c: any) => (c?.name || '').trim())
+            .filter((name: string) => !!name);
+
+        const rowKey = (row: Record<string, string>) => `${row['评价者'] || ''}::${row['被评价者'] || ''}`;
+        const existing = new Set(parsedCsv.rows.map(rowKey));
+        const fullRows = [...parsedCsv.rows];
+
+        for (const evaluator of characterNames) {
+            for (const evaluatee of characterNames) {
+                if (evaluator === evaluatee) continue;
+                const key = `${evaluator}::${evaluatee}`;
+                if (!existing.has(key)) {
+                    fullRows.push({
+                        '评价者': evaluator,
+                        '被评价者': evaluatee,
+                        '表面态度': '普通交流',
+                        '内心真实评价': '尚未深入了解'
+                    });
+                    existing.add(key);
+                }
+            }
+        }
+
+        const headers = parsedCsv.headers.length > 0
+            ? parsedCsv.headers
+            : ['评价者', '被评价者', '表面态度', '内心真实评价'];
+
+        return { headers, rows: fullRows };
+    }, [activeCategory, selectedFile, parsedCsv, parsedRoster]);
 
     const updateCsvRow = (rowIndex: number, field: string, value: string) => {
         if (!parsedCsv) return;
@@ -434,55 +517,8 @@ ${data.content}`;
     return (
         <>
         <div
-            onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY }); }}
             className="flex-1 flex flex-col h-full bg-[var(--color-cyan-light)]/40 backdrop-blur-3xl rounded-3xl border border-white/50 shadow-2xl animate-fade-in relative transition-all duration-700 overflow-hidden"
         >
-            {/* Context Menu */}
-            {contextMenu && (
-                <div
-                    className="fixed z-[1000] bg-white/95 backdrop-blur-md border-2 border-[var(--color-cyan-main)]/30 rounded-2xl shadow-2xl p-2 w-56 animate-in zoom-in-95 duration-150"
-                    style={{ top: contextMenu.y, left: contextMenu.x }}
-                    onClick={() => setContextMenu(null)}
-                >
-                    <div className="flex flex-col space-y-1">
-                        <div className="px-3 py-1.5 text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.2em]">编辑器功能</div>
-                        <button
-                            onClick={() => handleSave()}
-                            className="flex items-center px-3 py-2 text-xs font-black text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-main)] hover:text-white rounded-xl transition-colors"
-                        >
-                            <Save size={14} className="mr-3 opacity-40" /> 保存当前修改
-                        </button>
-                        <button
-                            onClick={() => fetchFiles()}
-                            className="flex items-center px-3 py-2 text-xs font-black text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-main)] hover:text-white rounded-xl transition-colors"
-                        >
-                            <RefreshCw size={14} className="mr-3 opacity-40" /> 刷新资源列表
-                        </button>
-                        <button
-                            onClick={() => setEditMode(editMode === 'visual' ? 'code' : 'visual')}
-                            className="flex items-center px-3 py-2 text-xs font-black text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-main)] hover:text-white rounded-xl transition-colors"
-                        >
-                            <Code size={14} className="mr-3 opacity-40" /> 切换编辑模式
-                        </button>
-
-                        <div className="h-px bg-[var(--color-cyan-main)]/10 my-2 mx-2" />
-                        <div className="px-3 py-1.5 text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.2em]">游戏快捷操作</div>
-
-                        <button
-                            onClick={() => window.dispatchEvent(new CustomEvent('changeTab', { detail: 'game' }))}
-                            className="flex items-center px-3 py-2 text-xs font-black text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-main)] hover:text-white rounded-xl transition-colors"
-                        >
-                            <Globe size={14} className="mr-3 opacity-40" /> 返回游戏对局
-                        </button>
-                        <button
-                            onClick={() => setShowPublishModal(true)}
-                            className="flex items-center px-3 py-2 text-xs font-black text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-main)] hover:text-white rounded-xl transition-colors"
-                        >
-                            <UploadCloud size={14} className="mr-3 opacity-40" /> 发布此模组
-                        </button>
-                    </div>
-                </div>
-            )}
             <EditorHeader
                 sidebarCollapsed={sidebarCollapsed}
                 setSidebarCollapsed={setSidebarCollapsed}
@@ -541,7 +577,7 @@ ${data.content}`;
                                     onAddNew={() => setNewItemModal({ type: 'char', name: '', archetype: '', description: '' })}
                                     onDelete={(id, name) => setDeleteConfirm({ type: 'char', id, name })}
                                 />
-                            ) : activeCategory === 'event' && selectedFile?.name === 'timeline.json' && editMode === 'visual' ? (
+                            ) : activeCategory === 'event' && selectedFile?.name?.includes('timeline.json') && editMode === 'visual' ? (
                                 <TimelineView
                                     content={fileContent}
                                     onSave={(c) => handleSave(c)}
@@ -555,7 +591,30 @@ ${data.content}`;
                                     onDeleteRow={(idx, name) => setDeleteConfirm({ type: 'csv-row', id: `${idx}`, index: idx, name })}
                                     onBack={backToTimeline}
                                     filter={eventFilter}
-                                    setFilter={setEventFilter}
+                                    focusMode={selectedFile?.name?.includes('00_开局剧情.csv') ? 'opening' : 'default'}
+                                />
+                            ) : activeCategory === 'relation' && selectedFile?.name?.includes('relationship.csv') && editMode === 'visual' ? (
+                                <RelationshipMatrix
+                                    parsedRoster={parsedRoster}
+                                    parsedCsv={relationCsv}
+                                    onUpdateRow={(rowIndex, field, value) => {
+                                        if (!relationCsv) return;
+                                        const newRows = [...relationCsv.rows];
+                                        newRows[rowIndex] = { ...newRows[rowIndex], [field]: value.replace(/,/g, '，') };
+                                        saveCsv(relationCsv.headers, newRows);
+                                    }}
+                                    onAddRow={(data) => {
+                                        if (!relationCsv) return;
+                                        const newRows = [...relationCsv.rows, data];
+                                        saveCsv(relationCsv.headers, newRows);
+                                    }}
+                                    onSaveAll={() => {
+                                        if (relationCsv) {
+                                            saveCsv(relationCsv.headers, relationCsv.rows);
+                                        } else {
+                                            handleSave();
+                                        }
+                                    }}
                                 />
                             ) : (
                                 <CodeWorkspace

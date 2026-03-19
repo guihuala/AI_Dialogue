@@ -27,7 +27,8 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         typewriterSpeed,
         saveGame,
         loadSave,
-        prefetch
+        prefetch,
+        pendingChoice
     } = useGameStore();
 
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -252,7 +253,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
             />
 
             <div className="absolute inset-0 pointer-events-none flex flex-col justify-end z-20">
-                {!isTyping && !isLoading && !isEnd && isDialogFinished && (
+                {!isTyping && !isLoading && isDialogFinished && (!isEnd || nextOptions.includes("继续剧情...")) && (
                     <ActionOptions 
                         options={nextOptions} 
                         onSelect={performTurn} 
@@ -261,7 +262,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                     />
                 )}
 
-                {isEnd && <EndOverlay isLoading={isLoading} onRestart={() => startGame()} />}
+                {isEnd && !nextOptions.includes("继续剧情...") && <EndOverlay isLoading={isLoading} onRestart={() => startGame()} />}
 
                 <DialogBox 
                     typedText={typedText}
@@ -272,6 +273,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                     scrollRef={scrollRef}
                     parseMarktext={parseMarktext}
                     speakerName={currentSpeaker}
+                    pendingChoice={pendingChoice}
                 />
             </div>
         </div>

@@ -1,5 +1,5 @@
 import { RefreshCcw } from 'lucide-react';
-import { ReactNode, RefObject } from 'react';
+import { ReactNode, RefObject, useEffect, useMemo, useState } from 'react';
 
 interface DialogBoxProps {
     typedText: string;
@@ -10,6 +10,7 @@ interface DialogBoxProps {
     scrollRef: RefObject<HTMLDivElement>;
     parseMarktext: (text: string) => ReactNode;
     speakerName?: string;
+    pendingChoice?: string | null;
 }
 
 export const DialogBox = ({
@@ -20,8 +21,39 @@ export const DialogBox = ({
     onTextClick,
     scrollRef,
     parseMarktext,
-    speakerName
+    speakerName,
+    pendingChoice
 }: DialogBoxProps) => {
+    const [loadingPhase, setLoadingPhase] = useState(0);
+
+    useEffect(() => {
+        if (!(isLoading && pendingChoice)) {
+            setLoadingPhase(0);
+            return;
+        }
+        const timer = setInterval(() => {
+            setLoadingPhase((v) => (v + 1) % 4);
+        }, 900);
+        return () => {
+            clearInterval(timer);
+        };
+    }, [isLoading, pendingChoice]);
+
+    const stageHints = useMemo(
+        () => [
+            "（室友正在理解你的选择...）",
+            "（她们交换了一个眼神，气氛有些微妙。）",
+            "（新的回应正在形成，请稍等。）",
+            "（剧情即将接续到下一段。）"
+        ],
+        []
+    );
+
+    const optimisticText = pendingChoice
+        ? `你选择了：${pendingChoice}\n\n${stageHints[loadingPhase]}`
+        : "";
+    const renderText = isLoading && optimisticText ? optimisticText : (typedText || "等待故事载入...");
+
     return (
         <div className="w-[95%] mx-auto mb-6 relative group/dialog">
             {speakerName && (
@@ -37,31 +69,21 @@ export const DialogBox = ({
                 title={isTyping ? "点击跳过打字动画" : "点击继续"}
             >
                 <div className="relative z-10">
-                    {parseMarktext(typedText || "等待故事载入...")}
+                    {parseMarktext(renderText)}
                     {isTyping && <span className="typing-cursor ml-1"></span>}
                 </div>
 
-                {/* Loading State Overlay over text area */}
+                {/* Loading hint (non-blocking) */}
                 {!isTyping && isLoading && (
-                    <div className="absolute inset-0 bg-white/80 backdrop-blur-md flex flex-col items-center justify-center animate-fade-in z-20">
-                        <div className="relative scale-75">
-                            <div className="w-24 h-24 rounded-full border-4 border-[var(--color-cyan-light)] border-t-[var(--color-cyan-main)] animate-spin"></div>
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <RefreshCcw className="text-[var(--color-cyan-main)] animate-pulse" size={32} />
-                            </div>
-                            <div className="absolute -inset-4 border border-[var(--color-cyan-main)]/20 rounded-full animate-[ping_2s_infinite]"></div>
-                            <div className="absolute -inset-8 border border-[var(--color-cyan-main)]/10 rounded-full animate-[ping_3s_infinite]"></div>
-                        </div>
-                        <div className="mt-6 flex flex-col items-center">
-                            <span className="text-[8px] font-black text-[var(--color-cyan-main)]/60 uppercase tracking-[0.6em] mb-2">Neural Process</span>
-                            <div className="flex items-center text-[var(--color-cyan-dark)] font-black text-[10px] tracking-[0.2em] uppercase bg-[var(--color-cyan-light)] px-6 py-2 rounded-full border border-[var(--color-cyan-main)]/20 shadow-sm">
-                                对话生成中
-                                <span className="ml-3 flex space-x-1.5 min-w-[20px]">
-                                    <span className="w-1.5 h-1.5 bg-[var(--color-cyan-dark)] rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                                    <span className="w-1.5 h-1.5 bg-[var(--color-cyan-dark)] rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                                    <span className="w-1.5 h-1.5 bg-[var(--color-cyan-dark)] rounded-full animate-bounce"></span>
-                                </span>
-                            </div>
+                    <div className="absolute right-5 bottom-4 z-20">
+                        <div className="flex items-center text-[var(--color-cyan-dark)] font-black text-[10px] tracking-[0.15em] uppercase bg-white/90 backdrop-blur-md px-4 py-2 rounded-full border border-[var(--color-cyan-main)]/20 shadow-sm">
+                            <RefreshCcw className="mr-2 text-[var(--color-cyan-main)] animate-spin" size={12} />
+                            {pendingChoice ? '生成中' : '对话生成中'}
+                            <span className="ml-2 flex space-x-1 min-w-[14px]">
+                                <span className="w-1 h-1 bg-[var(--color-cyan-dark)] rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                                <span className="w-1 h-1 bg-[var(--color-cyan-dark)] rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                                <span className="w-1 h-1 bg-[var(--color-cyan-dark)] rounded-full animate-bounce"></span>
+                            </span>
                         </div>
                     </div>
                 )}

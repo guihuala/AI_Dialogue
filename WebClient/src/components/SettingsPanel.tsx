@@ -19,7 +19,9 @@ export const SettingsPanel = () => {
         model_name: '',
         temperature: 0.7,
         max_tokens: 1000,
-        typewriter_speed: 30
+        typewriter_speed: 30,
+        latency_mode: 'balanced',
+        dialogue_mode: 'single_dm'
     });
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -111,7 +113,7 @@ export const SettingsPanel = () => {
                     </div>
                     <div>
                         <h2 className="text-2xl font-black text-[var(--color-cyan-dark)] tracking-wider">系统设置</h2>
-                        <p className="text-sm font-bold text-[var(--color-cyan-dark)]/60">个性化调整您的室友生存体验</p>
+                        <p className="text-sm font-bold text-[var(--color-cyan-dark)]/60">个性化调整您的生存体验</p>
                     </div>
                 </div>
                 {message && (
@@ -234,7 +236,7 @@ export const SettingsPanel = () => {
                                                 )}
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-[var(--color-cyan-dark)]/40 uppercase mb-2 ml-1">通信密钥 (API Secret Key)</label>
+                                                <label className="block text-[10px] font-black text-[var(--color-cyan-dark)]/40 uppercase mb-2 ml-1">通信密钥</label>
                                                 <input
                                                     type="password"
                                                     value={settings.api_key}
@@ -255,6 +257,41 @@ export const SettingsPanel = () => {
                                     </div>
 
                                     <div className="space-y-8 pl-1">
+                                        <div>
+                                            <div className="flex justify-between items-center mb-4">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">性能模式</span>
+                                                    <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">调整响应速度与剧情质量的平衡</span>
+                                                </div>
+                                            </div>
+                                            <select
+                                                value={settings.latency_mode}
+                                                onChange={(e) => setSettings({ ...settings, latency_mode: e.target.value as any })}
+                                                className="w-full bg-white text-[var(--color-cyan-dark)] font-black p-3.5 rounded-xl border-2 border-[var(--color-cyan-main)]/10 focus:border-[var(--color-cyan-main)] outline-none transition-all appearance-none cursor-pointer"
+                                            >
+                                                <option value="balanced">均衡模式（推荐）</option>
+                                                <option value="fast">极速模式（优先速度）</option>
+                                                <option value="story">剧情优先（优先质量）</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between items-center mb-4">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">对话架构</span>
+                                                    <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">选择单一DM或多Agent模式</span>
+                                                </div>
+                                            </div>
+                                            <select
+                                                value={settings.dialogue_mode}
+                                                onChange={(e) => setSettings({ ...settings, dialogue_mode: e.target.value as any })}
+                                                className="w-full bg-white text-[var(--color-cyan-dark)] font-black p-3.5 rounded-xl border-2 border-[var(--color-cyan-main)]/10 focus:border-[var(--color-cyan-main)] outline-none transition-all appearance-none cursor-pointer"
+                                            >
+                                                <option value="single_dm">单一DM统筹（推荐稳定）</option>
+                                                <option value="npc_dm">NPC-DM 多Agent（实验）</option>
+                                            </select>
+                                        </div>
+
                                         <div>
                                             <div className="flex justify-between items-center mb-4">
                                                 <div className="flex flex-col">

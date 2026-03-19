@@ -1,4 +1,4 @@
-import { Brain, Heart, Activity, ShieldCheck, RefreshCw, ChevronRight } from 'lucide-react';
+import { Brain, Activity, ShieldCheck, RefreshCw, ChevronRight } from 'lucide-react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 
 interface WellnessAppProps {

@@ -7,7 +7,7 @@ interface AlipayAppProps {
 
 export const AlipayApp = ({ money, history }: AlipayAppProps) => {
   // Try to find any money-related entries in the text or choice
-  const txHistory = history.slice(-8).reverse().map((h, i) => {
+  const txHistory = history.slice(-8).reverse().map((h) => {
     const isIncome = h.text.toLowerCase().includes('earned') || h.text.includes('赚') || h.text.includes('获得');
     const isExpense = h.text.includes('spent') || h.text.includes('花费') || h.text.includes('买');
     const amountMatch = h.text.match(/¥(\d+)/) || h.text.match(/(\d+)元/);

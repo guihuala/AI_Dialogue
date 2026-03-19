@@ -2,16 +2,23 @@ import random
 import json
 import os
 import re
+from collections import deque
 from src.core.event_script import load_user_events
 from src.core.config import get_user_events_dir
 
 class EventDirector:
     def __init__(self, user_id: str = "default"):
         self.user_id = user_id
+        from src.core.config import get_user_events_dir, DEFAULT_EVENTS_DIR
         self.events_dir = get_user_events_dir(user_id)
+        self.default_events_dir = DEFAULT_EVENTS_DIR
         self.timeline_path = os.path.join(self.events_dir, "timeline.json")
+        self.default_timeline_path = os.path.join(self.default_events_dir, "timeline.json")
         
         self.used_events = []
+        self.recent_events = deque(maxlen=6)
+        self.event_last_picked = {}
+        self.pick_counter = 0
         self.current_chapter = 1
         self.chapter_progress = 0
         self.event_database = load_user_events(user_id)
@@ -19,6 +26,9 @@ class EventDirector:
         
     def reset(self):
         self.used_events = []
+        self.recent_events.clear()
+        self.event_last_picked = {}
+        self.pick_counter = 0
         self.current_chapter = 1
         self.chapter_progress = 0
         
@@ -35,11 +45,18 @@ class EventDirector:
             except Exception as e:
                 print(f"❌ Timeline 读取失败: {e}")
         
+        # 2. Try default timeline path
+        if os.path.exists(self.default_timeline_path):
+            try:
+                with open(self.default_timeline_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except: pass
+
         default_timeline = {
-            "1": ["随机或专属", "通用", "Boss"],
-            "2": ["通用", "随机或专属", "Boss"],
-            "3": ["条件", "通用", "Boss"],
-            "4": ["随机或专属", "通用", "Boss"]
+            "1": ["开局", "固定", "通用", "随机或专属", "固定", "Boss"],
+            "2": ["固定", "通用", "随机或专属", "固定", "Boss"],
+            "3": ["固定", "通用", "条件", "随机或专属", "Boss"],
+            "4": ["固定", "随机或专属", "通用", "Boss"]
         }
         
         os.makedirs(os.path.dirname(self.timeline_path), exist_ok=True)
@@ -104,6 +121,61 @@ class EventDirector:
                 
         return True
 
+    def _matches_expected_type(self, expected_type: str, event) -> bool:
+        exp = str(expected_type or "")
+        evt_type = str(getattr(event, "event_type", "") or "")
+
+        is_boss = bool(getattr(event, "is_boss", False))
+        is_opening = "开局" in evt_type
+        is_fixed = "固定" in evt_type
+        is_conditional = "条件" in evt_type
+        is_persona = "专属" in evt_type
+        is_general = ("通用" in evt_type or "随机" in evt_type)
+
+        if "Boss" in exp:
+            return is_boss
+        if "开局" in exp:
+            return is_opening
+        if "固定" in exp:
+            return is_fixed
+        if "专属" in exp:
+            return is_persona
+        if "条件" in exp:
+            return is_conditional
+        if "通用" in exp:
+            return is_general or is_fixed
+        if "随机或专属" in exp:
+            return is_general or is_persona or is_fixed
+        return True
+
+    def _event_weight(self, event) -> float:
+        try:
+            return max(0.1, float(getattr(event, "event_weight", 1.0) or 1.0))
+        except Exception:
+            return 1.0
+
+    def _in_cooldown(self, event) -> bool:
+        event_id = str(getattr(event, "id", "") or "")
+        if not event_id:
+            return False
+        try:
+            cd = max(0, int(getattr(event, "cooldown_turns", 2) or 2))
+        except Exception:
+            cd = 2
+        last_picked = self.event_last_picked.get(event_id)
+        if last_picked is None:
+            return False
+        return (self.pick_counter - last_picked) <= cd
+
+    def _weighted_pick(self, pool):
+        if not pool:
+            return None
+        try:
+            weights = [self._event_weight(e) for e in pool]
+            return random.choices(pool, weights=weights, k=1)[0]
+        except Exception:
+            return random.choice(pool)
+
     def get_next_event(self, player_stats, active_chars, affinity=None):
         if affinity is None: affinity = {}
         
@@ -118,40 +190,68 @@ class EventDirector:
             
         expected_type = chapter_pools[self.chapter_progress]
         self.chapter_progress += 1
+        boss_slot = "Boss" in str(expected_type)
         
         # 初筛：拿出当前章节的所有未触发事件
-        available_events = [e for e in self.event_database.values() if e.chapter == self.current_chapter and e.id not in self.used_events]
-        
-        valid_pool = []
-        for e in available_events:
-            # 匹配大类
-            type_match = False
-            if "Boss" in expected_type and getattr(e, 'is_boss', False): type_match = True
-            elif "开局" in expected_type and "开局" in e.event_type: type_match = True
-            elif "专属" in expected_type and "专属" in e.event_type: type_match = True
-            elif "条件" in expected_type and "条件" in e.event_type: type_match = True
-            elif "通用" in expected_type and ("通用" in e.event_type or "随机" in e.event_type): type_match = True
-            elif "随机或专属" in expected_type and ("专属" in e.event_type or "通用" in e.event_type): type_match = True
-            
-            if not type_match:
+        available_events = []
+        for e in self.event_database.values():
+            if e.chapter != self.current_chapter:
                 continue
-                
-            if self._check_conditions(e, player_stats, active_chars, affinity):
-                valid_pool.append(e)
-                
-        # 兜底机制：如果严格筛选后池子空了，降级到通用池
-        if not valid_pool:
-            backup_pool = [e for e in available_events if "通用" in e.event_type and self._check_conditions(e, player_stats, active_chars, affinity)]
-            if backup_pool:
-                valid_pool = backup_pool
-            else:
-                # 极端兜底：连通用事件都因条件卡死了，无视条件硬抽一个（防崩溃）
-                valid_pool = [e for e in available_events if "通用" in e.event_type]
-                if not valid_pool:
-                    print(f"🔄 [事件调度] 第 {self.current_chapter} 章事件池已枯竭，重置事件历史记录！")
-                    self.used_events = [] # 穷尽了，重置历史
-                    return self.get_next_event(player_stats, active_chars, affinity)
+            if not getattr(e, "allow_repeat", False) and e.id in self.used_events:
+                continue
+            available_events.append(e)
 
-        chosen = random.choice(valid_pool)
-        self.used_events.append(chosen.id)
+        if not available_events:
+            print(f"🔄 [事件调度] 第 {self.current_chapter} 章可用事件为空，推进到下一章。")
+            self.current_chapter += 1
+            self.chapter_progress = 0
+            return self.get_next_event(player_stats, active_chars, affinity)
+
+        # 分层筛选：优先满足类型+条件+去重，其次逐步放宽，避免“定义太硬”导致卡死。
+        strict_pool = [
+            e for e in available_events
+            if self._matches_expected_type(expected_type, e)
+            and self._check_conditions(e, player_stats, active_chars, affinity)
+            and (e.id not in self.recent_events)
+            and (not self._in_cooldown(e))
+        ]
+        soft_pool = [
+            e for e in available_events
+            if self._matches_expected_type(expected_type, e)
+            and self._check_conditions(e, player_stats, active_chars, affinity)
+        ]
+        chapter_pool = [
+            e for e in available_events
+            if self._check_conditions(e, player_stats, active_chars, affinity)
+            and (e.id not in self.recent_events)
+        ]
+        fallback_pool = [
+            e for e in available_events
+            if self._check_conditions(e, player_stats, active_chars, affinity)
+        ]
+        emergency_pool = list(available_events)
+
+        if not boss_slot:
+            strict_pool = [e for e in strict_pool if not getattr(e, "is_boss", False)]
+            soft_pool = [e for e in soft_pool if not getattr(e, "is_boss", False)]
+            chapter_pool = [e for e in chapter_pool if not getattr(e, "is_boss", False)]
+            fallback_pool = [e for e in fallback_pool if not getattr(e, "is_boss", False)]
+            non_boss_emergency = [e for e in emergency_pool if not getattr(e, "is_boss", False)]
+            if non_boss_emergency:
+                emergency_pool = non_boss_emergency
+
+        valid_pool = strict_pool or soft_pool or chapter_pool or fallback_pool or emergency_pool
+
+        if valid_pool is emergency_pool:
+            print(f"⚠️ [事件调度] 第 {self.current_chapter} 章条件过严，已启用无条件兜底。")
+
+        chosen = self._weighted_pick(valid_pool)
+        if not chosen:
+            return None
+
+        if not getattr(chosen, "allow_repeat", False):
+            self.used_events.append(chosen.id)
+        self.recent_events.append(chosen.id)
+        self.event_last_picked[chosen.id] = self.pick_counter
+        self.pick_counter += 1
         return chosen

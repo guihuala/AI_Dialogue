@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { UploadCloud, Plus, Trash2, Sparkles, Loader2 } from 'lucide-react';
 import { gameApi } from '../../api/gameApi';
 

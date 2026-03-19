@@ -11,6 +11,9 @@ import concurrent.futures
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+# Avoid noisy HuggingFace tokenizers fork-parallelism warning in multi-worker/background contexts.
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 # 把当前文件的上一级目录加入系统路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -63,10 +66,12 @@ def get_current_roster(user_id: str = "default"):
 
 try:
     from src.core.data_loader import load_all_events
-    from src.core.event_script import EVENT_DATABASE
+    import src.core.event_script as es
+    EVENT_DATABASE = getattr(es, 'EVENT_DATABASE', {})
     EVENT_DATABASE.update(load_all_events(EVENTS_DIR))
 except Exception as e:
     print(f"Warning: Failed to load events data: {e}")
+    EVENT_DATABASE = {}
 
 # SAVE_DIR is now SAVES_DIR from config.py
 SAVE_DIR = SAVES_DIR
@@ -75,6 +80,13 @@ SAVE_DIR = SAVES_DIR
 PREFETCH_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=10)
 
 app = FastAPI(title="Roommate Survival Game API")
+
+@app.on_event("shutdown")
+def _shutdown_background_pool():
+    try:
+        PREFETCH_POOL.shutdown(wait=False, cancel_futures=True)
+    except Exception:
+        pass
 
 # --- Multi-user Engine Manager ---
 engines: Dict[str, GameEngine] = {}
@@ -168,6 +180,8 @@ class SettingsRequest(BaseModel):
     base_url: Optional[str] = None
     model_name: Optional[str] = None
     typewriter_speed: Optional[int] = None
+    latency_mode: Optional[str] = None
+    dialogue_mode: Optional[str] = None
 
 class ReflectionRequest(BaseModel):
     active_roommates: List[str]
@@ -281,6 +295,9 @@ async def pre_generate_script(req: GameTurnRequest, user_id: str = Depends(get_u
     """后台静默预取下一个事件的剧本"""
     try:
         engine = get_engine(user_id)
+        # 分支树已下线：在 single_dm / npc_dm 模式中，prefetch 不再触发主生成，避免重复耗时。
+        if engine and getattr(engine, "dialogue_mode", "single_dm") in ["single_dm", "npc_dm"]:
+            return {"status": "success", "message": "Prefetch skipped in current dialogue mode"}
         # 强制设置 is_prefetch 为 True 避免干扰正常保存
         req.is_prefetch = True
         
@@ -311,10 +328,18 @@ def monitor_game(user_id: str = Depends(get_user_id)):
         "event_completion_count": engine.event_completion_count if engine else 0,
         "recent_event_ids": engine.recent_event_ids if engine else []
     }
+    prefetch_stats = {}
+    if engine and hasattr(engine, "prefetch_mgr") and hasattr(engine, "llm") and hasattr(engine, "pm"):
+        try:
+            prefetcher = engine.prefetch_mgr.get_prefetcher(user_id, engine.llm, engine.pm)
+            prefetch_stats = prefetcher.get_metrics()
+        except Exception:
+            prefetch_stats = {}
     return {
         "status": "success", 
         "data": engine.latest_game_state_cache,
-        "engine_stats": engine_stats
+        "engine_stats": engine_stats,
+        "prefetch_stats": prefetch_stats
     }
 
 @app.post("/api/game/save")
@@ -468,7 +493,9 @@ def get_settings(user_id: str = Depends(get_user_id)):
                 "model_name": engine.llm.model or "",
                 "temperature": getattr(engine.llm, 'temperature', 0.7),
                 "max_tokens": getattr(engine.llm, 'max_tokens', 800),
-                "typewriter_speed": getattr(engine.llm, 'typewriter_speed', 30)
+                "typewriter_speed": getattr(engine.llm, 'typewriter_speed', 30),
+                "latency_mode": getattr(engine, 'latency_mode', 'balanced'),
+                "dialogue_mode": getattr(engine, 'dialogue_mode', 'single_dm')
             }
         }
     return {"status": "error", "message": "Engine not ready"}
@@ -481,6 +508,18 @@ def update_settings(req: SettingsRequest, user_id: str = Depends(get_user_id)):
         if req.temperature is not None: engine.llm.temperature = req.temperature
         if req.max_tokens is not None: engine.llm.max_tokens = req.max_tokens
         if req.typewriter_speed is not None: engine.llm.typewriter_speed = req.typewriter_speed
+        if req.latency_mode is not None:
+            mode = str(req.latency_mode).strip().lower()
+            if mode not in ["balanced", "fast", "story"]:
+                raise HTTPException(status_code=400, detail="latency_mode must be one of: balanced, fast, story")
+            engine.latency_mode = mode
+        if req.dialogue_mode is not None:
+            dmode = str(req.dialogue_mode).strip().lower()
+            if dmode in ["hybrid", "tree_only"]:
+                dmode = "single_dm"
+            if dmode not in ["single_dm", "npc_dm"]:
+                raise HTTPException(status_code=400, detail="dialogue_mode must be one of: single_dm, npc_dm")
+            engine.dialogue_mode = dmode
         
         current_api = req.api_key if req.api_key else engine.llm.api_key
         current_url = req.base_url if req.base_url else engine.llm.base_url
@@ -506,14 +545,27 @@ def get_admin_files(user_id: str = Depends(get_user_id)):
     user_prompts_dir = get_user_prompts_dir(user_id)
     user_events_dir = get_user_events_dir(user_id)
     
-    md_files = []
-    if os.path.exists(user_prompts_dir):
-        for root, dirs, files in os.walk(user_prompts_dir):
-            for file in files:
-                if file.endswith((".md", ".json", ".csv")):
-                    md_files.append(os.path.relpath(os.path.join(root, file), user_prompts_dir).replace("\\", "/"))
+    # 1. Gather files from both default and user-specific directories
+    dirs_to_scan = [DEFAULT_PROMPTS_DIR, user_prompts_dir]
+    md_files_set = set()
+    for d in dirs_to_scan:
+        if os.path.exists(d):
+            for root, _, files in os.walk(d):
+                for file in files:
+                    if file.endswith((".md", ".json", ".csv")):
+                        rel_path = os.path.relpath(os.path.join(root, file), d).replace("\\", "/")
+                        md_files_set.add(rel_path)
+    md_files = list(md_files_set)
+    # 2. Gather CSV files from events directories
+    event_dirs = [DEFAULT_EVENTS_DIR, user_events_dir]
+    csv_files_set = set()
+    for d in event_dirs:
+        if os.path.exists(d):
+            for file in os.listdir(d):
+                if file.endswith((".csv", ".json")):
+                    csv_files_set.add(file)
+    csv_files = list(csv_files_set)
     
-    csv_files = [f for f in os.listdir(user_events_dir) if f.endswith((".csv", ".json"))] if os.path.exists(user_events_dir) else []
     return {"status": "success", "md": sorted(md_files), "csv": sorted(csv_files)}
 
 @app.get("/api/admin/file")

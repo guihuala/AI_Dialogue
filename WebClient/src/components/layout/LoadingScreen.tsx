@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Cpu, Loader2, Sparkles, User2, MessageSquare } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 export const LoadingScreen = ({ onFinished }: { onFinished: () => void }) => {
     const [progress, setProgress] = useState(0);

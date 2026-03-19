@@ -56,7 +56,13 @@ class ScriptRunner:
             dialogue_seq.extend(next_turn.get("dialogue_sequence", []))
 
         # 构造选项
-        next_options = [opt.get("text") for opt in next_turn.get("player_choices", [])] if next_turn else []
+        next_options = []
+        if next_turn:
+            for opt in next_turn.get("player_choices", []):
+                if isinstance(opt, dict):
+                    txt = opt.get("text")
+                    if txt:
+                        next_options.append(txt)
         
         is_end = next_turn.get("is_end", False) if next_turn else True
 

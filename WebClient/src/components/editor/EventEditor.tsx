@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Trash2, ScrollText, X, Search, Filter, ArrowLeft } from 'lucide-react';
+import { Plus, Trash2, ScrollText, Search, ArrowLeft } from 'lucide-react';
 
 interface EventEditorProps {
     parsedCsv: { headers: string[], rows: Record<string, string>[] } | null;
@@ -8,7 +8,7 @@ interface EventEditorProps {
     onDeleteRow: (index: number, name: string) => void;
     onBack?: () => void;
     filter?: { chapter?: string, type?: string };
-    setFilter?: (filter: { chapter?: string, type?: string } | undefined) => void;
+    focusMode?: 'default' | 'opening';
 }
 
 export const EventEditor = ({
@@ -18,9 +18,10 @@ export const EventEditor = ({
     onDeleteRow,
     onBack,
     filter,
-    setFilter
+    focusMode = 'default'
 }: EventEditorProps) => {
     const [searchTerm, setSearchTerm] = useState('');
+    const isOpeningFocus = focusMode === 'opening';
     
     const filteredRows = useMemo(() => {
         if (!parsedCsv) return [];
@@ -44,6 +45,15 @@ export const EventEditor = ({
             });
     }, [parsedCsv, searchTerm, filter]);
 
+    const getRenderHeaders = () => {
+        if (!parsedCsv?.headers) return [];
+        if (!isOpeningFocus) return parsedCsv.headers;
+        const preferredOrder = ['事件标题', '场景与冲突描述', '预设剧本', '玩家交互', '结果', 'Event_ID'];
+        const preferred = preferredOrder.filter((h) => parsedCsv.headers.includes(h));
+        const others = parsedCsv.headers.filter((h) => !preferredOrder.includes(h));
+        return [...preferred, ...others];
+    };
+
     return (
         <div className="flex-1 flex flex-col overflow-hidden bg-[var(--color-warm-bg)]">
             <div className="px-8 py-6 border-b border-[var(--color-soft-border)] flex flex-col md:flex-row md:items-center justify-between shrink-0 bg-white shadow-sm gap-4">
@@ -57,13 +67,20 @@ export const EventEditor = ({
                         </button>
                     )}
                     <div className="text-left">
-                        <h4 className="text-xl font-black text-[var(--color-cyan-dark)] tracking-tight leading-none mb-1">剧情事件池</h4>
+                        <h4 className="text-xl font-black text-[var(--color-cyan-dark)] tracking-tight leading-none mb-1">
+                            {isOpeningFocus ? '开场固定剧情编辑' : '剧情事件池'}
+                        </h4>
                         {filter && (
                              <div className="flex items-center text-[var(--color-cyan-main)]/60 text-[10px] font-black uppercase tracking-widest">
                                  <span>{filter.chapter ? `学年 ${filter.chapter}` : '跨学年'}</span>
                                  <span className="mx-2 opacity-30">•</span>
                                  <span>{filter.type || '所有类型'}</span>
                              </div>
+                        )}
+                        {isOpeningFocus && (
+                            <div className="text-[10px] font-black text-[var(--color-cyan-main)]/70 uppercase tracking-widest mt-1">
+                                重点编辑「预设剧本」对话内容，条件字段默认弱化显示
+                            </div>
                         )}
                     </div>
                 </div>
@@ -101,14 +118,29 @@ export const EventEditor = ({
                                 </button>
                                 
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-left">
-                                    {parsedCsv?.headers?.map((h, hIdx) => (
-                                        <div key={h} className={hIdx === (parsedCsv?.headers?.length || 0) - 1 ? "md:col-span-3 space-y-1" : "space-y-1"}>
+                                    {getRenderHeaders().map((h) => {
+                                        const isDialogueField = h === '预设剧本';
+                                        const isSecondaryField = isOpeningFocus && ['触发条件', '专属角色', '是否Boss', '事件类型', '潜在冲突点', '所属章节'].includes(h);
+                                        const fieldClass = isDialogueField
+                                            ? 'md:col-span-4 space-y-1'
+                                            : isOpeningFocus && (h === '场景与冲突描述' || h === '玩家交互' || h === '结果')
+                                                ? 'md:col-span-2 space-y-1'
+                                                : 'space-y-1';
+                                        const inputRows = isDialogueField ? 6 : 1;
+                                        return (
+                                        <div key={h} className={fieldClass}>
                                             <label className="text-[10px] font-black text-[var(--color-cyan-main)]/50 ml-1 uppercase tracking-widest leading-none">{h}</label>
                                             <textarea
                                                 value={row[h]}
                                                 onChange={(e) => onUpdateRow(row.originalIndex, h, e.target.value)}
-                                                className="w-full px-4 py-3 bg-[var(--color-cyan-light)]/20 rounded-xl border border-transparent text-sm font-bold text-[var(--color-cyan-dark)] focus:bg-white focus:border-[var(--color-cyan-main)] outline-none transition-all resize-none overflow-hidden"
-                                                rows={1}
+                                                className={`w-full px-4 py-3 rounded-xl border border-transparent text-sm font-bold text-[var(--color-cyan-dark)] focus:bg-white focus:border-[var(--color-cyan-main)] outline-none transition-all resize-none overflow-hidden ${
+                                                    isDialogueField
+                                                        ? 'bg-[var(--color-yellow-light)]/40 border-[var(--color-yellow-main)]/30'
+                                                        : isSecondaryField
+                                                            ? 'bg-slate-100/60 text-slate-500'
+                                                            : 'bg-[var(--color-cyan-light)]/20'
+                                                }`}
+                                                rows={inputRows}
                                                 onInput={(e) => {
                                                     const target = e.target as HTMLTextAreaElement;
                                                     target.style.height = 'auto';
@@ -116,7 +148,7 @@ export const EventEditor = ({
                                                 }}
                                             />
                                         </div>
-                                    ))}
+                                    );})}
                                 </div>
                             </div>
                         );

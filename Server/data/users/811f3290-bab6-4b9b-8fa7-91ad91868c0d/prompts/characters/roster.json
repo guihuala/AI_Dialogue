@@ -1,16 +1,14 @@
 {
     "tang_mengqi": {
         "name": "唐梦琪",
-        "archetype": "天真烂漫",
+        "archetype": "天真烂漫/极度情绪化/外向型依赖",
         "tags": [
             "Shopaholic",
             "Boyfriend_Dependent"
         ],
         "description": "家里负债，父母常吵架，但自身高消费习惯难改。...",
         "file": "tang_mengqi.md",
-        "is_player": false,
-        "avatar": "",
-        "quotes": []
+        "is_player": false
     },
     "li_yinuo": {
         "name": "李一诺",

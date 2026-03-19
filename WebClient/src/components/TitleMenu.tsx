@@ -1,4 +1,4 @@
-import { Settings, Cloud, BookOpen, Heart } from 'lucide-react';
+import { Settings, Cloud, BookOpen } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 interface TitleMenuProps {

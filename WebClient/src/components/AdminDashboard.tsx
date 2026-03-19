@@ -44,7 +44,7 @@ export const AdminDashboard = () => {
     const handleDelete = async (id: string, name: string) => {
         if (!window.confirm(`确认要彻底删除模组 [${name}] 吗？此操作不可撤销。`)) return;
         try {
-            await gameApi.deleteWorkshopMod(id);
+            await gameApi.deleteWorkshopItem(id);
             loadItems();
         } catch (e) {
             alert('删除失败');
@@ -64,7 +64,7 @@ export const AdminDashboard = () => {
         if (!editingId) return;
         setLoading(true);
         try {
-            await gameApi.updateWorkshopMod(editingId, editForm);
+            await gameApi.updateWorkshopItem(editingId, editForm);
             setEditingId(null);
             loadItems();
         } catch (e) {

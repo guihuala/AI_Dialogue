@@ -1,4 +1,4 @@
-import { PlayCircle, Save, EyeOff, FastForward, Settings, RefreshCw, Github } from 'lucide-react';
+import { PlayCircle, Save, EyeOff, FastForward, Settings, RefreshCw } from 'lucide-react';
 
 interface GlobalContextMenuProps {
   x: number;

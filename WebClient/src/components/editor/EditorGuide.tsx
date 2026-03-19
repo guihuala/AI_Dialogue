@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { HelpCircle, ChevronLeft, ChevronRight, X, BookOpen, User, Sparkles, Clock, Edit3 } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronLeft, ChevronRight, X, BookOpen, User, Sparkles, Clock } from 'lucide-react';
 
 interface GuidePage {
     title: string;
