@@ -38,6 +38,16 @@ export const gameApi = {
     return res.data;
   },
 
+  prefetch: async (turnData: any, customPrompts?: Record<string, string>, saveId: string = "slot_0") => {
+    const res = await apiClient.post(`/game/prefetch`, {
+        ...turnData,
+        custom_prompts: customPrompts,
+        save_id: saveId,
+        is_prefetch: true
+    });
+    return res.data;
+  },
+
   getMonitor: async () => {
     const res = await apiClient.get(`/game/monitor`);
     return res.data;

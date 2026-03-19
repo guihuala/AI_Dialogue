@@ -16,22 +16,22 @@ export const ScenePortraits = ({ charactersInScene }: ScenePortraitsProps) => {
 
         let positionClass = "left-1/2 -translate-x-1/2";
         if (count === 2) {
-          positionClass = index === 0 ? "left-[20%] -translate-x-1/2" : "right-[20%] translate-x-1/2";
+          positionClass = index === 0 ? "left-[35%] -translate-x-1/2" : "right-[35%] translate-x-1/2";
         } else if (count === 3) {
-          if (index === 0) positionClass = "left-[10%] -translate-x-1/2";
+          if (index === 0) positionClass = "left-[20%] -translate-x-1/2";
           else if (index === 1) positionClass = "left-1/2 -translate-x-1/2";
-          else positionClass = "right-[10%] translate-x-1/2";
+          else positionClass = "right-[20%] translate-x-1/2";
         }
 
         return (
           <div key={char.id} className={`absolute bottom-0 ${positionClass} transition-all duration-700 ease-in-out`}>
             <img
-              src={`/assets/portraits/${char.id}.png`}
+              src={`/assets/portraits/${char.id}.webp`}
               alt={char.id}
               className={`max-h-[105vh] max-w-none w-auto transform transition-all duration-700 origin-bottom object-contain ${
                 char.isSpeaking || charactersInScene.length === 1
-                ? 'scale-100 drop-shadow-[0_0_30px_rgba(255,255,255,0.2)] translate-y-24 z-20 brightness-110 blur-none'
-                : 'scale-90 opacity-60 translate-y-36 z-10 brightness-50 blur-[2px]'
+                ? 'scale-95 drop-shadow-[0_0_30px_rgba(255,255,255,0.2)] translate-y-24 z-20 brightness-110 blur-none'
+                : 'scale-[0.85] opacity-60 translate-y-36 z-10 brightness-50 blur-[2px]'
               }`}
               style={{ height: 'auto' }}
             />

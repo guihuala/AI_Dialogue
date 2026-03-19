@@ -26,7 +26,8 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         wechatNotifications,
         typewriterSpeed,
         saveGame,
-        loadSave
+        loadSave,
+        prefetch
     } = useGameStore();
 
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -37,7 +38,8 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
     const [showHistory, setShowHistory] = useState(false);
 
     // Notifications system
-    const [notifications, setNotifications] = useState<{ msg: string, id: number }[]>([]);
+    const [notifications, setNotifications] = useState<{ msg: string; id: number }[]>([]);
+    const [currentSpeaker, setCurrentSpeaker] = useState<string | undefined>(undefined);
 
     // Dialog pacing state
     const [dialogSegments, setDialogSegments] = useState<string[]>([]);
@@ -100,16 +102,43 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         if (dialogSegments.length === 0 || currentSegmentIndex >= dialogSegments.length) {
             setTypedText('');
             setIsTyping(false);
+            setCurrentSpeaker(undefined); // Clear speaker when dialog ends
             return;
         }
 
         const currentText = dialogSegments[currentSegmentIndex];
+        
+        // --- [SPEAKER & PREFIX EXTRACTION] ---
+        let displayStr = currentText;
+        let speaker: string | undefined = undefined;
+
+        if (currentText.startsWith("[暗场动态]")) {
+            // 暗场动态：去掉前缀，不显示名字框
+            displayStr = currentText.replace("[暗场动态]", "").trim();
+            speaker = undefined;
+        } else {
+            // 标准说话人提取: **[Name]** or [Name]:
+            const speakerMatch = currentText.match(/^\*\*\[(.*?)\]\*\*/);
+            if (speakerMatch) {
+                speaker = speakerMatch[1];
+                displayStr = currentText.replace(/^\*\*\[(.*?)\]\*\*\s*/, "");
+            } else {
+                const simpleSpeakerMatch = currentText.match(/^([^：:]{1,10})[：:]/);
+                if (simpleSpeakerMatch) {
+                    speaker = simpleSpeakerMatch[1];
+                    displayStr = currentText.replace(/^([^：:]{1,10})[：:]\s*/, "");
+                }
+            }
+        }
+        
+        setCurrentSpeaker(speaker);
+
         setIsTyping(true);
         let i = 0;
         const interval = setInterval(() => {
-            setTypedText(currentText.slice(0, i + 1));
+            setTypedText(displayStr.slice(0, i + 1));
             i++;
-            if (i >= currentText.length) {
+            if (i >= displayStr.length) {
                 clearInterval(interval);
                 setIsTyping(false);
             }
@@ -160,6 +189,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
             { id: '林', names: ['林飒', '飒飒', '林'] },
             { id: '陈', names: ['陈雨婷', '雨婷', '陈'] },
             { id: '苏', names: ['苏浅', '浅浅', '苏'] },
+            { id: '安然', names: ['陆陈安然', '安然', '陆陈'] },
         ];
 
         let presentChars: any[] = [];
@@ -173,7 +203,13 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                 const sceneIdx = sceneContext.lastIndexOf(name);
                 if (sceneIdx > -1) { isPresent = true; highestMentionIdx = Math.max(highestMentionIdx, sceneIdx); }
             }
-            if (isPresent) presentChars.push({ id: c.id, isSpeaking, lastMentionIdx: highestMentionIdx });
+            if (isPresent) {
+                // If this character is the current speaker, force isSpeaking to true
+                if (currentSpeaker && c.names.includes(currentSpeaker)) {
+                    isSpeaking = true;
+                }
+                presentChars.push({ id: c.id, isSpeaking, lastMentionIdx: highestMentionIdx });
+            }
         }
 
         const actualSpeaker = [...presentChars].filter(c => c.isSpeaking).sort((a, b) => b.lastMentionIdx - a.lastMentionIdx)[0];
@@ -217,7 +253,12 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
 
             <div className="absolute inset-0 pointer-events-none flex flex-col justify-end z-20">
                 {!isTyping && !isLoading && !isEnd && isDialogFinished && (
-                    <ActionOptions options={nextOptions} onSelect={performTurn} disabled={isLoading || isTyping} />
+                    <ActionOptions 
+                        options={nextOptions} 
+                        onSelect={performTurn} 
+                        onHover={prefetch}
+                        disabled={isLoading || isTyping} 
+                    />
                 )}
 
                 {isEnd && <EndOverlay isLoading={isLoading} onRestart={() => startGame()} />}
@@ -230,6 +271,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                     onTextClick={handleTextClick}
                     scrollRef={scrollRef}
                     parseMarktext={parseMarktext}
+                    speakerName={currentSpeaker}
                 />
             </div>
         </div>

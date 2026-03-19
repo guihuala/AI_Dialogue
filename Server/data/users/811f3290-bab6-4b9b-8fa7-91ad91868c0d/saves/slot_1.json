@@ -1,0 +1,22 @@
+{
+    "slot_id": 1,
+    "timestamp": "2026-03-19 11:51:13",
+    "chapter_info": "第 1 章 - 第 2 回合",
+    "state": {
+        "slot_id": 1,
+        "active_roommates": [
+            "唐梦琪",
+            "赵鑫",
+            "苏浅",
+            "陆陈安然"
+        ],
+        "current_evt_id": "evt_ch1_laundry",
+        "chapter": 1,
+        "turn": 2,
+        "san": 100,
+        "money": 2000.0,
+        "gpa": 4.0,
+        "arg_count": 0,
+        "wechat_data_list": []
+    }
+}

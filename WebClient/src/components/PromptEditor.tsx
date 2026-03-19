@@ -94,6 +94,13 @@ export const PromptEditor = () => {
             setShowExplorer(false);
             setEditMode('visual');
             setSelectedFile(null); // Clear selected file to show explorer by default
+        } else if (activeCategory === 'relation') {
+            const rel = files.md.find(f => f.endsWith('relationship.csv'));
+            if (rel) {
+                setSelectedFile({ type: 'md', name: rel });
+                setShowExplorer(false);
+                setEditMode('visual');
+            }
         } else {
             setShowExplorer(true);
         }
@@ -141,6 +148,7 @@ export const PromptEditor = () => {
     const categories = [
         { id: 'world', name: '世界设定', icon: Globe },
         { id: 'char', name: '角色管理', icon: Users },
+        { id: 'relation', name: '人物关系', icon: Layers }, // Using Layers for matrix-like icon
         { id: 'event', name: '剧情编排', icon: ScrollText },
         { id: 'skills', name: '系统逻辑', icon: Layers },
         { id: 'all', name: '底层文件', icon: Terminal },

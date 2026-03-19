@@ -126,6 +126,7 @@ if os.path.exists(STATIC_DIR):
 class StartGameRequest(BaseModel):
     roommates: List[str] = []
     custom_prompts: Optional[Dict[str, str]] = None
+    is_prefetch: bool = False
     save_id: str = "slot_0" # 默认为临时槽位
 
 class GameTurnRequest(BaseModel):
@@ -144,6 +145,7 @@ class GameTurnRequest(BaseModel):
     affinity: Dict[str, float] = {}
     wechat_data_list: List[Dict[str, Any]] = []
     custom_prompts: Optional[Dict[str, str]] = None
+    is_prefetch: bool = False
     save_id: str = "slot_0"
 
 class SaveGameRequest(BaseModel):
@@ -236,90 +238,70 @@ def perform_turn(req: GameTurnRequest, user_id: str = Depends(get_user_id)):
                 if chat_name:
                     wechat_dict[chat_name] = [[m.get("sender", ""), m.get("message", "")] for m in session.get("messages", [])]
 
-        #  1. 拦截接管后台计算任务
-        cache_key = f"{req.current_evt_id}_{req.turn}_{req.choice}"
+        # 直接调用 play_main_turn，它内部会由 PrefetchManager 检查缓存并触发下一轮预取
+        res = engine.play_main_turn(
+            action_text=req.choice, selected_chars=req.active_roommates, 
+            current_evt_id=req.current_evt_id, is_transition=req.is_transition,
+            api_key="", base_url="", model="", tmp=0.7, top_p=1.0, max_t=350, 
+            pres_p=0.3, freq_p=0.5,
+            hygiene=req.hygiene, reputation=req.reputation,
+            san=req.san, money=req.money,
+            gpa=req.gpa, arg_count=req.arg_count, 
+            chapter=req.chapter, turn=req.turn,
+            affinity=req.affinity, wechat_data_dict=wechat_dict,
+            is_prefetch=req.is_prefetch,
+            custom_prompts=req.custom_prompts
+        )
         
-        if cache_key in engine.prefetch_futures:
-            print(f"🚀 [影子推演] 命中预计算队列: {req.choice}")
-            print(f"⌛ 正在挂起主线程，接管后台剩余计算（如果后台已算完，将瞬间返回）...")
-            future = engine.prefetch_futures.pop(cache_key)
-            
-            res = future.result() 
-            print(f"✅ [影子推演] 完美衔接！")
-            
-            # 补写被省略的记忆
-            if not res.get("is_end", False) and req.choice and "时间推移" not in req.choice:
-                dialogue_lines = []
-                seq = res.get("dialogue_sequence", [])
-                if isinstance(seq, list):
-                    for t in seq:
-                        if isinstance(t, dict) and t.get("content"):
-                            dialogue_lines.append(f"**[{t.get('speaker', '神秘人')}]** {t.get('content')}")
-                engine.mm.save_interaction(user_input=req.choice, ai_response=" ".join(dialogue_lines), user_name="陆陈安然")
-        else:
-            print(f"⚠️ [影子推演未命中] 正常进行主线程计算: {req.choice}")
-            res = engine.perform_turn(req.choice, req)
-        
+        # 触发反思逻辑 (保持原样)
         if engine.event_completion_count >= 3:
             print("🧠 [自动反思] 阈值已到，启动后台提炼...")
             active_roommates = req.active_roommates.copy()
             event_context = ", ".join(engine.recent_event_ids)
             current_chapter = req.chapter
-    
             from src.core.agent_system import ReflectionSystem
-            
-            # 这里是同步函数，我们将其封装进线程池
             def run_reflection_task():
                 try:
-                    # 传入正确的初始化参数
                     rs = ReflectionSystem(engine.llm, PROMPTS_DIR)
-                    # 调用正确的函数名
                     rs.trigger_night_reflection(current_chapter, event_context, active_roommates)
-                except Exception as e:
-                    print(f"后台反思失败: {e}")
-    
+                except Exception as e: print(f"后台反思失败: {e}")
             PREFETCH_POOL.submit(run_reflection_task)
-    
-            # 重置计数器
             engine.event_completion_count = 0
             engine.recent_event_ids = []
             res["reflection_triggered"] = True 
-            res["reflection_logs"] = ["反思任务已提交至后台线程池..."]
-
-        #  2. 触发下一回合的影子预测执行
-        if not res.get("is_end", False) and res.get("next_options"):
-            next_turn = res["turn"] 
-            
-            # 内存清理机制
-            if len(engine.prefetch_futures) > 15: engine.prefetch_futures.clear()
-                
-            for opt_text in res["next_options"]:
-                opt_choice = opt_text.strip()
-                if not opt_choice or opt_choice == "继续剧情...": continue
-                
-                next_cache_key = f"{res['current_evt_id']}_{next_turn}_{opt_choice}"
-                
-                print(f"将分支加入预计算线程池: {opt_choice}")
-                # 提交给线程池并保留“契约票据 (Future)”
-                future = PREFETCH_POOL.submit(
-                    engine.play_main_turn,
-                    action_text=opt_choice, selected_chars=req.active_roommates, current_evt_id=res["current_evt_id"],
-                    is_transition=False, api_key="", base_url="", model="",
-                    tmp=0.7, top_p=1.0, max_t=350, pres_p=0.3, freq_p=0.5,
-                    san=res["san"], money=res["money"], gpa=res["gpa"], hygiene=res["hygiene"], 
-                    reputation=res["reputation"], arg_count=res["arg_count"],
-                    chapter=res["chapter"], turn=res["turn"], affinity=res["affinity"].copy() if isinstance(res.get("affinity"), dict) else {},
-                    wechat_data_dict=wechat_dict,
-                    is_prefetch=True
-                )
-                engine.prefetch_futures[next_cache_key] = future
 
         engine.latest_game_state_cache = {"request": req.model_dump(), "response": res}
-        
         return res
     except Exception as e:
         print(f"Turn Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/game/prefetch")
+async def pre_generate_script(req: GameTurnRequest, user_id: str = Depends(get_user_id)):
+    """后台静默预取下一个事件的剧本"""
+    try:
+        engine = get_engine(user_id)
+        # 强制设置 is_prefetch 为 True 避免干扰正常保存
+        req.is_prefetch = True
+        
+        # 异步启动预取，不等待结果
+        PREFETCH_POOL.submit(
+            engine.play_main_turn,
+            action_text=req.choice, selected_chars=req.active_roommates, 
+            current_evt_id=req.current_evt_id, is_transition=req.is_transition,
+            api_key="", base_url="", model="", tmp=0.7, top_p=1.0, max_t=350, 
+            pres_p=0.3, freq_p=0.5,
+            hygiene=req.hygiene, reputation=req.reputation,
+            san=req.san, money=req.money,
+            gpa=req.gpa, arg_count=req.arg_count, 
+            chapter=req.chapter, turn=req.turn,
+            affinity=req.affinity, wechat_data_dict={},
+            is_prefetch=True,
+            custom_prompts=req.custom_prompts
+        )
+        return {"status": "success", "message": "Prefetch task queued"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.get("/api/game/monitor")
 def monitor_game(user_id: str = Depends(get_user_id)):
@@ -528,7 +510,7 @@ def get_admin_files(user_id: str = Depends(get_user_id)):
     if os.path.exists(user_prompts_dir):
         for root, dirs, files in os.walk(user_prompts_dir):
             for file in files:
-                if file.endswith((".md", ".json")):
+                if file.endswith((".md", ".json", ".csv")):
                     md_files.append(os.path.relpath(os.path.join(root, file), user_prompts_dir).replace("\\", "/"))
     
     csv_files = [f for f in os.listdir(user_events_dir) if f.endswith((".csv", ".json"))] if os.path.exists(user_events_dir) else []

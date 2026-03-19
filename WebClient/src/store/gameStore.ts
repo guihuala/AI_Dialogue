@@ -33,6 +33,8 @@ interface GameState {
   currentSaveId: string;
   visitorId: string;
 
+  eventScript: any | null;
+
   // actions
   startGame: (roommates?: string[], modId?: string) => Promise<void>;
   performTurn: (choice: string) => Promise<void>;
@@ -42,9 +44,11 @@ interface GameState {
   setAudioVolume: (volume: number) => void;
   setMuted: (muted: boolean) => void;
   setUiTransparency: (transparency: number) => void;
+  prefetch: (choice: string) => Promise<void>;
   resetGame: () => Promise<void>;
   clearWechatNotifications: () => void;
   togglePhone: (open?: boolean) => void;
+  setEventScript: (script: any) => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -71,6 +75,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   isMuted: false,
   uiTransparency: 90,
   currentSaveId: 'slot_0',
+  eventScript: null,
   visitorId: (() => {
     let id = localStorage.getItem('visitor_id');
     if (!id) {
@@ -79,6 +84,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
     return id as string;
   })(),
+
+  setEventScript: (script: any) => set({ eventScript: script }),
 
   startGame: async (roommates = [], modId?: string) => {
     set({ isLoading: true });
@@ -105,7 +112,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         nextOptions: data.next_options || [],
         isEnd: data.is_end || false,
         history: [{ turn: data.turn, text: data.display_text }],
-        wechatNotifications: data.wechat_notifications || []
+        wechatNotifications: data.wechat_notifications || [],
+        eventScript: data.event_script || null
       });
     } catch (e) {
       console.error(e);
@@ -116,14 +124,56 @@ export const useGameStore = create<GameState>((set, get) => ({
   performTurn: async (choice: string) => {
     const state = get();
     if (state.isLoading) return;
+
+    // --- [LOCAL SCRIPT RESOLUTION] ---
+    if (state.eventScript && !state.isEnd && choice !== "继续剧情...") {
+      const script = state.eventScript;
+      const turnData = (script.turns || []).find((t: any) => t.turn_num === state.turn);
+      
+      if (turnData) {
+        const selectedChoice = (turnData.player_choices || []).find((c: any) => 
+          choice.includes(c.text) || c.text.includes(choice)
+        );
+
+        if (selectedChoice) {
+          console.log("🚀 [Frontend] Script HIT: Resolving turn locally");
+          const nextTurnNum = selectedChoice.leads_to_turn;
+          const nextTurn = (script.turns || []).find((t: any) => t.turn_num === nextTurnNum);
+          
+          const dialogueSeq = [...(selectedChoice.immediate_outcome_dialogue || [])];
+          if (nextTurn && nextTurn.dialogue_sequence) {
+            dialogueSeq.push(...nextTurn.dialogue_sequence);
+          }
+
+          const displayLines = dialogueSeq.map((d: any) => `**[${d.speaker}]** ${d.content}`);
+          const newDisplayText = `你选择了：${selectedChoice.text}\n\n` + displayLines.join('\n\n');
+
+          const stats = selectedChoice.stat_changes || {};
+          
+          set((prev) => ({
+            san: Math.max(0, Math.min(100, prev.san + (stats.san_delta || 0))),
+            money: prev.money + (stats.money_delta || 0),
+            turn: nextTurnNum || prev.turn + 1,
+            displayText: newDisplayText,
+            nextOptions: nextTurn ? (nextTurn.player_choices || []).map((c: any) => c.text) : [],
+            isEnd: nextTurn ? nextTurn.is_end : true,
+            history: [...prev.history, { turn: prev.turn, text: newDisplayText }],
+            eventScript: nextTurn && nextTurn.is_end ? null : prev.eventScript
+          }));
+          return;
+        }
+      }
+    }
     
+    // --- [BACKEND FALLBACK / TRANSITION] ---
     set({ isLoading: true });
     try {
+      const isTransition = choice === "继续剧情..." || state.isEnd;
       const turnReq = {
         choice,
         active_roommates: state.active_roommates,
         current_evt_id: state.current_evt_id,
-        is_transition: false,
+        is_transition: isTransition,
         chapter: state.chapter,
         turn: state.turn,
         san: state.san,
@@ -150,12 +200,42 @@ export const useGameStore = create<GameState>((set, get) => ({
         displayText: data.display_text,
         nextOptions: data.next_options || [],
         isEnd: data.is_end || false,
-        history: [...prev.history, { turn: data.turn, text: `【你的选择】: ${choice}\n\n${data.display_text}` }],
-        wechatNotifications: data.wechat_notifications || prev.wechatNotifications
+        history: [...prev.history, { turn: data.turn, text: isTransition ? data.display_text : `【你的选择】: ${choice}\n\n${data.display_text}` }],
+        wechatNotifications: data.wechat_notifications || prev.wechatNotifications,
+        eventScript: data.event_script || null
       }));
+
+      // 性能优化：如果在 transition 之后拿到了新剧本，则无需预取
+      if (!data.event_script && data.next_options && data.next_options.length > 0 && !data.is_end) {
+          get().prefetch(data.next_options[0]);
+      }
     } catch (e) {
       console.error(e);
       set({ isLoading: false });
+    }
+  },
+
+  prefetch: async (choice: string) => {
+    const state = get();
+    try {
+      const turnReq = {
+        choice,
+        active_roommates: state.active_roommates,
+        current_evt_id: state.current_evt_id,
+        is_transition: false,
+        chapter: state.chapter,
+        turn: state.turn,
+        san: state.san,
+        money: state.money,
+        gpa: state.gpa,
+        hygiene: state.hygiene,
+        reputation: state.reputation,
+        affinity: state.affinity,
+        save_id: state.currentSaveId
+      };
+      await gameApi.prefetch(turnReq, undefined, state.currentSaveId);
+    } catch (e) {
+      console.warn('Prefetch failed (silent):', e);
     }
   },
 

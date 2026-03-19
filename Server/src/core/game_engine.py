@@ -16,6 +16,8 @@ from src.core.event_script import load_user_events
 from src.core.prompt_manager import PromptManager
 from src.core.agent_system import NPCAgent
 from src.core.tool_manager import ToolManager
+from src.core.prefetch_manager import PrefetchManager
+from src.core.script_runner import ScriptRunner
 from src.core.config import (
     DATA_ROOT, CHROMA_DB_PATH, PROFILE_PATH, 
     get_user_chroma_path, get_user_saves_dir
@@ -42,13 +44,12 @@ class GameEngine:
         
         self.mm = MemoryManager(user_profile_path, user_chroma_path, self.llm)
         self.director = EventDirector(user_id)
-        self.pm = PromptManager(user_id)
         self.tm = ToolManager()
-
-        self.event_completion_count = 0  # 记录已完成的事件数
+        self.pm = PromptManager(user_id)
+        self.prefetch_mgr = PrefetchManager()
+        self.event_completion_count = 0
         self.recent_event_ids = []
-        self.prefetch_futures = {}  # 影子推演缓存
-        self.latest_game_state_cache = {}  # 最后状态缓存
+        self.prefetch_futures = {}
 
     def reset(self):
         self.director.reset()
@@ -120,7 +121,7 @@ class GameEngine:
         settlement_msg = ""
         
         if is_transition or current_evt_id == "":
-            if turn == 0: 
+            if turn == 0 and not is_prefetch: 
                 self.mm.clear_game_history()
                 self.director.current_chapter = chapter
                 self.director.chapter_progress = 0
@@ -148,15 +149,92 @@ class GameEngine:
                 settlement_msg = f"**[大{chapter}学年结算]** 扣除生活费800。GPA：{gpa:.2f}\n\n"
                 chapter = next_evt.chapter; arg_count = 0 
             turn = 1
+            
+            # --- [DEEP PREFETCH CONSUMPTION: OPENING] ---
+            prefetcher = self.prefetch_mgr.get_prefetcher(self.user_id, self.llm, self.pm)
+            cached_script = prefetcher.get_cached_script()
+            if cached_script and cached_script.get("event_id") == next_evt.id and not is_prefetch:
+                print(f"🚀 [Prefetch] HIT: Using deep script for {next_evt.name}")
+                runner = ScriptRunner(cached_script)
+                first_turn = runner.get_turn(1)
+                if first_turn:
+                    return {
+                        "narrator_transition": cached_script.get("description", f"🎬 **{next_evt.name}**\n---"),
+                        "current_scene": first_turn.get("scene", "宿舍"),
+                        "dialogue_sequence": first_turn.get("dialogue_sequence", []),
+                        "next_options": [opt.get("text") for opt in first_turn.get("player_choices", [])],
+                        "stat_changes": {}, # Initial entry usually no changes
+                        "is_end": first_turn.get("is_end", False),
+                        "event_id": next_evt.id,
+                        "turn": 1,
+                        "event_script": cached_script # Return full script to frontend
+                    }
+
             event_context = f"【系统指令】开始以下事件，不要写任何开场白或过场旁白。\n【新事件】:{next_evt.name}\n【场景描述】:{next_evt.description}"
         else:
             next_evt = self.director.event_database.get(current_evt_id)
             if not next_evt:
                 return {"error": "事件丢失，请重置游戏。"}
+            
+            # --- [DEEP PREFETCH CONSUMPTION: IN-EVENT TURN] ---
+            prefetcher = self.prefetch_mgr.get_prefetcher(self.user_id, self.llm, self.pm)
+            cached_script = prefetcher.get_cached_script()
+            if cached_script and not is_prefetch:
+                print(f"🚀 [Prefetch] HIT: Executing choice '{action_text}' from script")
+                runner = ScriptRunner(cached_script)
+                res_data = runner.get_next_turn_data(turn, action_text)
+                
+                if "error" not in res_data:
+                    # Apply stat changes from script
+                    stats_data = res_data.get("stat_changes", {})
+                    san = max(0, min(100, san + stats_data.get("san_delta", 0)))
+                    money += stats_data.get("money_delta", 0)
+                    
+                    aff_changes = stats_data.get("affinity_changes", {})
+                    if isinstance(aff_changes, dict):
+                        for char_name, change_val in aff_changes.items():
+                            if char_name in affinity: 
+                                affinity[char_name] = max(0, min(100, affinity[char_name] + change_val))
+
+                    # 构造最终返回
+                    display_text = res_data.get("narrator_transition", "") + "\n\n"
+                    dialogue_lines = []
+                    for t in res_data.get("dialogue_sequence", []):
+                        spk, cont = t.get("speaker", "神秘人"), t.get("content", "")
+                        if cont: dialogue_lines.append(f"**[{spk}]** {cont}")
+                    
+                    if dialogue_lines:
+                        display_text += "\n\n".join(dialogue_lines)
+
+                    # 如果事件结束，清理缓存
+                    if res_data.get("is_end"):
+                        prefetcher.clear_cache()
+
+                    return {
+                        "is_game_over": False,
+                        "display_text": display_text,
+                        "san": san,
+                        "money": money,
+                        "gpa": gpa,
+                        "hygiene": hygiene,
+                        "reputation": reputation,
+                        "arg_count": arg_count,
+                        "chapter": chapter,
+                        "turn": res_data.get("turn", turn + 1),
+                        "affinity": affinity,
+                        "active_roommates": selected_chars,
+                        "current_scene": res_data.get("current_scene", "场景"),
+                        "current_evt_id": next_evt.id,
+                        "is_end": res_data.get("is_end", False),
+                        "next_options": res_data.get("next_options", []),
+                        "dialogue_sequence": res_data.get("dialogue_sequence", []),
+                        "narrator_transition": res_data.get("narrator_transition", "")
+                    }
+
             turn += 1
-            # 将 turn >= 3 改为 turn >= 6
-            pacing = "【节奏：结局】事件已充分发展，请明确收尾，将 is_end 置为 true。" if turn >= 6 else "【节奏：激化】冲突升级，引发新的讨论。"
-            event_context = f"【事件】: {next_evt.name}\n【回合】: {turn}/6\n{pacing}\n【玩家选择意图】: {action_text}"
+            # 将 turn >= 6 改为 turn >= 10
+            pacing = "【节奏：结局】事件已充分发展，请明确收尾，将 is_end 置为 true。" if turn >= 10 else "【节奏：激化】冲突升级，引发新的讨论。"
+            event_context = f"【事件】: {next_evt.name}\n【回合】: {turn}/10\n{pacing}\n【玩家选择意图】: {action_text}"
 
         try:
             relevant_docs = self.mm.vector_store.search(f"{next_evt.name} {action_text}", n_results=6)
@@ -358,7 +436,7 @@ class GameEngine:
                     if "gpa_delta" in tool_res: gpa = max(0.0, min(4.0, gpa + tool_res["gpa_delta"]))
                     if "money_delta" in tool_res: money += tool_res["money_delta"]
             
-            is_end = True if getattr(next_evt, 'is_cg', False) or turn >= 6 else parsed.get("is_end", False)
+            is_end = True if getattr(next_evt, 'is_cg', False) or turn >= 10 else parsed.get("is_end", False)
 
             if not getattr(next_evt, 'is_cg', False) and action_text and "（时间推移..." not in action_text and not is_prefetch:
                 self.mm.save_interaction(user_input=action_text, ai_response=" ".join(dialogue_lines), user_name="陆陈安然")
@@ -404,6 +482,40 @@ class GameEngine:
                 else:
                     extracted_options = ["【深呼吸】", "【继续观察】", "【转移话题】", "【沉默】", "【叹气】"]
 
+            # --- [START PREFETCH FOR NEXT EVENT] ---
+            prefetch_ctx = {
+                "chapter": chapter,
+                "turn": turn,
+                "active_chars": selected_chars,
+                "custom_prompts": custom_prompts
+            }
+            # 如果是事件开头且没命中的话，尝试补刷当前事件剧本
+            if turn <= 1:
+                print(f"📡 [Prefetch] Triggering prefetch for CURRENT event: {next_evt.name}", flush=True)
+                prefetch_ctx["event_name"] = next_evt.name
+                prefetch_ctx["event_id"] = next_evt.id
+                prefetch_ctx["event_description"] = next_evt.description
+                self.prefetch_mgr.get_prefetcher(self.user_id, self.llm, self.pm).generate_script_async(prefetch_ctx)
+            # 如果当前事件结束，尝试预取下一个阶段
+            elif parsed.get("is_end", False):
+                next_predicted = self.director.get_next_event(
+                    {"money": money, "san": san, "hygiene": hygiene, "gpa": gpa, "reputation": reputation},
+                    selected_chars, affinity
+                )
+                if next_predicted:
+                    print(f"📡 [Prefetch] Triggering prefetch for NEXT event: {next_predicted.name}", flush=True)
+                    prefetch_ctx["event_name"] = next_predicted.name
+                    prefetch_ctx["event_id"] = next_predicted.id
+                    prefetch_ctx["event_description"] = next_predicted.description
+                    self.prefetch_mgr.get_prefetcher(self.user_id, self.llm, self.pm).generate_script_async(prefetch_ctx)
+
+            # --- [ALWAYS PROVIDE SCRIPT IF AVAILABLE] ---
+            prefetcher = self.prefetch_mgr.get_prefetcher(self.user_id, self.llm, self.pm)
+            script_in_cache = prefetcher.get_cached_script()
+            final_script = None
+            if script_in_cache and script_in_cache.get("event_id") == next_evt.id:
+                final_script = script_in_cache
+
             return {
                 "is_game_over": False, 
                 "res_text": res_text, 
@@ -425,6 +537,7 @@ class GameEngine:
                 "wechat_notifications": valid_notifs,
                 "narrator_transition": parsed.get("narrator_transition", ""),
                 "dialogue_sequence": seq if isinstance(seq, list) else [],
+                "event_script": final_script, # 关键：即使当前回合是实时生成的，也要把后台生好的剧本传回前端
                 "error": parsed.get("error", ""),
                 "sys_prompt": sys_prm,
                 "user_prompt": user_prm,
