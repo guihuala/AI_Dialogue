@@ -94,7 +94,6 @@ class EventDirector:
                     continue
                 
                 # 动态获取玩家状态或好感度
-                # 动态获取玩家状态或好感度
                 actual_val = 50 
                 k_lower = key.lower()
                 if k_lower in ['san', 'sanity']: actual_val = player_stats.get('san', 100)

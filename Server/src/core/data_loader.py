@@ -1,5 +1,6 @@
 import csv
 import os
+import re
 from src.models.schema import ScriptedEvent
 
 def load_all_events(events_dir: str) -> dict:
@@ -55,6 +56,12 @@ def load_all_events(events_dir: str) -> dict:
                 fallback_idx += 1
         return parsed
 
+    def _looks_like_labeled_options(text):
+        raw = str(text or "").strip()
+        if not raw:
+            return False
+        return bool(re.search(r'(^|\|)\s*(?:[A-Ea-e]|[1-5])\s*[:：]', raw))
+
     for filename in os.listdir(events_dir):
         if not filename.endswith(".csv"): continue
             
@@ -78,9 +85,38 @@ def load_all_events(events_dir: str) -> dict:
                     clean_row = {str(k).strip(): str(v or "").strip() for k, v in row.items() if k is not None}
                     evt_id = clean_row.get("Event_ID", "").strip()
                     if not evt_id: continue 
-                    
-                    options_dict = _parse_labeled_map(clean_row.get("玩家交互", ""))
-                    outcomes_dict = _parse_labeled_map(clean_row.get("结果", ""))
+
+                    raw_options = clean_row.get("玩家交互", "")
+                    raw_outcomes = clean_row.get("结果", "")
+                    min_turn_raw = clean_row.get("最短回合", clean_row.get("最少回合", 5))
+                    max_turn_raw = clean_row.get("最长回合", clean_row.get("最多回合", 10))
+                    progress_beats_raw = clean_row.get("推进节点", clean_row.get("剧情推进节点", clean_row.get("阶段节点", "")))
+                    end_signals_raw = clean_row.get("收束条件", clean_row.get("结束信号", ""))
+                    event_weight_raw = clean_row.get("权重", clean_row.get("事件权重", 1.0))
+                    cooldown_turns_raw = clean_row.get("冷却回合", clean_row.get("事件冷却", 2))
+                    allow_repeat_raw = clean_row.get("允许重复", "FALSE")
+
+                    # 兼容用户删掉「玩家交互/结果」列但数据行仍保留两列的情况：自动纠偏。
+                    if (
+                        not raw_options
+                        and not raw_outcomes
+                        and _looks_like_labeled_options(min_turn_raw)
+                    ):
+                        extras = row.get(None, []) or []
+                        raw_options = str(min_turn_raw or "")
+                        raw_outcomes = str(max_turn_raw or "")
+                        min_turn_raw = progress_beats_raw
+                        max_turn_raw = end_signals_raw
+                        progress_beats_raw = event_weight_raw
+                        end_signals_raw = cooldown_turns_raw
+                        event_weight_raw = allow_repeat_raw
+                        if len(extras) >= 1:
+                            cooldown_turns_raw = extras[0]
+                        if len(extras) >= 2:
+                            allow_repeat_raw = extras[1]
+
+                    options_dict = _parse_labeled_map(raw_options)
+                    outcomes_dict = _parse_labeled_map(raw_outcomes)
                     
                     is_boss_str = str(clean_row.get("是否Boss", "FALSE")).strip().upper()
                     
@@ -100,19 +136,17 @@ def load_all_events(events_dir: str) -> dict:
                     
                     is_cg = (len(fixed_dialogue) > 0 or "CG" in str(clean_row.get("事件类型", default_type)).upper())
 
-                    min_turn_for_end = _to_int(clean_row.get("最短回合", clean_row.get("最少回合", 5)), 5)
-                    max_turn_for_end = _to_int(clean_row.get("最长回合", clean_row.get("最多回合", 10)), 10)
+                    min_turn_for_end = _to_int(min_turn_raw, 5)
+                    max_turn_for_end = _to_int(max_turn_raw, 10)
                     if max_turn_for_end < min_turn_for_end:
                         max_turn_for_end = min_turn_for_end + 2
 
-                    progress_beats = _split_list(
-                        clean_row.get("推进节点", clean_row.get("剧情推进节点", clean_row.get("阶段节点", "")))
-                    )
-                    end_signals = _split_list(clean_row.get("收束条件", clean_row.get("结束信号", "")))
+                    progress_beats = _split_list(progress_beats_raw)
+                    end_signals = _split_list(end_signals_raw)
                     next_event_id = clean_row.get("下一事件ID", clean_row.get("下一事件", "")).strip() or None
-                    event_weight = _to_float(clean_row.get("权重", clean_row.get("事件权重", 1.0)), 1.0)
-                    cooldown_turns = _to_int(clean_row.get("冷却回合", clean_row.get("事件冷却", 2)), 2)
-                    allow_repeat = _to_bool(clean_row.get("允许重复", "FALSE"), False)
+                    event_weight = _to_float(event_weight_raw, 1.0)
+                    cooldown_turns = _to_int(cooldown_turns_raw, 2)
+                    allow_repeat = _to_bool(allow_repeat_raw, False)
 
                     event = ScriptedEvent(
                         id=evt_id,

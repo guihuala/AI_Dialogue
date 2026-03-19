@@ -1,7 +1,7 @@
 {
     "player_anran": {
         "name": "陆陈安然",
-        "avatar": "/assets/portraits/主角.webp",
+        "avatar": "/assets/portraits/安然.webp",
         "archetype": "温吞/淡漠/选择困难症/观察型内倾",
         "tags": [
             "Protagonist",
@@ -20,7 +20,7 @@
             "Shopaholic",
             "Boyfriend_Dependent"
         ],
-        "description": "家里负债，父母常吵架，但自身高消费习惯难改。...",
+        "description": "热情但是很难搞的大小姐？...",
         "file": "tang_mengqi.md"
     },
     "li_yinuo": {
@@ -32,7 +32,7 @@
             "Early_Bird",
             "GPA_Oriented"
         ],
-        "description": "害怕努力失败。对规则的严格执行源于内心对秩序崩塌的恐惧。...",
+        "description": "每天都很努力在背单词。...",
         "file": "li_yinuo.md"
     },
     "zhao_xin": {
@@ -45,7 +45,7 @@
             "Frugal",
             "Tomboy"
         ],
-        "description": "隐忍但有清晰底线，被触及会引发可怕的报复。...",
+        "description": "爱打游戏的老熟人罢了。...",
         "file": "zhao_xin.md"
     },
     "lin_sa": {
@@ -58,7 +58,7 @@
             "Smoker",
             "Night_Owl"
         ],
-        "description": "和一些女同学的关系被说闲话。极度害怕被保守的父母知道真实情况。...",
+        "description": "看上去不好惹其实很好惹的家伙。...",
         "file": "lin_sa.md"
     },
     "chen_yuting": {
@@ -71,7 +71,7 @@
             "Two_Faced",
             "Information_Hub"
         ],
-        "description": "掌握大量学生及老师的黑料。最大弱点是害怕失去权力。...",
+        "description": "超级爱八卦，超级热情。...",
         "file": "chen_yuting.md"
     },
     "su_qian": {
@@ -84,7 +84,7 @@
             "Depressed",
             "Artist"
         ],
-        "description": "网络名气不好，曾被指控抄袭且被开盒泄露身份证照，导致严重躯体化。...",
+        "description": "有点像老鼠？每天都窝在床上。...",
         "file": "su_qian.md"
     }
 }

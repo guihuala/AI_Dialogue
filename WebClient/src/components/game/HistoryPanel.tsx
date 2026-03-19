@@ -4,6 +4,7 @@ import { ReactNode, RefObject } from 'react';
 interface HistoryItem {
   turn: number;
   text: string;
+  rawJson?: string;
 }
 
 interface HistoryPanelProps {
@@ -49,6 +50,24 @@ export const HistoryPanel = ({
             <div className="text-white/90 whitespace-pre-wrap font-bold leading-relaxed">
               {parseMarktext(h.text)}
             </div>
+            {h.rawJson && (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-[10px] tracking-widest uppercase font-black text-cyan-300/90">
+                  查看 AI 原始 JSON
+                </summary>
+                <div className="mt-2 flex justify-end">
+                  <button
+                    onClick={() => navigator.clipboard.writeText(h.rawJson || '')}
+                    className="text-[10px] px-3 py-1 rounded-lg bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/40 transition-colors font-black tracking-widest uppercase"
+                  >
+                    复制 JSON
+                  </button>
+                </div>
+                <pre className="mt-2 text-[11px] leading-relaxed text-cyan-100/95 bg-black/40 border border-white/10 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
+                  {h.rawJson}
+                </pre>
+              </details>
+            )}
           </div>
         ))}
       </div>

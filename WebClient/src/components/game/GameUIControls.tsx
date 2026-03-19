@@ -1,9 +1,10 @@
-import { Smartphone, Save, ScrollText } from 'lucide-react';
+import { Smartphone, Save, ScrollText, House } from 'lucide-react';
 
 interface GameUIControlsProps {
   onTogglePhone: () => void;
   onSaveGame: () => void;
   onShowHistory: () => void;
+  onBackToMenu: () => void;
   wechatNotificationCount: number;
 }
 
@@ -11,6 +12,7 @@ export const GameUIControls = ({
   onTogglePhone,
   onSaveGame,
   onShowHistory,
+  onBackToMenu,
   wechatNotificationCount
 }: GameUIControlsProps) => {
   return (
@@ -37,6 +39,12 @@ export const GameUIControls = ({
         className="flex items-center px-4 py-2 bg-white/90 hover:bg-white text-[var(--color-cyan-dark)] backdrop-blur-md rounded-full border border-[var(--color-cyan-main)]/30 shadow-lg transition-all font-black text-sm tracking-widest uppercase"
       >
         <ScrollText size={16} className="mr-2 text-[var(--color-yellow-main)] drop-shadow-sm" /> 回顾记录
+      </button>
+      <button
+        onClick={onBackToMenu}
+        className="flex items-center px-4 py-2 bg-white/90 hover:bg-white text-[var(--color-cyan-dark)] backdrop-blur-md rounded-full border border-[var(--color-cyan-main)]/30 shadow-lg transition-all font-black text-sm tracking-widest uppercase"
+      >
+        <House size={16} className="mr-2 text-[var(--color-cyan-main)]" /> 返回主菜单
       </button>
     </div>
   );

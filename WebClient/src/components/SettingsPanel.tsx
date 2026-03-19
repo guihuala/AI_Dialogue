@@ -3,6 +3,7 @@ import { settingsApi, SystemSettings } from '../api/settingsApi';
 import { gameApi } from '../api/gameApi';
 import { useGameStore } from '../store/gameStore';
 import { Settings, Save, RefreshCcw, Server, Thermometer, Database, Type, Trash2, Milestone, Zap } from 'lucide-react';
+import { ConfirmDialog } from './common/ConfirmDialog';
 
 const AI_PRESETS = [
     { name: 'DeepSeek (深度求索)', url: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'] },
@@ -11,6 +12,15 @@ const AI_PRESETS = [
     { name: 'ZhiPu (智谱清言)', url: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-plus', 'glm-4-flash'] },
     { name: 'Ollama (本地推理)', url: 'http://localhost:11434/v1', models: ['qwen2.5:7b', 'llama3:8b', 'deepseek-r1:7b'] }
 ];
+
+const TEMP_MIN = 0.2;
+const TEMP_MAX = 1.2;
+const TOKENS_MIN = 300;
+const TOKENS_MAX = 2000;
+const STABLE_TEMP_MIN = 0.3;
+const STABLE_TEMP_MAX = 0.8;
+const STABLE_TOKENS_MIN = 1000;
+const STABLE_TOKENS_MAX = 1600;
 
 export const SettingsPanel = () => {
     const [settings, setSettings] = useState<SystemSettings>({
@@ -21,12 +31,21 @@ export const SettingsPanel = () => {
         max_tokens: 1000,
         typewriter_speed: 30,
         latency_mode: 'balanced',
-        dialogue_mode: 'single_dm'
+        dialogue_mode: 'single_dm',
+        stability_mode: 'stable'
     });
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState('');
     const [activeTab, setActiveTab] = useState<'ai' | 'preferences' | 'memory'>('ai');
+    const [confirmDialog, setConfirmDialog] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        confirmText?: string;
+        danger?: boolean;
+        onConfirm?: () => Promise<void> | void;
+    }>({ open: false, title: '', message: '' });
     const [memories, setMemories] = useState<any[]>([]);
     const [memoryFilter, setMemoryFilter] = useState({ char: '', type: '' });
     const { currentSaveId, active_roommates } = useGameStore();
@@ -44,7 +63,12 @@ export const SettingsPanel = () => {
         const fetchSettings = async () => {
             try {
                 const data = await settingsApi.getSettings();
-                if (data) setSettings(data);
+                if (data) {
+                    setSettings({
+                        ...data,
+                        stability_mode: data.stability_mode || 'stable'
+                    });
+                }
             } catch (err) {
                 console.error('Failed to fetch settings:', err);
                 setMessage('读取设置失败。请检查后端是否正常运行。');
@@ -71,21 +95,39 @@ export const SettingsPanel = () => {
     };
 
     const handleDeleteMemory = async (id: string) => {
-        if (!confirm('确定要抹除这条记忆吗？AI 将不再能检索到它。')) return;
-        try {
-            await gameApi.deleteMemory(id);
-            setMemories(memories.filter(m => m.id !== id));
-        } catch (err) {
-            console.error('Failed to delete memory:', err);
-        }
+        setConfirmDialog({
+            open: true,
+            title: '抹除记忆',
+            message: '确定要抹除这条记忆吗？AI 将不再能检索到它。',
+            confirmText: '确认抹除',
+            danger: true,
+            onConfirm: async () => {
+                try {
+                    await gameApi.deleteMemory(id);
+                    setMemories(memories.filter(m => m.id !== id));
+                } catch (err) {
+                    console.error('Failed to delete memory:', err);
+                }
+            }
+        });
     };
 
     const handleSave = async () => {
         setIsSaving(true);
         setMessage('');
         try {
-            await settingsApi.updateSettings(settings);
-            setTypewriterSpeed(settings.typewriter_speed);
+            const safeSettings = {
+                ...settings,
+                temperature: settings.stability_mode === 'stable'
+                    ? Math.max(STABLE_TEMP_MIN, Math.min(STABLE_TEMP_MAX, settings.temperature))
+                    : Math.max(TEMP_MIN, Math.min(TEMP_MAX, settings.temperature)),
+                max_tokens: settings.stability_mode === 'stable'
+                    ? Math.max(STABLE_TOKENS_MIN, Math.min(STABLE_TOKENS_MAX, settings.max_tokens))
+                    : Math.max(TOKENS_MIN, Math.min(TOKENS_MAX, settings.max_tokens))
+            };
+            await settingsApi.updateSettings(safeSettings);
+            setSettings(safeSettings);
+            setTypewriterSpeed(safeSettings.typewriter_speed);
             setMessage('设置保存成功！');
             setTimeout(() => setMessage(''), 3000);
         } catch (error) {
@@ -295,8 +337,27 @@ export const SettingsPanel = () => {
                                         <div>
                                             <div className="flex justify-between items-center mb-4">
                                                 <div className="flex flex-col">
+                                                    <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">输出稳定性</span>
+                                                    <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">Stable 更抗 JSON 崩坏，Balanced 更自由</span>
+                                                </div>
+                                            </div>
+                                            <select
+                                                value={settings.stability_mode}
+                                                onChange={(e) => setSettings({ ...settings, stability_mode: e.target.value as any })}
+                                                className="w-full bg-white text-[var(--color-cyan-dark)] font-black p-3.5 rounded-xl border-2 border-[var(--color-cyan-main)]/10 focus:border-[var(--color-cyan-main)] outline-none transition-all appearance-none cursor-pointer"
+                                            >
+                                                <option value="stable">Stable（推荐）</option>
+                                                <option value="balanced">Balanced（更自由）</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between items-center mb-4">
+                                                <div className="flex flex-col">
                                                     <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">采样温度 (Temperature)</span>
-                                                    <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">数值越高，由于随机性带来的文本“创意感”越强</span>
+                                                    <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">
+                                                        {settings.stability_mode === 'stable' ? 'Stable 推荐 0.3-0.8（更稳）' : 'Balanced 推荐 0.2-1.2（更自由）'}
+                                                    </span>
                                                 </div>
                                                 <span className="font-black text-[var(--color-yellow-main)] bg-[var(--color-cyan-dark)] px-3 py-1 rounded-lg text-xs tabular-nums">
                                                     {settings.temperature.toFixed(1)}
@@ -304,7 +365,9 @@ export const SettingsPanel = () => {
                                             </div>
                                             <input
                                                 type="range"
-                                                min="0" max="2" step="0.1"
+                                                min={settings.stability_mode === 'stable' ? STABLE_TEMP_MIN : TEMP_MIN}
+                                                max={settings.stability_mode === 'stable' ? STABLE_TEMP_MAX : TEMP_MAX}
+                                                step="0.1"
                                                 value={settings.temperature}
                                                 onChange={(e) => setSettings({ ...settings, temperature: parseFloat(e.target.value) })}
                                                 className="w-full h-1.5 bg-[var(--color-cyan-main)]/10 rounded-lg appearance-none cursor-pointer accent-[var(--color-cyan-main)] transition-all hover:h-2"
@@ -315,7 +378,9 @@ export const SettingsPanel = () => {
                                             <div className="flex justify-between items-center mb-4">
                                                 <div className="flex flex-col">
                                                     <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">单次最大Token (Limit)</span>
-                                                    <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">限制AI单词回复的最大长度</span>
+                                                    <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">
+                                                        {settings.stability_mode === 'stable' ? 'Stable 推荐 1000-1600（防截断且更稳）' : 'Balanced 推荐 300-2000'}
+                                                    </span>
                                                 </div>
                                                 <div className="flex items-center space-x-2">
                                                     <span className="font-black text-[var(--color-cyan-main)] text-sm">{settings.max_tokens}</span>
@@ -324,7 +389,9 @@ export const SettingsPanel = () => {
                                             </div>
                                             <input
                                                 type="range"
-                                                min="100" max="4000" step="50"
+                                                min={settings.stability_mode === 'stable' ? STABLE_TOKENS_MIN : TOKENS_MIN}
+                                                max={settings.stability_mode === 'stable' ? STABLE_TOKENS_MAX : TOKENS_MAX}
+                                                step="50"
                                                 value={settings.max_tokens}
                                                 onChange={(e) => setSettings({ ...settings, max_tokens: parseInt(e.target.value) })}
                                                 className="w-full h-1.5 bg-[var(--color-cyan-main)]/10 rounded-lg appearance-none cursor-pointer accent-[var(--color-cyan-main)] transition-all hover:h-2"
@@ -443,9 +510,16 @@ export const SettingsPanel = () => {
 
                             <button
                                 onClick={() => {
-                                    if (confirm('警告：这将重置后台所有记忆缓存并强制结束当前进程。继续吗？')) {
-                                        resetGame();
-                                    }
+                                    setConfirmDialog({
+                                        open: true,
+                                        title: '重置记忆与进度',
+                                        message: '警告：这将重置后台所有记忆缓存并强制结束当前进程。继续吗？',
+                                        confirmText: '确认重置',
+                                        danger: true,
+                                        onConfirm: async () => {
+                                            await resetGame();
+                                        }
+                                    });
                                 }}
                                 className="w-full py-4 bg-white border-2 border-red-200 hover:bg-red-500 hover:border-red-500 hover:text-white text-red-500 font-black rounded-2xl transition-all shadow-sm flex items-center justify-center space-x-2 text-sm uppercase tracking-widest"
                             >
@@ -533,6 +607,20 @@ export const SettingsPanel = () => {
                     </div>
                 )}
             </div>
+
+            <ConfirmDialog
+                open={confirmDialog.open}
+                title={confirmDialog.title}
+                message={confirmDialog.message}
+                confirmText={confirmDialog.confirmText || '确认'}
+                danger={!!confirmDialog.danger}
+                onCancel={() => setConfirmDialog({ open: false, title: '', message: '' })}
+                onConfirm={async () => {
+                    const handler = confirmDialog.onConfirm;
+                    setConfirmDialog({ open: false, title: '', message: '' });
+                    if (handler) await handler();
+                }}
+            />
         </div>
     );
 };

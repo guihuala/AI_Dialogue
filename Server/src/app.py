@@ -27,6 +27,14 @@ from src.core.config import (
     get_user_prompts_dir, get_user_events_dir, get_user_library_dir
 )
 
+TEMP_MIN = 0.2
+TEMP_MAX = 1.2
+TOKENS_MIN = 300
+TOKENS_MAX = 2000
+
+def _clamp(value, vmin, vmax):
+    return max(vmin, min(vmax, value))
+
 # --- 动态列表管理器 ---
 # Paths are now managed in src.core.config
 
@@ -182,6 +190,7 @@ class SettingsRequest(BaseModel):
     typewriter_speed: Optional[int] = None
     latency_mode: Optional[str] = None
     dialogue_mode: Optional[str] = None
+    stability_mode: Optional[str] = None
 
 class ReflectionRequest(BaseModel):
     active_roommates: List[str]
@@ -216,6 +225,8 @@ def start_game(req: StartGameRequest, user_id: str = Depends(get_user_id)):
     try:
         if engine and hasattr(engine, 'mm'):
             engine.mm.current_save_id = req.save_id
+        runtime_tmp = _clamp(float(getattr(engine.llm, "temperature", 0.7)), TEMP_MIN, TEMP_MAX)
+        runtime_max_t = int(_clamp(int(getattr(engine.llm, "max_tokens", 800)), TOKENS_MIN, TOKENS_MAX))
 
         # Ensure user save directory exists
         user_save_dir = get_user_saves_dir(user_id)
@@ -223,7 +234,7 @@ def start_game(req: StartGameRequest, user_id: str = Depends(get_user_id)):
 
         init_res = engine.play_main_turn(
             action_text="", selected_chars=selected_ids, current_evt_id="", is_transition=True,
-            api_key="", base_url="", model="", tmp=0.7, top_p=1.0, max_t=350, pres_p=0.3, freq_p=0.5,
+            api_key="", base_url="", model="", tmp=runtime_tmp, top_p=1.0, max_t=runtime_max_t, pres_p=0.3, freq_p=0.5,
             hygiene=100, reputation=100,
             san=100, money=2000,
             gpa=4.0, arg_count=0, chapter=1, turn=0,
@@ -244,6 +255,8 @@ def perform_turn(req: GameTurnRequest, user_id: str = Depends(get_user_id)):
     try:
         if engine and hasattr(engine, 'mm'):
             engine.mm.current_save_id = req.save_id
+        runtime_tmp = _clamp(float(getattr(engine.llm, "temperature", 0.7)), TEMP_MIN, TEMP_MAX)
+        runtime_max_t = int(_clamp(int(getattr(engine.llm, "max_tokens", 800)), TOKENS_MIN, TOKENS_MAX))
             
         wechat_dict = {}
         if req.wechat_data_list:
@@ -256,7 +269,7 @@ def perform_turn(req: GameTurnRequest, user_id: str = Depends(get_user_id)):
         res = engine.play_main_turn(
             action_text=req.choice, selected_chars=req.active_roommates, 
             current_evt_id=req.current_evt_id, is_transition=req.is_transition,
-            api_key="", base_url="", model="", tmp=0.7, top_p=1.0, max_t=350, 
+            api_key="", base_url="", model="", tmp=runtime_tmp, top_p=1.0, max_t=runtime_max_t, 
             pres_p=0.3, freq_p=0.5,
             hygiene=req.hygiene, reputation=req.reputation,
             san=req.san, money=req.money,
@@ -295,6 +308,8 @@ async def pre_generate_script(req: GameTurnRequest, user_id: str = Depends(get_u
     """后台静默预取下一个事件的剧本"""
     try:
         engine = get_engine(user_id)
+        runtime_tmp = _clamp(float(getattr(engine.llm, "temperature", 0.7)), TEMP_MIN, TEMP_MAX) if engine and hasattr(engine, "llm") else 0.7
+        runtime_max_t = int(_clamp(int(getattr(engine.llm, "max_tokens", 800)), TOKENS_MIN, TOKENS_MAX)) if engine and hasattr(engine, "llm") else 800
         # 分支树已下线：在 single_dm / npc_dm 模式中，prefetch 不再触发主生成，避免重复耗时。
         if engine and getattr(engine, "dialogue_mode", "single_dm") in ["single_dm", "npc_dm"]:
             return {"status": "success", "message": "Prefetch skipped in current dialogue mode"}
@@ -306,7 +321,7 @@ async def pre_generate_script(req: GameTurnRequest, user_id: str = Depends(get_u
             engine.play_main_turn,
             action_text=req.choice, selected_chars=req.active_roommates, 
             current_evt_id=req.current_evt_id, is_transition=req.is_transition,
-            api_key="", base_url="", model="", tmp=0.7, top_p=1.0, max_t=350, 
+            api_key="", base_url="", model="", tmp=runtime_tmp, top_p=1.0, max_t=runtime_max_t, 
             pres_p=0.3, freq_p=0.5,
             hygiene=req.hygiene, reputation=req.reputation,
             san=req.san, money=req.money,
@@ -491,11 +506,12 @@ def get_settings(user_id: str = Depends(get_user_id)):
                 "api_key": engine.llm.api_key or "",
                 "base_url": engine.llm.base_url or "",
                 "model_name": engine.llm.model or "",
-                "temperature": getattr(engine.llm, 'temperature', 0.7),
-                "max_tokens": getattr(engine.llm, 'max_tokens', 800),
+                "temperature": _clamp(float(getattr(engine.llm, 'temperature', 0.7)), TEMP_MIN, TEMP_MAX),
+                "max_tokens": int(_clamp(int(getattr(engine.llm, 'max_tokens', 800)), TOKENS_MIN, TOKENS_MAX)),
                 "typewriter_speed": getattr(engine.llm, 'typewriter_speed', 30),
                 "latency_mode": getattr(engine, 'latency_mode', 'balanced'),
-                "dialogue_mode": getattr(engine, 'dialogue_mode', 'single_dm')
+                "dialogue_mode": getattr(engine, 'dialogue_mode', 'single_dm'),
+                "stability_mode": getattr(engine, 'stability_mode', 'stable')
             }
         }
     return {"status": "error", "message": "Engine not ready"}
@@ -505,8 +521,10 @@ def update_settings(req: SettingsRequest, user_id: str = Depends(get_user_id)):
     """更新大模型底层配置"""
     engine = get_engine(user_id)
     if engine and hasattr(engine, 'llm'):
-        if req.temperature is not None: engine.llm.temperature = req.temperature
-        if req.max_tokens is not None: engine.llm.max_tokens = req.max_tokens
+        if req.temperature is not None:
+            engine.llm.temperature = _clamp(float(req.temperature), TEMP_MIN, TEMP_MAX)
+        if req.max_tokens is not None:
+            engine.llm.max_tokens = int(_clamp(int(req.max_tokens), TOKENS_MIN, TOKENS_MAX))
         if req.typewriter_speed is not None: engine.llm.typewriter_speed = req.typewriter_speed
         if req.latency_mode is not None:
             mode = str(req.latency_mode).strip().lower()
@@ -520,6 +538,11 @@ def update_settings(req: SettingsRequest, user_id: str = Depends(get_user_id)):
             if dmode not in ["single_dm", "npc_dm"]:
                 raise HTTPException(status_code=400, detail="dialogue_mode must be one of: single_dm, npc_dm")
             engine.dialogue_mode = dmode
+        if req.stability_mode is not None:
+            smode = str(req.stability_mode).strip().lower()
+            if smode not in ["stable", "balanced"]:
+                raise HTTPException(status_code=400, detail="stability_mode must be one of: stable, balanced")
+            engine.stability_mode = smode
         
         current_api = req.api_key if req.api_key else engine.llm.api_key
         current_url = req.base_url if req.base_url else engine.llm.base_url

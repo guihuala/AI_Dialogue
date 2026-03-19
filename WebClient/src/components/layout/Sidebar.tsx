@@ -28,13 +28,13 @@ export const Sidebar = ({
       {/* Sidebar Overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-20 transition-opacity"
+          className="fixed inset-0 bg-black/50 z-[1200] transition-opacity"
           onClick={onClose}
         />
       )}
 
       {/* Sidebar Content */}
-      <aside className={`fixed inset-y-0 left-0 w-64 flex flex-col transition-transform duration-500 ease-in-out shadow-2xl z-30 shrink-0 bg-[var(--color-cyan-main)] text-white ${(isOpen && showUI) ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed inset-y-0 left-0 w-64 flex flex-col transition-transform duration-500 ease-in-out shadow-2xl z-[1300] shrink-0 bg-[var(--color-cyan-main)] text-white ${(isOpen && showUI) ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="h-20 flex items-center justify-between px-6 border-b border-white/10 shrink-0 bg-[var(--color-cyan-dark)]/20">
           <span className="text-xl font-black tracking-tight text-white flex flex-col">
             <span className="text-[var(--color-yellow-main)] text-xs uppercase tracking-[0.3em] mb-1">Dorm Life</span>

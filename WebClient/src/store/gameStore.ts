@@ -16,6 +16,7 @@ interface GameState {
   chapter: number;
   turn: number;
   current_evt_id: string;
+  current_scene: string;
   active_roommates: string[];
   affinity: Record<string, number>;
   
@@ -23,7 +24,7 @@ interface GameState {
   displayText: string;
   nextOptions: string[];
   isEnd: boolean;
-  history: Array<{turn: number, text: string}>;
+  history: Array<{turn: number, text: string, rawJson?: string}>;
   wechatNotifications: Array<{sender: string, message: string}>;
   isPhoneOpen: boolean;
   typewriterSpeed: number;
@@ -63,6 +64,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   chapter: 1,
   turn: 0,
   current_evt_id: '',
+  current_scene: '宿舍',
   active_roommates: [],
   affinity: {},
   displayText: '',
@@ -110,12 +112,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         chapter: data.chapter,
         turn: data.turn,
         current_evt_id: data.current_evt_id,
+        current_scene: data.current_scene || '宿舍',
         active_roommates: data.active_roommates || roommates,
         affinity: data.affinity,
         displayText: data.display_text,
         nextOptions: data.next_options || [],
         isEnd: data.is_end || false,
-        history: [{ turn: data.turn, text: data.display_text }],
+        history: [{ turn: data.turn, text: data.display_text, rawJson: data.res_text || '' }],
         wechatNotifications: data.wechat_notifications || [],
         eventScript: data.event_script || null
       });
@@ -161,7 +164,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             displayText: newDisplayText,
             nextOptions: nextTurn ? (nextTurn.player_choices || []).map((c: any) => c.text) : [],
             isEnd: nextTurn ? nextTurn.is_end : true,
-            history: [...prev.history, { turn: prev.turn, text: newDisplayText }],
+            history: [...prev.history, { turn: prev.turn, text: newDisplayText, rawJson: '' }],
             eventScript: nextTurn && nextTurn.is_end ? null : prev.eventScript
           }));
           return;
@@ -201,11 +204,16 @@ export const useGameStore = create<GameState>((set, get) => ({
         chapter: data.chapter,
         turn: data.turn,
         current_evt_id: data.current_evt_id,
+        current_scene: data.current_scene || prev.current_scene || '宿舍',
         affinity: data.affinity,
         displayText: data.display_text,
         nextOptions: data.next_options || [],
         isEnd: data.is_end || false,
-        history: [...prev.history, { turn: data.turn, text: isTransition ? data.display_text : `【你的选择】: ${choice}\n\n${data.display_text}` }],
+        history: [...prev.history, {
+          turn: data.turn,
+          text: isTransition ? data.display_text : `【你的选择】: ${choice}\n\n${data.display_text}`,
+          rawJson: data.res_text || ''
+        }],
         wechatNotifications: data.wechat_notifications || prev.wechatNotifications,
         eventScript: data.event_script || null
       }));
@@ -274,6 +282,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               chapter: gameState.chapter,
               turn: gameState.turn,
               current_evt_id: gameState.current_evt_id,
+              current_scene: gameState.current_scene || '宿舍',
               active_roommates: gameState.active_roommates,
               // affinity, hygiene, etc should ideally be in save too
               displayText: "存档已成功加载，您可以继续之前的进度。",
@@ -327,6 +336,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               chapter: 1,
               turn: 0,
               current_evt_id: '',
+              current_scene: '宿舍',
               history: [],
               wechatNotifications: [],
               displayText: ''

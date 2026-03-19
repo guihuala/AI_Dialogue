@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { gameApi } from '../api/gameApi';
 import { Shield, Trash2, Edit2, Check, X, RefreshCw, LogOut, Package } from 'lucide-react';
+import { ConfirmDialog } from './common/ConfirmDialog';
 
 export const AdminDashboard = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -9,6 +10,14 @@ export const AdminDashboard = () => {
     const [loading, setLoading] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editForm, setEditForm] = useState({ name: '', author: '', description: '' });
+    const [confirmDialog, setConfirmDialog] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        confirmText?: string;
+        danger?: boolean;
+        onConfirm?: () => Promise<void> | void;
+    }>({ open: false, title: '', message: '' });
 
     // Simple hardcoded admin password for demonstration
     // In a real app, this should be verified against a backend
@@ -42,13 +51,21 @@ export const AdminDashboard = () => {
     };
 
     const handleDelete = async (id: string, name: string) => {
-        if (!window.confirm(`确认要彻底删除模组 [${name}] 吗？此操作不可撤销。`)) return;
-        try {
-            await gameApi.deleteWorkshopItem(id);
-            loadItems();
-        } catch (e) {
-            alert('删除失败');
-        }
+        setConfirmDialog({
+            open: true,
+            title: '彻底删除模组',
+            message: `确认要彻底删除模组 [${name}] 吗？此操作不可撤销。`,
+            confirmText: '确认删除',
+            danger: true,
+            onConfirm: async () => {
+                try {
+                    await gameApi.deleteWorkshopItem(id);
+                    loadItems();
+                } catch (e) {
+                    alert('删除失败');
+                }
+            }
+        });
     };
 
     const startEdit = (item: any) => {
@@ -259,6 +276,20 @@ export const AdminDashboard = () => {
                     Mokukeki Admin Interface v1.0.4
                 </div>
             </div>
+
+            <ConfirmDialog
+                open={confirmDialog.open}
+                title={confirmDialog.title}
+                message={confirmDialog.message}
+                confirmText={confirmDialog.confirmText || '确认'}
+                danger={!!confirmDialog.danger}
+                onCancel={() => setConfirmDialog({ open: false, title: '', message: '' })}
+                onConfirm={async () => {
+                    const handler = confirmDialog.onConfirm;
+                    setConfirmDialog({ open: false, title: '', message: '' });
+                    if (handler) await handler();
+                }}
+            />
         </div>
     );
 };

@@ -28,6 +28,7 @@ class GameEngine:
         self.user_id = user_id
         self.latency_mode = "balanced"  # balanced | fast | story
         self.dialogue_mode = "single_dm"   # single_dm | hybrid | tree_only | npc_dm
+        self.stability_mode = "stable"  # stable | balanced
         self.candidate_pool = {}
         for key, obj in vars(presets_module).items():
             if isinstance(obj, CharacterProfile) and obj.Name != "陆陈安然": 
@@ -53,12 +54,14 @@ class GameEngine:
         self.recent_event_ids = []
         self.prefetch_futures = {}
         self.event_repeat_state = {}
+        self.recent_options_by_event = {}
 
     def reset(self):
         self.director.reset()
         self.event_completion_count = 0
         self.recent_event_ids = []
         self.event_repeat_state = {}
+        self.recent_options_by_event = {}
 
     def _get_latency_profile(self, event_obj) -> dict:
         """
@@ -105,6 +108,33 @@ class GameEngine:
         }
 
     def parse_and_repair_json(self, raw_text):
+        def _extract_options_from_raw(text):
+            if not text:
+                return []
+            try:
+                m = re.search(r'(?:next_options|下一步选项|选项)\s*[:：]\s*\[(.*?)\]', text, flags=re.DOTALL)
+                if not m:
+                    return []
+                inner = m.group(1)
+                inner = inner.replace("“", '"').replace("”", '"').replace("‘", "'").replace("’", "'")
+                cand = re.split(r'["\']\s*,\s*["\']|[,，;\n]+', inner)
+                out = []
+                for c in cand:
+                    s = str(c or "").strip().strip('"').strip("'").strip()
+                    if s:
+                        out.append(s)
+                # 去重保序
+                dedup = []
+                seen = set()
+                for o in out:
+                    key = re.sub(r"\s+", " ", o)
+                    if key not in seen:
+                        seen.add(key)
+                        dedup.append(o)
+                return dedup[:4]
+            except Exception:
+                return []
+
         raw_text = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL)
         raw_text = re.sub(r'```json\s*', '', raw_text)
         raw_text = re.sub(r'```\s*', '', raw_text)
@@ -128,35 +158,89 @@ class GameEngine:
                 parsed = json.loads(repaired) if isinstance(repaired, str) else repaired
                 if isinstance(parsed, dict): return parsed
             except: pass
-            
+
+            rescued_options = _extract_options_from_raw(raw_text)
             return {
                 "narrator_transition": "（系统受到干扰，尝试理清思绪...）",
                 "current_scene": "未知",
                 "dialogue_sequence": [{"speaker": "系统提示", "content": "（由于未知干扰，当前对话解析失败，请检查参数面板中的“原始输出”查明原因。）", "mood": "neutral"}],
                 "npc_background_actions": [],
                 "wechat_notifications": [],
-                "next_options": ["【深呼吸】", "【重试】", "【继续观察】"],
+                "next_options": rescued_options if rescued_options else ["【深呼吸】", "【重试】", "【继续观察】"],
                 "stat_changes": {},
                 "is_end": False
             }
+
+    def _normalize_parsed_payload(self, parsed):
+        """
+        兼容中英文/别名键名，防止模型输出字段名漂移导致“解析成功但不生效”。
+        """
+        if not isinstance(parsed, dict):
+            return {}
+
+        def pick(d, keys, default=None):
+            for k in keys:
+                if k in d:
+                    return d.get(k)
+            return default
+
+        normalized = {
+            "narrator_transition": pick(parsed, ["narrator_transition", "narration", "旁白", "叙述", "过场"], ""),
+            "current_scene": pick(parsed, ["current_scene", "scene", "场景"], "未知"),
+            "dialogue_sequence": pick(parsed, ["dialogue_sequence", "dialogues", "对话序列", "对话"], []),
+            "npc_background_actions": pick(parsed, ["npc_background_actions", "background_actions", "暗场动态", "背景动作"], []),
+            "wechat_notifications": pick(parsed, ["wechat_notifications", "wechat", "微信通知", "微信消息"], []),
+            "next_options": pick(parsed, ["next_options", "options", "下一步选项", "选项"], []),
+            "stat_changes": pick(parsed, ["stat_changes", "stats", "属性变化", "数值变化", "状态变化"], {}),
+            "is_end": pick(parsed, ["is_end", "isEnd", "结束", "是否结束"], False),
+            "tool_calls": pick(parsed, ["tool_calls", "tools", "工具调用"], []),
+        }
+
+        stat = normalized.get("stat_changes", {})
+        if not isinstance(stat, dict):
+            stat = {}
+        affinity_map = pick(stat, ["affinity_changes", "affinity", "好感变化", "亲和力变化"], {})
+        if isinstance(affinity_map, list):
+            merged = {}
+            for item in affinity_map:
+                if isinstance(item, dict):
+                    for k, v in item.items():
+                        merged[str(k)] = v
+            affinity_map = merged
+        if not isinstance(affinity_map, dict):
+            affinity_map = {}
+
+        normalized["stat_changes"] = {
+            "san_delta": pick(stat, ["san_delta", "sanity_delta", "san", "sanity", "理智变化", "理智值变化"], 0),
+            "money_delta": pick(stat, ["money_delta", "money", "金钱变化", "资金变化"], 0),
+            "is_argument": bool(pick(stat, ["is_argument", "argument", "争吵", "是否争吵"], False)),
+            "affinity_changes": affinity_map
+        }
+        return normalized
 
     def _normalize_options(self, raw_options, next_evt=None):
         """
         容错解析 next_options，处理模型把多个选项粘成一个字符串的情况。
         """
+        def _split_option_text(text):
+            t = str(text or "").strip()
+            if not t:
+                return []
+            chunks = re.split(r'[\n,，;；|、]+', t)
+            chunks = [c.strip(" -•\t") for c in chunks if c and c.strip(" -•\t")]
+            if len(chunks) <= 1:
+                labeled = re.split(r'(?=(?:^|[\s])(?:[A-Da-d]|[1-4])[\.:\：、])', t)
+                chunks = [c.strip(" -•\t") for c in labeled if c and c.strip(" -•\t")]
+            return chunks if chunks else ([t] if t else [])
+
         options = []
         if isinstance(raw_options, list):
-            options = [str(o).strip() for o in raw_options if o is not None and str(o).strip()]
+            for o in raw_options:
+                if o is None:
+                    continue
+                options.extend(_split_option_text(o))
         elif isinstance(raw_options, str):
-            text = raw_options.strip()
-            # 常规分隔符：换行、逗号、分号、竖线、顿号
-            chunks = re.split(r'[\n,，;；|、]+', text)
-            chunks = [c.strip(" -•\t") for c in chunks if c and c.strip(" -•\t")]
-            # 如果拆不出来，再按 A:/B:/C: 之类模式切
-            if len(chunks) <= 1:
-                labeled = re.split(r'(?=(?:^|[\s])(?:[A-Da-d]|[1-4])[\.:\：、])', text)
-                chunks = [c.strip(" -•\t") for c in labeled if c and c.strip(" -•\t")]
-            options = chunks
+            options = _split_option_text(raw_options)
 
         # 进一步处理单个长字符串里粘了多个标签的情况
         if len(options) == 1:
@@ -187,6 +271,119 @@ class GameEngine:
                 return evt_options[:4]
 
         return ["【深呼吸】", "【继续观察】", "【转移话题】"]
+
+    def _diversify_options(self, event_id, options, next_evt=None):
+        """
+        过滤与最近一轮高度重复的选项，优先保证“剧情推进”而非原地打转。
+        """
+        if not isinstance(options, list):
+            options = []
+        options = [str(o).strip() for o in options if str(o).strip()]
+
+        def norm(txt):
+            return re.sub(r'[\s\W_]+', '', str(txt or "").lower())
+
+        history = self.recent_options_by_event.get(event_id, [])
+        recent_norm = set()
+        for round_opts in history[-1:]:
+            for o in round_opts:
+                recent_norm.add(norm(o))
+
+        diversified = []
+        seen = set()
+        for opt in options:
+            n = norm(opt)
+            if not n or n in seen:
+                continue
+            if n in recent_norm:
+                continue
+            diversified.append(opt)
+            seen.add(n)
+
+        fallback_pool = []
+        if next_evt is not None:
+            raw_evt_options = getattr(next_evt, "options", {})
+            if isinstance(raw_evt_options, dict):
+                fallback_pool.extend([str(v).strip() for v in raw_evt_options.values() if str(v).strip()])
+        fallback_pool.extend([
+            "推动当事人给出明确方案",
+            "追问关键细节与真实顾虑",
+            "提出折中规则先试行一晚",
+            "让全员表态并记录执行",
+            "暂时退一步观察后续变化"
+        ])
+
+        for cand in fallback_pool:
+            n = norm(cand)
+            if not n or n in seen or n in recent_norm:
+                continue
+            diversified.append(cand)
+            seen.add(n)
+            if len(diversified) >= 4:
+                break
+
+        if len(diversified) < 3:
+            for cand in ["继续推进当前矛盾", "把争议转成可执行步骤", "请求第三方给建议"]:
+                n = norm(cand)
+                if n not in seen:
+                    diversified.append(cand)
+                    seen.add(n)
+                if len(diversified) >= 3:
+                    break
+
+        final_options = diversified[:4]
+        self.recent_options_by_event.setdefault(event_id, []).append(final_options)
+        self.recent_options_by_event[event_id] = self.recent_options_by_event[event_id][-4:]
+        return final_options
+
+    def _build_json_contract(self):
+        base_contract = (
+            "\n\n【强制 JSON 输出协议】\n"
+            "1. 仅输出一个 JSON 对象，不要输出解释、注释、Markdown 代码块。\n"
+            "2. 所有 key 与字符串 value 必须使用英文双引号。\n"
+            "3. 必须包含字段：narrator_transition, current_scene, dialogue_sequence, npc_background_actions, "
+            "wechat_notifications, next_options, stat_changes, is_end, tool_calls。\n"
+            "4. dialogue_sequence 必须是数组，每项包含 speaker, content, mood。\n"
+            "5. next_options 必须是 3-4 个独立字符串数组元素，不能把多个选项写在一个字符串里。\n"
+            "6. stat_changes 必须包含 san_delta, money_delta, is_argument, affinity_changes。\n"
+        )
+        if self.stability_mode == "stable":
+            base_contract += (
+                "7. 优先稳定性：不要使用中文标点作为 JSON 结构符，不要省略引号。\n"
+                "8. 不确定时返回空数组/0/false，不要省略字段。\n"
+            )
+        return base_contract
+
+    def _is_payload_usable(self, parsed, next_evt=None):
+        if not isinstance(parsed, dict):
+            return False
+        if parsed.get("error"):
+            return False
+
+        seq = parsed.get("dialogue_sequence", [])
+        if isinstance(seq, dict):
+            seq = [seq]
+        if not isinstance(seq, list):
+            return False
+        valid_lines = 0
+        has_parse_error_line = False
+        for item in seq:
+            if not isinstance(item, dict):
+                continue
+            content = str(item.get("content", "") or "").strip()
+            if content:
+                valid_lines += 1
+                if "解析失败" in content:
+                    has_parse_error_line = True
+        if has_parse_error_line:
+            return False
+
+        options = self._normalize_options(parsed.get("next_options", []), next_evt)
+        if len(options) < 3:
+            return False
+
+        min_dialogue = 3 if self.stability_mode == "stable" else 2
+        return valid_lines >= min_dialogue
 
     def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, hygiene, reputation, arg_count, chapter, turn, affinity, wechat_data_dict, is_prefetch=False, custom_prompts=None):
         self.llm.update_config(api_key=api_key, base_url=base_url, model=model)
@@ -219,29 +416,23 @@ class GameEngine:
 
         player_stats = {"money": money, "san": san, "hygiene": hygiene, "gpa": gpa, "reputation": reputation}
         settlement_msg = ""
+        is_new_event_entry = bool(is_transition or current_evt_id == "")
         
         if is_transition or current_evt_id == "":
             if turn == 0 and not is_prefetch: 
                 self.mm.clear_game_history()
+                self.director.reset()
                 self.director.current_chapter = chapter
-                self.director.chapter_progress = 0
-                self.director.used_events = []
                 
             next_evt = self.director.get_next_event(player_stats, selected_chars, affinity)
             if not next_evt:
-                # 游戏全流程已结束 (毕业)
-                return {
-                    "is_game_over": True,
-                    "display_text": "**[大学生活圆满结束]** 你完成了四年的大学生活，走向了人生的新阶段。恭喜毕业！",
-                    "chapter": chapter,
-                    "turn": turn,
-                    "san": san,
-                    "money": money,
-                    "gpa": gpa,
-                    "is_end": True,
-                    "next_options": ["查看我的结局", "重新开始"],
-                    "dialogue_sequence": [{"speaker": "系统提示", "content": "全剧终。", "mood": "happy"}]
-                }
+                # 不走全剧终：循环回到第一章继续生成新的校园日常。
+                self.director.reset()
+                self.director.current_chapter = 1
+                chapter = 1
+                next_evt = self.director.get_next_event(player_stats, selected_chars, affinity)
+                if not next_evt:
+                    return {"error": "事件池为空，请检查事件 CSV 配置。"}
 
             if next_evt.chapter > chapter:
                 money -= 800  
@@ -293,7 +484,7 @@ class GameEngine:
                 if first_turn:
                     next_options = [opt.get("text") for opt in first_turn.get("player_choices", []) if isinstance(opt, dict) and opt.get("text")]
                     return {
-                        "narrator_transition": cached_script.get("description", f"🎬 **{next_evt.name}**\n---"),
+                        "narrator_transition": cached_script.get("description", f" **{next_evt.name}**"),
                         "current_scene": first_turn.get("scene", "宿舍"),
                         "dialogue_sequence": first_turn.get("dialogue_sequence", []),
                         "next_options": next_options if next_options else ["继续剧情..."],
@@ -413,14 +604,11 @@ class GameEngine:
                 prefetcher.mark_fallback()
 
             turn += 1
-            evt_min_turn = max(2, min(12, int(getattr(next_evt, "min_turn_for_end", 6) or 6)))
-            evt_max_turn = max(evt_min_turn + 1, min(16, int(getattr(next_evt, "max_turn_for_end", 10) or 10)))
+            evt_min_turn = max(2, min(12, int(getattr(next_evt, "min_turn_for_end", 5) or 5)))
             if turn < evt_min_turn:
                 pacing = "【节奏：发展】继续推进冲突，不要重复上回合同义表达。"
-            elif turn >= evt_max_turn:
-                pacing = "【节奏：收束】事件信息已充分，明确给出阶段性结论并结束事件。"
             else:
-                pacing = "【节奏：推进】根据玩家动作产生新信息、新立场或新代价。"
+                pacing = "【节奏：推进】给出新信息或新动作；若已有阶段性结果可转场，但不要求完整结局。"
 
             beats = getattr(next_evt, "progress_beats", []) or []
             beat_hint = ""
@@ -432,7 +620,7 @@ class GameEngine:
 
             event_context = (
                 f"【事件】: {next_evt.name}"
-                f"\n【回合】: {turn}/{evt_max_turn}"
+                f"\n【回合】: {turn}"
                 f"\n{pacing}"
                 f"{beat_hint}{end_hint}"
                 f"\n【玩家选择意图】: {action_text}"
@@ -540,7 +728,12 @@ class GameEngine:
         # DM统筹并结算阶段
         # ========================================================
         
-        user_prm = f"{event_context}\n\n【玩家意图】: {action_text}{reactions_str}\n\n【现有微信通讯录】: {safe_keys}\n{wechat_summary}\n[状态] SAN:{san}, 资金:{money}。\n\n{self.pm.get_main_author_note()}"
+        recent_opt_hint = ""
+        recent_opts = self.recent_options_by_event.get(getattr(next_evt, "id", ""), [])
+        if recent_opts:
+            recent_opt_hint = "\n【上一轮选项（避免复读）】" + " | ".join(recent_opts[-1])
+
+        user_prm = f"{event_context}{recent_opt_hint}\n\n【玩家意图】: {action_text}{reactions_str}\n\n【现有微信通讯录】: {safe_keys}\n{wechat_summary}\n[状态] SAN:{san}, 资金:{money}。\n\n{self.pm.get_main_author_note()}"
 
         try:
             if getattr(next_evt, 'is_cg', False):
@@ -561,6 +754,7 @@ class GameEngine:
                     "is_end": True
                 }
                 res_text = json.dumps(parsed, ensure_ascii=False)
+                parsed = self._normalize_parsed_payload(parsed)
             else:
                 if use_branch_tree and effective_dialogue_mode == "tree_only":
                     parsed = {
@@ -576,39 +770,112 @@ class GameEngine:
                     res_text = json.dumps(parsed, ensure_ascii=False)
                 else:
                     t2 = time.time()
-                    llm_max_tokens = min(max_t, latency_profile["llm_max_tokens"])
+                    profile_cap = int(latency_profile.get("llm_max_tokens", 1000))
                     try:
-                        res_text = self.llm.generate_response(
-                            system_prompt=sys_prm,
-                            user_input=user_prm,
-                            context="",
-                            temperature=tmp,
-                            top_p=top_p,
-                            max_tokens=llm_max_tokens,
-                            presence_penalty=pres_p,
-                            frequency_penalty=freq_p
+                        llm_max_tokens = int(max_t) if max_t is not None else profile_cap
+                    except Exception:
+                        llm_max_tokens = profile_cap
+                    llm_max_tokens = max(300, min(llm_max_tokens, 2000))
+
+                    gen_tmp = float(tmp)
+                    gen_tokens = int(llm_max_tokens)
+                    gen_pres = float(pres_p)
+                    gen_freq = float(freq_p)
+                    if self.stability_mode == "stable":
+                        # 稳定模式下主动收敛采样参数，减少乱码和半截 JSON。
+                        gen_tmp = max(0.3, min(gen_tmp, 0.8))
+                        gen_tokens = max(1000, min(gen_tokens, 1600))
+                        gen_pres = max(-0.1, min(gen_pres, 0.4))
+                        gen_freq = max(0.0, min(gen_freq, 0.4))
+
+                    parsed = None
+                    res_text = ""
+                    attempts = 2 if self.stability_mode == "stable" else 1
+                    last_error = None
+                    json_contract = self._build_json_contract()
+                    try:
+                        for attempt_idx in range(attempts):
+                            attempt_tmp = gen_tmp
+                            attempt_tokens = gen_tokens
+                            attempt_pres = gen_pres
+                            attempt_freq = gen_freq
+                            attempt_sys = sys_prm + json_contract
+                            attempt_user = user_prm
+
+                            if attempt_idx == 1:
+                                attempt_tmp = max(0.2, gen_tmp - 0.2)
+                                attempt_tokens = max(1000, min(gen_tokens, 1300))
+                                attempt_pres = 0.0
+                                attempt_freq = 0.0
+                                attempt_user = user_prm + "\n\n【重试要求】上一版 JSON 结构不稳定。请严格按协议返回完整 JSON。"
+
+                            res_text = self.llm.generate_response(
+                                system_prompt=attempt_sys,
+                                user_input=attempt_user,
+                                context="",
+                                temperature=attempt_tmp,
+                                top_p=top_p,
+                                max_tokens=attempt_tokens,
+                                presence_penalty=attempt_pres,
+                                frequency_penalty=attempt_freq
+                            )
+                            parsed_candidate = self.parse_and_repair_json(res_text)
+                            parsed_candidate = self._normalize_parsed_payload(parsed_candidate)
+                            if self._is_payload_usable(parsed_candidate, next_evt):
+                                parsed = parsed_candidate
+                                break
+                            parsed = parsed_candidate
+                            last_error = "payload unusable"
+                            print(f"⚠️ [Stability] DM 第{attempt_idx + 1}次输出结构不稳，准备重试...", flush=True)
+
+                        print(
+                            f"🛑 [耗时监控] DM 主大脑生成 JSON 耗时: {time.time() - t2:.2f} 秒 | "
+                            f"max_tokens={gen_tokens} | stability={self.stability_mode}"
                         )
-                        print(f"🛑 [耗时监控] DM 主大脑生成 JSON 耗时: {time.time() - t2:.2f} 秒")
-                        parsed = self.parse_and_repair_json(res_text)
+                        if parsed is None:
+                            raise ValueError(last_error or "empty payload")
                         prefetcher.mark_non_fallback()
                     except Exception as e:
                         print(f"⚠️ [LLM Error] 实时生成异常，返回解析兜底: {e}", flush=True)
                         prefetcher.mark_fallback()
                         safe_err = str(e).replace('"', "'").replace("\n", " ")
                         parsed = self.parse_and_repair_json(json.dumps({"error": safe_err}, ensure_ascii=False))
+                        parsed = self._normalize_parsed_payload(parsed)
                         res_text = json.dumps(parsed, ensure_ascii=False)
+
+            # 新事件开场时，补充主角视角导语，避免玩家“直接进入角色台词”产生割裂感。
+            if is_new_event_entry and not getattr(next_evt, 'is_cg', False):
+                intro = str(parsed.get("narrator_transition", "") or "").strip()
+                if intro:
+                    if "安然视角" not in intro:
+                        parsed["narrator_transition"] = f"【安然视角】{intro}"
+                else:
+                    desc = str(getattr(next_evt, "description", "") or "").strip()
+                    if len(desc) > 48:
+                        desc = desc[:48] + "…"
+                    parsed["narrator_transition"] = f"【安然视角】我环顾四周，{desc or '空气里有股将起争执的味道。'}"
 
             stats_data = parsed.get("stat_changes", {})
             if not isinstance(stats_data, dict): stats_data = {} 
+
+            def _num(v, default=0):
+                try:
+                    return float(v)
+                except Exception:
+                    return default
             
-            san = max(0, min(100, san + stats_data.get("san_delta", 0)))
-            money += stats_data.get("money_delta", 0)
-            if stats_data.get("is_argument", False): arg_count += 1
+            san_delta = _num(stats_data.get("san_delta", 0), 0)
+            money_delta = _num(stats_data.get("money_delta", 0), 0)
+            san = max(0, min(100, san + san_delta))
+            money += money_delta
+            if bool(stats_data.get("is_argument", False)): arg_count += 1
             
             aff_changes = stats_data.get("affinity_changes", {})
             if isinstance(aff_changes, dict):
                 for char_name, change_val in aff_changes.items():
-                    if char_name in affinity: affinity[char_name] = max(0, min(100, affinity[char_name] + change_val))
+                    if char_name in affinity:
+                        delta = _num(change_val, 0)
+                        affinity[char_name] = max(0, min(100, affinity[char_name] + delta))
                 
             display_text = settlement_msg
             if parsed.get("narrator_transition"): display_text += f"{parsed['narrator_transition']}\n\n"
@@ -679,14 +946,11 @@ class GameEngine:
                     if "money_delta" in tool_res: money += tool_res["money_delta"]
             
             # 防止事件过早结束：按事件定义控制收尾窗口。
-            min_turn_for_end = max(2, min(12, int(getattr(next_evt, "min_turn_for_end", 6) or 6)))
-            max_turn_for_end = max(min_turn_for_end + 1, min(16, int(getattr(next_evt, "max_turn_for_end", 10) or 10)))
+            min_turn_for_end = max(2, min(12, int(getattr(next_evt, "min_turn_for_end", 5) or 5)))
             if getattr(next_evt, 'is_cg', False):
                 is_end = True
             elif turn < min_turn_for_end:
                 is_end = False
-            elif turn >= max_turn_for_end:
-                is_end = True
             else:
                 is_end = bool(parsed.get("is_end", False))
 
@@ -739,6 +1003,8 @@ class GameEngine:
                 extracted_options = ["继续剧情..."]
             elif is_end:
                 extracted_options = ["继续剧情..."]
+            else:
+                extracted_options = self._diversify_options(next_evt.id, extracted_options, next_evt)
 
             # --- [START PREFETCH FOR NEXT EVENT] ---
             prefetch_ctx = {

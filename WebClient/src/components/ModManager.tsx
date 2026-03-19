@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Layers, Cloud, BookOpen, Trash2, Download, Play, Plus, RefreshCw, X, Check, Lock, Search, Edit3 } from 'lucide-react';
 import { gameApi } from '../api/gameApi';
+import { ConfirmDialog } from './common/ConfirmDialog';
 
 type TabType = 'library' | 'workshop';
 
@@ -21,6 +22,14 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
     const [saveName, setSaveName] = useState('');
     const [saveDesc, setSaveDesc] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+    const [confirmDialog, setConfirmDialog] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        confirmText?: string;
+        danger?: boolean;
+        onConfirm?: () => Promise<void> | void;
+    }>({ open: false, title: '', message: '' });
 
     // Action state
     const [actionTarget, setActionTarget] = useState<string | null>(null);
@@ -76,30 +85,45 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
     };
 
     const handleApply = async (id: string, name: string) => {
-        if (!window.confirm(`将应用模组 [${name}] 到当前活动环境。\n注意：新对局开启后，存档将与该模组绑定。\n\n确认继续？`)) return;
-        setActionTarget(id);
-        try {
-            await gameApi.applyFromLibrary(id);
-            showToast(`✅ [${name}] 已应用并完成热重载`);
-        } catch (e) {
-            showToast('❌ 应用失败');
-        } finally {
-            setActionTarget(null);
-        }
+        setConfirmDialog({
+            open: true,
+            title: '应用模组',
+            message: `将应用模组 [${name}] 到当前活动环境。\n注意：新对局开启后，存档将与该模组绑定。\n\n确认继续？`,
+            confirmText: '确认应用',
+            onConfirm: async () => {
+                setActionTarget(id);
+                try {
+                    await gameApi.applyFromLibrary(id);
+                    showToast(`✅ [${name}] 已应用并完成热重载`);
+                } catch (e) {
+                    showToast('❌ 应用失败');
+                } finally {
+                    setActionTarget(null);
+                }
+            }
+        });
     };
 
     const handleDelete = async (id: string, name: string) => {
-        if (!window.confirm(`确定要删除模组 [${name}] 吗？`)) return;
-        setActionTarget(`del-${id}`);
-        try {
-            await gameApi.deleteFromLibrary(id);
-            showToast(`🗑 已删除 [${name}]`);
-            loadLibrary();
-        } catch (e) {
-            showToast('❌ 删除失败');
-        } finally {
-            setActionTarget(null);
-        }
+        setConfirmDialog({
+            open: true,
+            title: '删除模组',
+            message: `确定要删除模组 [${name}] 吗？`,
+            confirmText: '确认删除',
+            danger: true,
+            onConfirm: async () => {
+                setActionTarget(`del-${id}`);
+                try {
+                    await gameApi.deleteFromLibrary(id);
+                    showToast(`🗑 已删除 [${name}]`);
+                    loadLibrary();
+                } catch (e) {
+                    showToast('❌ 删除失败');
+                } finally {
+                    setActionTarget(null);
+                }
+            }
+        });
     };
 
     const handleDownload = async (id: string, name: string) => {
@@ -330,6 +354,20 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                     </div>
                 </div>
             )}
+
+            <ConfirmDialog
+                open={confirmDialog.open}
+                title={confirmDialog.title}
+                message={confirmDialog.message}
+                confirmText={confirmDialog.confirmText || '确认'}
+                danger={!!confirmDialog.danger}
+                onCancel={() => setConfirmDialog({ open: false, title: '', message: '' })}
+                onConfirm={async () => {
+                    const handler = confirmDialog.onConfirm;
+                    setConfirmDialog({ open: false, title: '', message: '' });
+                    if (handler) await handler();
+                }}
+            />
         </div>
     );
 };

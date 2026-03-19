@@ -24,6 +24,7 @@ export interface SystemSettings {
     typewriter_speed: number;
     latency_mode: 'balanced' | 'fast' | 'story';
     dialogue_mode: 'single_dm' | 'npc_dm';
+    stability_mode: 'stable' | 'balanced';
 }
 
 export const settingsApi = {
