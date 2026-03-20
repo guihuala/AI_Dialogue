@@ -57,14 +57,14 @@ export const TimelineView = ({ content, onSave, onSelectPool }: TimelineViewProp
         '1': '大一 / 启程',
         '2': '大二 / 磨合',
         '3': '大三 / 抉择',
-        '4': '大四 / 终焉'
+        '4': '大四 / 分别'
     };
 
     if (isEditing) {
         return (
             <div className="flex-1 flex flex-col p-8 space-y-4 bg-[var(--color-warm-bg)]">
                 <div className="flex items-center justify-between">
-                    <h4 className="text-xl font-black text-[var(--color-cyan-dark)] uppercase">编辑时间轴配置 (JSON)</h4>
+                    <h4 className="text-xl font-black text-[var(--color-cyan-dark)] uppercase">编辑时间轴配置</h4>
                     <div className="flex space-x-3">
                         <button 
                             onClick={() => setIsEditing(false)}

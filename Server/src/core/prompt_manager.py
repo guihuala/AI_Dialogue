@@ -1,6 +1,7 @@
 import os
 import csv
 import json
+import re
 
 from src.core.config import get_user_prompts_dir, DEFAULT_PROMPTS_DIR
 
@@ -32,6 +33,7 @@ class PromptManager:
         self.roster_data = self._load_roster_data()
         self.char_file_map = self._load_char_file_map()
         self.player_name = self._resolve_player_name()
+        self.player_file = self.char_file_map.get(self.player_name, "")
 
     def _load_roster_data(self) -> dict:
         mapping_file = os.path.join(self.chars_dir, "roster.json")
@@ -69,6 +71,82 @@ class PromptManager:
 
     def get_player_name(self) -> str:
         return self.player_name
+
+    def get_player_file(self) -> str:
+        return self.player_file
+
+    def get_player_profile_text(self, player_name: str = None) -> str:
+        target_name = (player_name or self.get_player_name() or "").strip()
+        player_file = self.char_file_map.get(target_name, "") or self.get_player_file()
+        if not player_file:
+            return ""
+        return self._read_md(f"characters/{player_file}")
+
+    def _get_active_chars(self, context: dict = None) -> list:
+        context = context or {}
+        active_chars = context.get("active_chars", []) or []
+        return [str(char).strip() for char in list(active_chars) if str(char).strip()]
+
+    def _build_player_template_vars(self, context: dict = None) -> dict:
+        context = context or {}
+        player_name = context.get("player_name", self.get_player_name()) or self.get_player_name()
+        player_profile = self.get_player_profile_text(player_name).strip()
+        if not player_profile:
+            player_profile = f"当前玩家主角是 {player_name}。请基于其角色设定生成符合人设的反应。"
+
+        return {
+            "PLAYER_NAME": player_name,
+            "PLAYER_PROFILE": player_profile,
+            "PLAYER_VIEW_LABEL": f"{player_name}视角",
+        }
+
+    def _build_template_vars(self, context: dict = None) -> dict:
+        context = context or {}
+        vars_map = self._build_player_template_vars(context)
+
+        active_chars = self._get_active_chars(context)
+        members = context.get("members")
+        if isinstance(members, (list, tuple)):
+            members_text = "、".join(str(item).strip() for item in members if str(item).strip())
+        else:
+            members_text = str(members or "").strip()
+        if not members_text and active_chars:
+            members_text = "、".join(active_chars)
+
+        extra_vars = {
+            "CHANNEL_NAME": str(context.get("channel_name", "") or "").strip(),
+            "MEMBERS": members_text,
+        }
+
+        for key, value in context.items():
+            if not isinstance(key, str):
+                continue
+            placeholder_key = key.strip().upper()
+            if not placeholder_key or placeholder_key in vars_map:
+                continue
+            if isinstance(value, (str, int, float, bool)):
+                extra_vars[placeholder_key] = str(value)
+
+        vars_map.update(extra_vars)
+        return vars_map
+
+    def _render_prompt_template(self, text: str, context: dict = None) -> str:
+        if not text:
+            return text
+
+        vars_map = self._build_template_vars(context)
+        rendered = text
+        for key, value in vars_map.items():
+            rendered = rendered.replace(f"[{key}]", value)
+            rendered = rendered.replace(f"{{{{{key}}}}}", value)
+
+        player_name = vars_map["PLAYER_NAME"]
+        if player_name and player_name != "陆陈安然":
+            rendered = re.sub(r"(?<![\[\{])陆陈安然(?![\]\}])", player_name, rendered)
+        return rendered
+
+    def render_prompt_file(self, relative_path: str, context: dict = None) -> str:
+        return self._render_prompt_template(self._read_md(relative_path), context)
 
     def get_roster_name_map(self) -> dict:
         """
@@ -143,8 +221,8 @@ class PromptManager:
         return world_text
 
     def _skill_character_roster(self, context: dict) -> str:
-        active_chars = context.get("active_chars", [])
-        player_name = self.get_player_name()
+        active_chars = self._get_active_chars(context)
+        player_name = context.get("player_name", self.get_player_name())
         if player_name not in active_chars: active_chars.append(player_name)
         profiles = []
         for char in active_chars:
@@ -155,8 +233,8 @@ class PromptManager:
         return ""
 
     def _skill_relationship_matrix(self, context: dict) -> str:
-        active_chars = context.get("active_chars", [])
-        player_name = self.get_player_name()
+        active_chars = self._get_active_chars(context)
+        player_name = context.get("player_name", self.get_player_name())
         if player_name not in active_chars: active_chars.append(player_name)
         
         rel_csv_path = os.path.join(self.chars_dir, "relationship.csv")
@@ -184,10 +262,7 @@ class PromptManager:
         return ""
         
     def get_main_system_prompt(self, context: dict) -> str:
-        base_prompt = self._read_md("main_system.md")
-        player_name = context.get("player_name", self.get_player_name())
-        if player_name and player_name != "陆陈安然":
-            base_prompt = base_prompt.replace("陆陈安然", player_name)
+        base_prompt = self.render_prompt_file("main_system.md", context)
         active_skills = []
         for skill_name, skill_func in self.skills.items():
             skill_text = skill_func(context)
@@ -212,11 +287,11 @@ class PromptManager:
 
     def get_main_author_note(self, context: dict = None) -> str:
         context = context or {}
-        text = self._read_md("main_author_note.md")
-        player_name = context.get("player_name", self.get_player_name())
-        if player_name and player_name != "陆陈安然":
-            text = text.replace("陆陈安然", player_name)
-        return text
+        return self.render_prompt_file("main_author_note.md", context)
+
+    def get_wechat_system_prompt(self, context: dict = None) -> str:
+        context = context or {}
+        return self.render_prompt_file("wechat_system.md", context)
 
     def get_all_relationships(self) -> str:
         """提取全局角色认知网络与底层偏见"""

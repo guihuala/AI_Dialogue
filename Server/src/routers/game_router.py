@@ -338,7 +338,7 @@ def build_game_router(
 
             state = save_data.get("state", {})
             roster = get_current_roster(user_id)
-            player_name = "陆陈安然"
+            player_name = getattr(engine, "player_name", "") or "当前主角"
             for _, info in roster.items():
                 if isinstance(info, dict) and bool(info.get("is_player", False)):
                     candidate = str(info.get("name", "")).strip()

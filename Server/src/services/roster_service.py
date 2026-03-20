@@ -29,6 +29,18 @@ def normalize_roster_single_player(roster: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
+def get_player_name_from_roster(roster: Dict[str, Any], fallback: str = "陆陈安然") -> str:
+    if not isinstance(roster, dict):
+        return fallback
+
+    for _, info in roster.items():
+        if isinstance(info, dict) and bool(info.get("is_player", False)):
+            name = str(info.get("name", "")).strip()
+            if name:
+                return name
+    return fallback
+
+
 def get_current_roster(user_id: str = "default"):
     """动态获取当前角色档案库集"""
     user_prompts_dir = get_user_prompts_dir(user_id)
@@ -62,7 +74,7 @@ def get_current_roster(user_id: str = "default"):
                 "tags": profile.Tags,
                 "description": profile.Background_Secret[:40] + "...",
                 "file": f"{cid}.md",
-                "is_player": profile.Name == "陆陈安然",
+                "is_player": False,
             }
 
     try:
@@ -74,4 +86,3 @@ def get_current_roster(user_id: str = "default"):
         pass
 
     return roster
-

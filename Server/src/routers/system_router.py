@@ -115,6 +115,8 @@ def build_system_router(
                 engine.pm = type(engine.pm)(user_id)
                 if hasattr(engine, "player_name") and hasattr(engine.pm, "get_player_name"):
                     engine.player_name = engine.pm.get_player_name()
+                if hasattr(engine, "tm") and hasattr(engine.tm, "set_player_name") and hasattr(engine, "player_name"):
+                    engine.tm.set_player_name(engine.player_name)
             return {"status": "success", "message": "知识库、剧本与提示词已热重载成功！"}
         except Exception as e:
             return {"status": "error", "message": f"重建失败: {str(e)}"}

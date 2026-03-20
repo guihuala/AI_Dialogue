@@ -43,7 +43,7 @@ export const RelationshipMatrix = ({
             map[evaluator][evaluatee] = {
                 rowIndex: idx,
                 surface: row['表面态度'] || '',
-                inner: row['内心真实评价'] || ''
+                inner: row['真实评价'] || ''
             };
         });
         return map;

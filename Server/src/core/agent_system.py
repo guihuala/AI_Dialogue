@@ -124,9 +124,9 @@ class ReflectionSystem:
     "reflections": [
         {
             "character": "唐梦琪",
-            "diary": "今天安然居然帮着李一诺说话，真是看错她了，以后必须防着点。",
+            "diary": "今天主角居然帮着李一诺说话，真是看错她了，以后必须防着点。",
             "updated_relations": [
-                {"target": "陆陈安然", "surface": "假笑客套", "inner": "是个墙头草，不可深交"},
+                {"target": "玩家主角", "surface": "假笑客套", "inner": "是个墙头草，不可深交"},
                 {"target": "李一诺", "surface": "阴阳怪气", "inner": "死板的独裁者，恶心"}
             ]
         }

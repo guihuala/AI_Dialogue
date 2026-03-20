@@ -118,7 +118,9 @@ def build_admin_router(
                         if hasattr(engine, "pm"):
                             engine.pm = type(engine.pm)(user_id)
                         if hasattr(engine, "player_name"):
-                            engine.player_name = engine.pm.get_player_name() if hasattr(engine.pm, "get_player_name") else "陆陈安然"
+                            engine.player_name = engine.pm.get_player_name() if hasattr(engine.pm, "get_player_name") else engine.player_name
+                        if hasattr(engine, "tm") and hasattr(engine.tm, "set_player_name") and hasattr(engine, "player_name"):
+                            engine.tm.set_player_name(engine.player_name)
             append_audit_log(user_id, "save_admin_file", "ok", f"{req.type}:{req.name}", {})
             return {"status": "success", "message": f"{req.name} 保存成功"}
         except Exception as e:

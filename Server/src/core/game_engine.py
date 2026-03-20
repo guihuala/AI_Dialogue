@@ -29,9 +29,11 @@ class GameEngine:
         self.latency_mode = "balanced"  # balanced | fast | story
         self.dialogue_mode = "single_dm"   # single_dm | hybrid | tree_only | npc_dm
         self.stability_mode = "stable"  # stable | balanced
+        self.pm = PromptManager(user_id)
+        default_player_name = self.pm.get_player_name() if hasattr(self.pm, "get_player_name") else "陆陈安然"
         self.candidate_pool = {}
         for key, obj in vars(presets_module).items():
-            if isinstance(obj, CharacterProfile) and obj.Name != "陆陈安然": 
+            if isinstance(obj, CharacterProfile) and obj.Name != default_player_name:
                 self.candidate_pool[obj.Name] = obj
                 
         self.llm = LLMService()
@@ -48,8 +50,9 @@ class GameEngine:
         self.mm = MemoryManager(user_profile_path, user_chroma_path, self.llm)
         self.director = EventDirector(user_id)
         self.tm = ToolManager()
-        self.pm = PromptManager(user_id)
-        self.player_name = self.pm.get_player_name() if hasattr(self.pm, "get_player_name") else "陆陈安然"
+        self.player_name = default_player_name
+        if hasattr(self.tm, "set_player_name"):
+            self.tm.set_player_name(self.player_name)
         self.prefetch_mgr = PrefetchManager()
         self.event_completion_count = 0
         self.recent_event_ids = []
@@ -59,7 +62,9 @@ class GameEngine:
 
     def reset(self):
         self.director.reset()
-        self.player_name = self.pm.get_player_name() if hasattr(self.pm, "get_player_name") else "陆陈安然"
+        self.player_name = self.pm.get_player_name() if hasattr(self.pm, "get_player_name") else self.player_name
+        if hasattr(self.tm, "set_player_name"):
+            self.tm.set_player_name(self.player_name)
         self.event_completion_count = 0
         self.recent_event_ids = []
         self.event_repeat_state = {}
@@ -473,6 +478,8 @@ class GameEngine:
         self.llm.update_config(api_key=api_key, base_url=base_url, model=model)
         player_name = self.pm.get_player_name() if hasattr(self.pm, "get_player_name") else self.player_name
         self.player_name = player_name
+        if hasattr(self.tm, "set_player_name"):
+            self.tm.set_player_name(player_name)
         effective_dialogue_mode = self.dialogue_mode
         if effective_dialogue_mode in ["tree_only", "hybrid"]:
             effective_dialogue_mode = "single_dm"

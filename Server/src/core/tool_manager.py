@@ -1,8 +1,15 @@
 class ToolManager:
     """系统级工具箱：负责处理 AI 的所有实体工具调用"""
     
-    def __init__(self):
+    def __init__(self, player_name: str = "陆陈安然"):
         self.call_history = []  # 初始化工具调用栈
+        self.player_name = player_name or "陆陈安然"
+
+    def set_player_name(self, player_name: str):
+        self.player_name = (player_name or "").strip() or "陆陈安然"
+
+    def get_player_name(self) -> str:
+        return self.player_name
         
     def execute(self, func_name: str, args: dict) -> dict:
         """动态路由：自动寻找并执行对应的工具函数"""
@@ -43,12 +50,16 @@ class ToolManager:
 
     def sabotage_academic(self, args: dict) -> dict:
         """工具：学业背刺系统"""
-        target = args.get("target", "陆陈安然")
+        player_name = self.get_player_name()
+        raw_target = str(args.get("target", "") or "").strip()
+        target = raw_target or player_name
+        if target in {"player", "玩家", "主角", "当前主角", "__player__"}:
+            target = player_name
         method = args.get("method", "未知手段")
         res = {
             "display_text": f"\n\n⚠️ **【系统工具触发：学业背刺】**\n> {target} 的学业遭到了恶性破坏！\n> 破坏方式：{method}\n> *(系统已调用底层接口强行扣除目标 GPA！)*\n"
         }
-        if target == "陆陈安然":
+        if target == player_name:
             res["gpa_delta"] = -0.3  # 扣除 0.3 的绩点
         return res
         

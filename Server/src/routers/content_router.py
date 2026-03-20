@@ -167,6 +167,8 @@ def build_content_router(
                     engine.pm = type(engine.pm)(user_id)
                     if hasattr(engine, "player_name") and hasattr(engine.pm, "get_player_name"):
                         engine.player_name = engine.pm.get_player_name()
+                    if hasattr(engine, "tm") and hasattr(engine.tm, "set_player_name") and hasattr(engine, "player_name"):
+                        engine.tm.set_player_name(engine.player_name)
 
             append_audit_log(user_id, "apply_library_mod", "ok", item_id, {"name": data.get("name")})
             return {"status": "success", "message": f"模组 [{data.get('name')}] 已成功应用"}
@@ -285,6 +287,8 @@ def build_content_router(
                     engine.pm = type(engine.pm)(user_id)
                     if hasattr(engine, "player_name") and hasattr(engine.pm, "get_player_name"):
                         engine.player_name = engine.pm.get_player_name()
+                    if hasattr(engine, "tm") and hasattr(engine.tm, "set_player_name") and hasattr(engine, "player_name"):
+                        engine.tm.set_player_name(engine.player_name)
             append_audit_log(user_id, "rollback_snapshot", "ok", snapshot_id, {})
             return {"status": "success", "message": f"已回滚到快照 {snapshot_id}"}
         except FileNotFoundError:

@@ -51,13 +51,13 @@ export const EditorHeader = ({
                             onClick={() => setEditMode('visual')}
                             className={`flex items-center px-4 py-2 rounded-lg text-[10px] font-black transition-all ${editMode === 'visual' ? 'bg-white text-[var(--color-cyan-dark)] shadow-sm' : 'text-[var(--color-cyan-main)]/60 hover:text-[var(--color-cyan-dark)]'}`}
                         >
-                            <Eye size={14} className="mr-2" /> 视觉引导
+                            <Eye size={14} className="mr-2" /> 可视化
                         </button>
                         <button
                             onClick={() => setEditMode('code')}
                             className={`flex items-center px-4 py-2 rounded-lg text-[10px] font-black transition-all ${editMode === 'code' ? 'bg-white text-[var(--color-cyan-dark)] shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                         >
-                            <Code size={14} className="mr-2" /> 代码注入
+                            <Code size={14} className="mr-2" /> 原始文件
                         </button>
                     </div>
                 )}
@@ -73,7 +73,7 @@ export const EditorHeader = ({
                     className="flex items-center px-8 py-4 bg-[var(--color-yellow-main)] hover:bg-[var(--color-yellow-light)] text-[var(--color-cyan-dark)] rounded-3xl font-black transition-all text-xs shadow-xl shadow-yellow-900/10 active:scale-95 group"
                 >
                     <UploadCloud size={20} className="mr-3 group-hover:-translate-y-1 transition-transform" />
-                    部署至工坊
+                    公开至工坊
                 </button>
                 <button
                     onClick={onSave}

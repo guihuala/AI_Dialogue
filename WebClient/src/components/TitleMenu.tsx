@@ -1,4 +1,4 @@
-import { Settings, Cloud, BookOpen } from 'lucide-react';
+import { Settings, Cloud, BookOpen, Bell } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 interface TitleMenuProps {
@@ -6,9 +6,10 @@ interface TitleMenuProps {
     onWorkshop: () => void;
     onEditor: () => void;
     onSettings: () => void;
+    onAnnouncement: () => void;
 }
 
-export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings }: TitleMenuProps) => {
+export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnouncement }: TitleMenuProps) => {
     const [currentTime, setCurrentTime] = useState(new Date());
 
     useEffect(() => {
@@ -42,6 +43,13 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings }: TitleMe
             <div className="absolute top-10 left-10 right-10 z-20 flex justify-between items-start pointer-events-none">
                 {/* Right: Date & Clock */}
                 <div className="flex flex-col items-end gap-3 pointer-events-auto">
+                    <button
+                        onClick={onAnnouncement}
+                        className="flex items-center gap-2 px-4 py-2.5 glass-panel rounded-2xl border-white/60 shadow-sm text-[var(--color-cyan-dark)] hover:bg-white transition-all hover:-translate-y-0.5"
+                    >
+                        <Bell size={16} className="text-[var(--color-yellow-main)]" />
+                        <span className="text-[10px] font-black tracking-[0.25em] uppercase">公告</span>
+                    </button>
                     <div className="flex flex-col items-end px-5 py-3 glass-panel rounded-2xl border-white/60 shadow-sm">
                         <div className="flex items-baseline gap-2">
                             <span className="text-2xl font-black text-[var(--color-cyan-dark)] font-mono tracking-tighter">

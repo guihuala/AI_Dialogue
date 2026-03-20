@@ -67,7 +67,7 @@ export const EditorModals = ({
                                 <div className="w-16 h-16 rounded-2xl bg-[var(--color-cyan-light)] text-[var(--color-cyan-main)] flex items-center justify-center mr-6 shrink-0 shadow-lg border-2 border-white">
                                     <UploadCloud size={36} />
                                 </div>
-                                <h3 className="text-4xl font-black text-[var(--color-cyan-dark)] tracking-tighter leading-none">发布至多元宇宙</h3>
+                                <h3 className="text-4xl font-black text-[var(--color-cyan-dark)] tracking-tighter leading-none">发布</h3>
                             </div>
 
                             <div className="space-y-10">
@@ -127,7 +127,7 @@ export const EditorModals = ({
                                 </div>
                                 <div className="grid grid-cols-2 gap-8">
                                     <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-4 tracking-[0.4em] ml-2">总架构师</label>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-4 tracking-[0.4em] ml-2">作者</label>
                                         <input
                                             type="text"
                                             value={publishMetadata.author}
