@@ -49,6 +49,7 @@ class GameEngine:
         self.director = EventDirector(user_id)
         self.tm = ToolManager()
         self.pm = PromptManager(user_id)
+        self.player_name = self.pm.get_player_name() if hasattr(self.pm, "get_player_name") else "陆陈安然"
         self.prefetch_mgr = PrefetchManager()
         self.event_completion_count = 0
         self.recent_event_ids = []
@@ -58,6 +59,7 @@ class GameEngine:
 
     def reset(self):
         self.director.reset()
+        self.player_name = self.pm.get_player_name() if hasattr(self.pm, "get_player_name") else "陆陈安然"
         self.event_completion_count = 0
         self.recent_event_ids = []
         self.event_repeat_state = {}
@@ -192,6 +194,7 @@ class GameEngine:
             "wechat_notifications": pick(parsed, ["wechat_notifications", "wechat", "微信通知", "微信消息"], []),
             "next_options": pick(parsed, ["next_options", "options", "下一步选项", "选项"], []),
             "stat_changes": pick(parsed, ["stat_changes", "stats", "属性变化", "数值变化", "状态变化"], {}),
+            "effects": pick(parsed, ["effects", "effect_commands", "effects_commands", "结算命令", "效果命令"], []),
             "is_end": pick(parsed, ["is_end", "isEnd", "结束", "是否结束"], False),
             "tool_calls": pick(parsed, ["tool_calls", "tools", "工具调用"], []),
         }
@@ -341,16 +344,25 @@ class GameEngine:
             "\n\n【强制 JSON 输出协议】\n"
             "1. 仅输出一个 JSON 对象，不要输出解释、注释、Markdown 代码块。\n"
             "2. 所有 key 与字符串 value 必须使用英文双引号。\n"
-            "3. 必须包含字段：narrator_transition, current_scene, dialogue_sequence, npc_background_actions, "
-            "wechat_notifications, next_options, stat_changes, is_end, tool_calls。\n"
-            "4. dialogue_sequence 必须是数组，每项包含 speaker, content, mood。\n"
-            "5. next_options 必须是 3-4 个独立字符串数组元素，不能把多个选项写在一个字符串里。\n"
-            "6. stat_changes 必须包含 san_delta, money_delta, is_argument, affinity_changes。\n"
+            "3. dialogue_sequence 必须是数组，每项包含 speaker, content, mood。\n"
+            "4. next_options 必须是 3-4 个独立字符串数组元素，不能把多个选项拼在一个字符串里。\n"
         )
         if self.stability_mode == "stable":
             base_contract += (
-                "7. 优先稳定性：不要使用中文标点作为 JSON 结构符，不要省略引号。\n"
-                "8. 不确定时返回空数组/0/false，不要省略字段。\n"
+                "5. 【最小稳定 Schema】必须包含字段：narrator_transition, current_scene, dialogue_sequence, next_options, effects, is_end。\n"
+                "6. effects 必须是字符串数组，使用以下命令格式之一：\n"
+                "   - san:+N / san:-N\n"
+                "   - money:+N / money:-N\n"
+                "   - arg:+1（表示发生争吵计数）\n"
+                "   - affinity:角色名:+N 或 affinity:角色名:-N\n"
+                "   - wechat:群聊名|发送者|消息内容\n"
+                "7. 稳定模式下不要输出 stat_changes / wechat_notifications / npc_background_actions / tool_calls。\n"
+                "8. 优先稳定性：不要使用中文标点作为 JSON 结构符，不要省略引号。\n"
+                "9. 不确定时返回空数组/false，不要省略字段。\n"
+            )
+        else:
+            base_contract += (
+                "5. 建议包含字段：narrator_transition, current_scene, dialogue_sequence, next_options, is_end。\n"
             )
         return base_contract
 
@@ -385,24 +397,94 @@ class GameEngine:
         min_dialogue = 3 if self.stability_mode == "stable" else 2
         return valid_lines >= min_dialogue
 
+    def _parse_effect_commands(self, effects):
+        """
+        将 effects 命令数组解析为统一结算结构。
+        支持：
+        - san:+2 / san:-2
+        - money:+100 / money:-50
+        - arg:+1
+        - affinity:林飒:+3
+        """
+        result = {
+            "san_delta": 0.0,
+            "money_delta": 0.0,
+            "arg_delta": 0,
+            "affinity_changes": {},
+            "wechat_notifications": []
+        }
+        if isinstance(effects, str):
+            effects = [effects]
+        if not isinstance(effects, list):
+            return result
+
+        for raw_cmd in effects:
+            cmd = str(raw_cmd or "").strip()
+            if not cmd:
+                continue
+            normalized = (
+                cmd.replace("：", ":")
+                   .replace("，", ",")
+                   .replace("＋", "+")
+                   .replace("－", "-")
+                   .replace(" ", "")
+            )
+            try:
+                m = re.fullmatch(r"(san|money|arg):([+-]?\d+(?:\.\d+)?)", normalized, flags=re.IGNORECASE)
+                if m:
+                    key = m.group(1).lower()
+                    val = float(m.group(2))
+                    if key == "san":
+                        result["san_delta"] += val
+                    elif key == "money":
+                        result["money_delta"] += val
+                    elif key == "arg":
+                        result["arg_delta"] += int(round(val))
+                    continue
+
+                m2 = re.fullmatch(r"affinity:([^:]{1,24}):([+-]?\d+(?:\.\d+)?)", normalized, flags=re.IGNORECASE)
+                if m2:
+                    char_name = m2.group(1).strip()
+                    delta = float(m2.group(2))
+                    if char_name:
+                        result["affinity_changes"][char_name] = result["affinity_changes"].get(char_name, 0.0) + delta
+                    continue
+
+                # wechat:群聊名|发送者|消息内容
+                m3 = re.match(r"^wechat:(.+)$", str(raw_cmd or "").strip(), flags=re.IGNORECASE)
+                if m3:
+                    payload = m3.group(1).strip()
+                    payload = payload.replace("｜", "|")
+                    parts = [p.strip() for p in payload.split("|", 2)]
+                    if len(parts) == 3:
+                        chat_name, sender, message = parts
+                        if chat_name and sender and message:
+                            result["wechat_notifications"].append({
+                                "chat_name": chat_name,
+                                "sender": sender,
+                                "message": message
+                            })
+                    continue
+            except Exception:
+                continue
+        return result
+
     def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, hygiene, reputation, arg_count, chapter, turn, affinity, wechat_data_dict, is_prefetch=False, custom_prompts=None):
         self.llm.update_config(api_key=api_key, base_url=base_url, model=model)
+        player_name = self.pm.get_player_name() if hasattr(self.pm, "get_player_name") else self.player_name
+        self.player_name = player_name
         effective_dialogue_mode = self.dialogue_mode
         if effective_dialogue_mode in ["tree_only", "hybrid"]:
             effective_dialogue_mode = "single_dm"
         use_branch_tree = False
         
         # --- 动态映射逻辑 ---
-        roster_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "prompts", "characters", "roster.json")
-        roster = {}
-        if os.path.exists(roster_path):
-            try:
-                with open(roster_path, 'r', encoding='utf-8') as f:
-                    roster = json.load(f)
-            except: pass
+        roster_name_map = self.pm.get_roster_name_map() if hasattr(self.pm, "get_roster_name_map") else {}
 
         def get_name(cid):
-            if cid in roster: return roster[cid].get("name", cid)
+            cid_key = str(cid)
+            if cid_key in roster_name_map:
+                return roster_name_map[cid_key]
             if hasattr(presets_module, "CANDIDATE_POOL") and cid in presets_module.CANDIDATE_POOL:
                 return presets_module.CANDIDATE_POOL[cid].Name
             return cid
@@ -490,6 +572,7 @@ class GameEngine:
                         "next_options": next_options if next_options else ["继续剧情..."],
                         "stat_changes": {}, # Initial entry usually no changes
                         "is_end": first_turn.get("is_end", False),
+                        "player_name": player_name,
                         "event_id": next_evt.id,
                         "turn": 1,
                         "event_script": cached_script # Return full script to frontend
@@ -596,6 +679,7 @@ class GameEngine:
                         "current_scene": res_data.get("current_scene", "场景"),
                         "current_evt_id": next_evt.id,
                         "is_end": res_data.get("is_end", False),
+                        "player_name": player_name,
                         "next_options": res_data.get("next_options", []),
                         "dialogue_sequence": res_data.get("dialogue_sequence", []),
                         "narrator_transition": res_data.get("narrator_transition", "")
@@ -629,7 +713,7 @@ class GameEngine:
         try:
             relevant_docs = self.mm.vector_store.search(f"{next_evt.name} {action_text}", n_results=6)
             valid_lores = []
-            active_plus_player = selected_chars + ["陆陈安然"] 
+            active_plus_player = selected_chars + [player_name]
             for d in relevant_docs:
                 content = d.get('content', '')
                 if "语录" in content and any(f"[{c}" in content for c in active_plus_player):
@@ -654,6 +738,7 @@ class GameEngine:
             "event_name": next_evt.name,               
             "event_description": next_evt.description, 
             "active_chars": selected_chars,
+            "player_name": player_name,
             "rag_lore": lore_str,
             "custom_prompts": custom_prompts
         }
@@ -665,7 +750,7 @@ class GameEngine:
         # 多智能体剧场演出阶段
         # ========================================================
 
-        npc_chars = [c for c in selected_chars if c != "陆陈安然"]
+        npc_chars = [c for c in selected_chars if c != player_name]
         reactions_str = ""
         
         # 仅在 npc_dm 模式启用多智能体并行反应。single_dm/hybrid/tree_only 均走单一 DM。
@@ -733,7 +818,11 @@ class GameEngine:
         if recent_opts:
             recent_opt_hint = "\n【上一轮选项（避免复读）】" + " | ".join(recent_opts[-1])
 
-        user_prm = f"{event_context}{recent_opt_hint}\n\n【玩家意图】: {action_text}{reactions_str}\n\n【现有微信通讯录】: {safe_keys}\n{wechat_summary}\n[状态] SAN:{san}, 资金:{money}。\n\n{self.pm.get_main_author_note()}"
+        user_prm = (
+            f"{event_context}{recent_opt_hint}\n\n【玩家角色】{player_name}\n\n【玩家意图】: {action_text}{reactions_str}\n\n"
+            f"【现有微信通讯录】: {safe_keys}\n{wechat_summary}\n[状态] SAN:{san}, 资金:{money}。\n\n"
+            f"{self.pm.get_main_author_note({'player_name': player_name})}"
+        )
 
         try:
             if getattr(next_evt, 'is_cg', False):
@@ -846,31 +935,47 @@ class GameEngine:
             # 新事件开场时，补充主角视角导语，避免玩家“直接进入角色台词”产生割裂感。
             if is_new_event_entry and not getattr(next_evt, 'is_cg', False):
                 intro = str(parsed.get("narrator_transition", "") or "").strip()
+                view_tag = f"{player_name}视角"
                 if intro:
-                    if "安然视角" not in intro:
-                        parsed["narrator_transition"] = f"【安然视角】{intro}"
+                    if view_tag not in intro:
+                        parsed["narrator_transition"] = f"【{view_tag}】{intro}"
                 else:
                     desc = str(getattr(next_evt, "description", "") or "").strip()
                     if len(desc) > 48:
                         desc = desc[:48] + "…"
-                    parsed["narrator_transition"] = f"【安然视角】我环顾四周，{desc or '空气里有股将起争执的味道。'}"
+                    parsed["narrator_transition"] = f"【{view_tag}】我环顾四周，{desc or '空气里有股将起争执的味道。'}"
 
             stats_data = parsed.get("stat_changes", {})
-            if not isinstance(stats_data, dict): stats_data = {} 
+            if not isinstance(stats_data, dict):
+                stats_data = {}
+            effects_data = self._parse_effect_commands(parsed.get("effects", []))
 
             def _num(v, default=0):
                 try:
                     return float(v)
                 except Exception:
                     return default
-            
-            san_delta = _num(stats_data.get("san_delta", 0), 0)
-            money_delta = _num(stats_data.get("money_delta", 0), 0)
+
+            # 优先使用 effects 命令式结算；若无则回退 legacy stat_changes。
+            has_effects = bool(parsed.get("effects"))
+            if has_effects:
+                san_delta = _num(effects_data.get("san_delta", 0), 0)
+                money_delta = _num(effects_data.get("money_delta", 0), 0)
+                arg_delta = int(_num(effects_data.get("arg_delta", 0), 0))
+                aff_changes = effects_data.get("affinity_changes", {})
+                is_argument = arg_delta > 0
+            else:
+                san_delta = _num(stats_data.get("san_delta", 0), 0)
+                money_delta = _num(stats_data.get("money_delta", 0), 0)
+                is_argument = bool(stats_data.get("is_argument", False))
+                aff_changes = stats_data.get("affinity_changes", {})
+                arg_delta = 1 if is_argument else 0
+
             san = max(0, min(100, san + san_delta))
             money += money_delta
-            if bool(stats_data.get("is_argument", False)): arg_count += 1
-            
-            aff_changes = stats_data.get("affinity_changes", {})
+            if arg_delta > 0:
+                arg_count += arg_delta
+
             if isinstance(aff_changes, dict):
                 for char_name, change_val in aff_changes.items():
                     if char_name in affinity:
@@ -965,11 +1070,14 @@ class GameEngine:
                 self.event_repeat_state.pop(next_evt.id, None)
 
             if not getattr(next_evt, 'is_cg', False) and action_text and "（时间推移..." not in action_text and not is_prefetch:
-                self.mm.save_interaction(user_input=action_text, ai_response=" ".join(dialogue_lines), user_name="陆陈安然")
+                self.mm.save_interaction(user_input=action_text, ai_response=" ".join(dialogue_lines), user_name=player_name)
 
             valid_notifs = []
             wechat_list = parsed.get("wechat_notifications", [])
             if isinstance(wechat_list, dict): wechat_list = [wechat_list]
+            effect_wechat = effects_data.get("wechat_notifications", []) if isinstance(effects_data, dict) else []
+            if isinstance(effect_wechat, list) and effect_wechat:
+                wechat_list = wechat_list + effect_wechat
             if isinstance(wechat_list, list):
                 for w in wechat_list:
                     if not isinstance(w, dict): continue 
@@ -1060,6 +1168,7 @@ class GameEngine:
                 "current_scene": parsed.get("current_scene", "宿舍"),
                 "current_evt_id": next_evt.id,
                 "is_end": is_end, 
+                "player_name": player_name,
                 "next_options": extracted_options, 
                 "wechat_notifications": valid_notifs,
                 "narrator_transition": parsed.get("narrator_transition", ""),

@@ -32,7 +32,8 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         pendingChoice,
         current_evt_id,
         current_scene,
-        resetGame
+        resetGame,
+        active_roommates
     } = useGameStore();
 
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -244,7 +245,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
 
         const actualSpeaker = [...presentChars].filter(c => c.isSpeaking).sort((a, b) => b.lastMentionIdx - a.lastMentionIdx)[0];
         if (actualSpeaker) presentChars.forEach(c => { if (c.id !== actualSpeaker.id) c.isSpeaking = false; });
-        return presentChars.sort((a, b) => b.lastMentionIdx - a.lastMentionIdx).slice(0, 3);
+        return presentChars.sort((a, b) => b.lastMentionIdx - a.lastMentionIdx).slice(0, 4);
     };
 
     const parseMarktext = (text: string) => {
@@ -276,6 +277,24 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
             </div>
 
             <AttributeNotifications notifications={notifications} />
+
+            <div className="absolute top-5 left-5 z-30 pointer-events-none">
+                <div className="rounded-full border border-[var(--color-cyan-main)]/25 bg-white/80 backdrop-blur-md px-3 py-2 shadow-lg max-w-[52vw]">
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                        <span className="text-[10px] font-black tracking-widest text-[var(--color-cyan-dark)]/55 uppercase pr-1">
+                            室友
+                        </span>
+                        {(active_roommates || []).map((name) => (
+                            <span
+                                key={name}
+                                className="px-2 py-0.5 rounded-full bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] text-[11px] font-black border border-[var(--color-cyan-main)]/20"
+                            >
+                                {name}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            </div>
             
             <ScenePortraits charactersInScene={determineCharactersInScene()} />
 

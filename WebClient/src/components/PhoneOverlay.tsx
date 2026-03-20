@@ -14,7 +14,7 @@ export const PhoneOverlay = () => {
     clearWechatNotifications, 
     isPhoneOpen, 
     togglePhone,
-    san, money, gpa, chapter, turn, history, affinity, active_roommates
+    san, money, gpa, chapter, turn, history, affinity, active_roommates, player_name
   } = useGameStore();
   
   const [currentApp, setCurrentApp] = useState<string | null>(null);
@@ -72,6 +72,7 @@ export const PhoneOverlay = () => {
                     clearNotifications={clearWechatNotifications} 
                     affinity={affinity}
                     activeRoommates={active_roommates}
+                    playerName={player_name}
                   />
                 )}
                 {currentApp === 'calendar' && (

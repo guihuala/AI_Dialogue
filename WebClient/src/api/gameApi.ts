@@ -85,8 +85,43 @@ export const gameApi = {
     return res.data;
   },
 
+  validateLibraryItem: async (itemId: string) => {
+    const res = await apiClient.post(`/library/validate/${itemId}`);
+    return res.data;
+  },
+
   deleteFromLibrary: async (itemId: string) => {
     const res = await apiClient.delete(`/library/${itemId}`);
+    return res.data;
+  },
+
+  getUserState: async () => {
+    const res = await apiClient.get(`/user/state`);
+    return res.data;
+  },
+
+  getStorageQuota: async () => {
+    const res = await apiClient.get(`/storage/quota`);
+    return res.data;
+  },
+
+  cleanupStorage: async (payload: { dry_run?: boolean; keep_recent_library?: number; keep_recent_snapshots?: number }) => {
+    const res = await apiClient.post(`/storage/cleanup`, payload);
+    return res.data;
+  },
+
+  getUserAudit: async (limit: number = 30) => {
+    const res = await apiClient.get(`/user/audit`, { params: { limit } });
+    return res.data;
+  },
+
+  getSnapshots: async () => {
+    const res = await apiClient.get(`/user/snapshots`);
+    return res.data;
+  },
+
+  rollbackSnapshot: async (snapshotId: string) => {
+    const res = await apiClient.post(`/user/rollback/${snapshotId}`);
     return res.data;
   },
 
@@ -103,6 +138,11 @@ export const gameApi = {
 
   publishCurrentMod: async (metadata: { name: string, author: string, description: string }) => {
     const res = await apiClient.post(`/workshop/publish_current`, metadata);
+    return res.data;
+  },
+
+  validateCurrentForPublish: async () => {
+    const res = await apiClient.post(`/workshop/validate_current`);
     return res.data;
   },
 

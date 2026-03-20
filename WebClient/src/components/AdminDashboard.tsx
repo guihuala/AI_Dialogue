@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { gameApi } from '../api/gameApi';
-import { Shield, Trash2, Edit2, Check, X, RefreshCw, LogOut, Package } from 'lucide-react';
+import { Shield, Trash2, Edit2, Check, X, RefreshCw, LogOut, Package, Database, History, FileClock } from 'lucide-react';
 import { ConfirmDialog } from './common/ConfirmDialog';
 
 export const AdminDashboard = () => {
@@ -8,8 +8,12 @@ export const AdminDashboard = () => {
     const [password, setPassword] = useState('');
     const [items, setItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [cleaning, setCleaning] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editForm, setEditForm] = useState({ name: '', author: '', description: '' });
+    const [userState, setUserState] = useState<any>(null);
+    const [quota, setQuota] = useState<any>(null);
+    const [auditRows, setAuditRows] = useState<any[]>([]);
     const [confirmDialog, setConfirmDialog] = useState<{
         open: boolean;
         title: string;
@@ -32,8 +36,16 @@ export const AdminDashboard = () => {
     const loadItems = async () => {
         setLoading(true);
         try {
-            const res = await gameApi.getWorkshopList();
-            setItems(res.data || []);
+            const [wsRes, stateRes, quotaRes, auditRes] = await Promise.all([
+                gameApi.getWorkshopList(),
+                gameApi.getUserState(),
+                gameApi.getStorageQuota(),
+                gameApi.getUserAudit(20)
+            ]);
+            setItems(wsRes.data || []);
+            setUserState(stateRes.data || null);
+            setQuota(quotaRes.data || null);
+            setAuditRows(auditRes.data || []);
         } catch (e) {
             console.error(e);
         } finally {
@@ -88,6 +100,30 @@ export const AdminDashboard = () => {
             alert('更新失败');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleCleanup = async (dryRun: boolean) => {
+        setCleaning(true);
+        try {
+            const res = await gameApi.cleanupStorage({
+                dry_run: dryRun,
+                keep_recent_library: 100,
+                keep_recent_snapshots: 20
+            });
+            const data = res?.data || {};
+            const removedLib = data?.removed?.library?.length || 0;
+            const removedSnap = data?.removed?.snapshots?.length || 0;
+            if (dryRun) {
+                alert(`预估可清理：library ${removedLib} 项，snapshots ${removedSnap} 项`);
+            } else {
+                alert(`已清理：library ${removedLib} 项，snapshots ${removedSnap} 项`);
+                loadItems();
+            }
+        } catch (e) {
+            alert('清理失败');
+        } finally {
+            setCleaning(false);
         }
     };
 
@@ -148,6 +184,22 @@ export const AdminDashboard = () => {
 
                 <div className="flex items-center gap-3">
                     <button
+                        onClick={() => handleCleanup(true)}
+                        disabled={cleaning}
+                        className="px-3 py-2 bg-white border border-[var(--color-cyan-main)]/20 text-[var(--color-cyan-main)] rounded-xl hover:bg-[var(--color-cyan-light)] transition-all disabled:opacity-50 text-xs font-black"
+                        title="预览清理结果"
+                    >
+                        预览清理
+                    </button>
+                    <button
+                        onClick={() => handleCleanup(false)}
+                        disabled={cleaning}
+                        className="px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl hover:bg-amber-100 transition-all disabled:opacity-50 text-xs font-black"
+                        title="执行智能清理"
+                    >
+                        执行清理
+                    </button>
+                    <button
                         onClick={loadItems}
                         disabled={loading}
                         className="p-3 bg-[var(--color-cyan-light)] text-[var(--color-cyan-main)] rounded-xl hover:bg-[var(--color-cyan-main)] hover:text-white transition-all disabled:opacity-50"
@@ -166,6 +218,44 @@ export const AdminDashboard = () => {
             </div>
 
             <div className="flex-1 overflow-hidden bg-[var(--color-cyan-light)]/10 rounded-3xl border border-[var(--color-cyan-main)]/5 flex flex-col">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 border-b border-[var(--color-cyan-main)]/10 bg-white/60">
+                    <div className="rounded-2xl border border-[var(--color-cyan-main)]/10 bg-white p-4">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] flex items-center gap-2">
+                            <Database size={12} />
+                            当前激活
+                        </div>
+                        <div className="mt-2 text-sm font-black text-[var(--color-cyan-dark)]">
+                            {userState?.active_source || 'default'} / {userState?.active_mod_id || 'default'}
+                        </div>
+                    </div>
+                    <div className="rounded-2xl border border-[var(--color-cyan-main)]/10 bg-white p-4">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] flex items-center gap-2">
+                            <History size={12} />
+                            快照留存
+                        </div>
+                        <div className="mt-2 text-sm font-black text-[var(--color-cyan-dark)]">
+                            last: {userState?.last_good_snapshot_id || '-'}
+                        </div>
+                    </div>
+                    <div className="rounded-2xl border border-[var(--color-cyan-main)]/10 bg-white p-4">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] flex items-center gap-2">
+                            <FileClock size={12} />
+                            存储配额
+                        </div>
+                        <div className="mt-2 text-sm font-black text-[var(--color-cyan-dark)]">
+                            {quota?.usage?.library_items || 0}/{quota?.limits?.library_items || 0} 模组
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-bold">
+                            {(quota?.usage?.library_bytes || 0) / (1024 * 1024) > 0 ? `${((quota?.usage?.library_bytes || 0) / (1024 * 1024)).toFixed(1)} MB` : '0 MB'}
+                        </div>
+                        {Array.isArray(quota?.warnings) && quota.warnings.length > 0 && (
+                            <div className="text-[10px] text-amber-600 font-black mt-1">
+                                {quota.warnings.join('；')}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 <div className="p-6 border-b border-[var(--color-cyan-main)]/10 bg-white/50 overflow-hidden">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.2em] flex items-center">
@@ -272,8 +362,25 @@ export const AdminDashboard = () => {
                     </div>
                 </div>
 
+                <div className="p-4 border-t border-[var(--color-cyan-main)]/10 bg-white/60">
+                    <h4 className="text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.2em] mb-2">最近审计日志</h4>
+                    <div className="max-h-36 overflow-y-auto custom-scrollbar bg-white rounded-xl border border-[var(--color-cyan-main)]/10">
+                        {auditRows.length === 0 ? (
+                            <div className="px-3 py-4 text-xs text-slate-400 font-bold">暂无日志</div>
+                        ) : (
+                            auditRows.map((r, idx) => (
+                                <div key={idx} className="px-3 py-2 text-[11px] font-bold text-slate-600 border-b last:border-b-0 border-[var(--color-cyan-main)]/5">
+                                    <span className={`mr-2 ${r.status === 'ok' ? 'text-emerald-600' : 'text-red-500'}`}>[{r.status}]</span>
+                                    <span className="mr-2">{r.action}</span>
+                                    <span className="text-slate-400">{r.ts}</span>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+
                 <div className="mt-auto p-4 bg-[var(--color-cyan-main)]/5 border-t border-[var(--color-cyan-main)]/10 text-[9px] font-black text-[var(--color-cyan-main)]/40 uppercase tracking-[0.4em] text-center">
-                    Mokukeki Admin Interface v1.0.4
+                    Mokukeki Admin Interface v2.0.0
                 </div>
             </div>
 

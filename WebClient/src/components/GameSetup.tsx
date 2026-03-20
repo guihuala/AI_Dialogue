@@ -24,7 +24,8 @@ export const GameSetup = ({ onBack, onStartGame, onTabChange }: GameSetupProps) 
         const loadSetupData = async () => {
             try {
                 const candRes = await gameApi.getCandidates();
-                setCandidates(candRes.data || []);
+                const safeCandidates = (candRes.data || []).filter((c: any) => !c?.is_player);
+                setCandidates(safeCandidates);
             } catch (e) {
                 console.error(e);
             } finally {

@@ -16,10 +16,12 @@ export const GameUIControls = ({
   wechatNotificationCount
 }: GameUIControlsProps) => {
   return (
-    <div className="absolute top-6 right-6 z-30 flex space-x-3 pointer-events-auto">
+    <div className="absolute top-5 right-5 z-30 pointer-events-auto">
+      <div className="rounded-2xl border border-[var(--color-cyan-main)]/25 bg-white/75 backdrop-blur-md p-2.5 shadow-xl">
+      <div className="flex flex-wrap justify-end gap-2 max-w-[620px]">
       <button
         onClick={onTogglePhone}
-        className="flex items-center px-4 py-2 bg-white/90 hover:bg-white text-[var(--color-cyan-dark)] backdrop-blur-md rounded-full border border-[var(--color-cyan-main)]/30 shadow-lg transition-all font-black text-sm tracking-widest uppercase relative"
+        className="flex items-center px-3.5 py-2 bg-white/90 hover:bg-white text-[var(--color-cyan-dark)] backdrop-blur-md rounded-full border border-[var(--color-cyan-main)]/30 shadow-lg transition-all font-black text-xs tracking-widest uppercase relative"
       >
         <Smartphone size={16} className="mr-2 text-[var(--color-cyan-main)]" /> 打开手机
         {wechatNotificationCount > 0 && (
@@ -30,22 +32,24 @@ export const GameUIControls = ({
       </button>
       <button
         onClick={onSaveGame}
-        className="flex items-center px-4 py-2 bg-white/90 hover:bg-white text-[var(--color-cyan-dark)] backdrop-blur-md rounded-full border border-[var(--color-cyan-main)]/30 shadow-lg transition-all font-black text-sm tracking-widest uppercase"
+        className="flex items-center px-3.5 py-2 bg-white/90 hover:bg-white text-[var(--color-cyan-dark)] backdrop-blur-md rounded-full border border-[var(--color-cyan-main)]/30 shadow-lg transition-all font-black text-xs tracking-widest uppercase"
       >
         <Save size={16} className="mr-2 text-[var(--color-cyan-main)]" /> 保存进度
       </button>
       <button
         onClick={onShowHistory}
-        className="flex items-center px-4 py-2 bg-white/90 hover:bg-white text-[var(--color-cyan-dark)] backdrop-blur-md rounded-full border border-[var(--color-cyan-main)]/30 shadow-lg transition-all font-black text-sm tracking-widest uppercase"
+        className="flex items-center px-3.5 py-2 bg-white/90 hover:bg-white text-[var(--color-cyan-dark)] backdrop-blur-md rounded-full border border-[var(--color-cyan-main)]/30 shadow-lg transition-all font-black text-xs tracking-widest uppercase"
       >
         <ScrollText size={16} className="mr-2 text-[var(--color-yellow-main)] drop-shadow-sm" /> 回顾记录
       </button>
       <button
         onClick={onBackToMenu}
-        className="flex items-center px-4 py-2 bg-white/90 hover:bg-white text-[var(--color-cyan-dark)] backdrop-blur-md rounded-full border border-[var(--color-cyan-main)]/30 shadow-lg transition-all font-black text-sm tracking-widest uppercase"
+        className="flex items-center px-3.5 py-2 bg-white/90 hover:bg-white text-[var(--color-cyan-dark)] backdrop-blur-md rounded-full border border-[var(--color-cyan-main)]/30 shadow-lg transition-all font-black text-xs tracking-widest uppercase"
       >
         <House size={16} className="mr-2 text-[var(--color-cyan-main)]" /> 返回主菜单
       </button>
+      </div>
+      </div>
     </div>
   );
 };

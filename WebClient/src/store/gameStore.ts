@@ -17,6 +17,7 @@ interface GameState {
   turn: number;
   current_evt_id: string;
   current_scene: string;
+  player_name: string;
   active_roommates: string[];
   affinity: Record<string, number>;
   
@@ -65,6 +66,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   turn: 0,
   current_evt_id: '',
   current_scene: '宿舍',
+  player_name: '陆陈安然',
   active_roommates: [],
   affinity: {},
   displayText: '',
@@ -113,6 +115,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         turn: data.turn,
         current_evt_id: data.current_evt_id,
         current_scene: data.current_scene || '宿舍',
+        player_name: data.player_name || '陆陈安然',
         active_roommates: data.active_roommates || roommates,
         affinity: data.affinity,
         displayText: data.display_text,
@@ -205,6 +208,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         turn: data.turn,
         current_evt_id: data.current_evt_id,
         current_scene: data.current_scene || prev.current_scene || '宿舍',
+        player_name: data.player_name || prev.player_name || '陆陈安然',
         affinity: data.affinity,
         displayText: data.display_text,
         nextOptions: data.next_options || [],
@@ -283,6 +287,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               turn: gameState.turn,
               current_evt_id: gameState.current_evt_id,
               current_scene: gameState.current_scene || '宿舍',
+              player_name: gameState.player_name || '陆陈安然',
               active_roommates: gameState.active_roommates,
               // affinity, hygiene, etc should ideally be in save too
               displayText: "存档已成功加载，您可以继续之前的进度。",
@@ -337,6 +342,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               turn: 0,
               current_evt_id: '',
               current_scene: '宿舍',
+              player_name: '陆陈安然',
               history: [],
               wechatNotifications: [],
               displayText: ''

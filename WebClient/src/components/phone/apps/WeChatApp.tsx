@@ -6,6 +6,7 @@ interface WeChatAppProps {
   clearNotifications: () => void;
   affinity: Record<string, number>;
   activeRoommates: string[];
+  playerName: string;
 }
 
 // Roommate WeChat Configuration
@@ -13,7 +14,7 @@ const WECHAT_CONFIG: Record<string, { nickName: string; avatar?: string; bio: st
 
 };
 
-export const WeChatApp = ({ notifications, clearNotifications, affinity, activeRoommates }: WeChatAppProps) => {
+export const WeChatApp = ({ notifications, clearNotifications, affinity, activeRoommates, playerName }: WeChatAppProps) => {
   const [activeTab, setActiveTab] = useState<'chats' | 'contacts' | 'discovery'>('chats');
   const [activeChat, setActiveChat] = useState<any | null>(null);
   const [activeProfile, setActiveProfile] = useState<any | null>(null);
@@ -129,9 +130,9 @@ export const WeChatApp = ({ notifications, clearNotifications, affinity, activeR
   );
 
   const renderContactsList = () => {
-    // Exclude player name "陆陈安然" and filter roommates
+    // Exclude current player name and filter roommates
     const allFriends = Array.from(new Set([...activeRoommates, ...Object.keys(affinity)]))
-      .filter(name => name !== '陆陈安然');
+      .filter(name => name !== playerName);
 
     return (
       <div className="flex-1 flex flex-col bg-white animate-in fade-in duration-300">
@@ -283,7 +284,7 @@ export const WeChatApp = ({ notifications, clearNotifications, affinity, activeR
         <div className="py-2 text-center"><span className="bg-slate-200/50 text-[9px] text-slate-400 font-black px-3 py-1 rounded-md uppercase tracking-[0.2em]">{chat.isGroup ? 'ROOM CHAT' : 'ENCRYPTED DIALOGUE'}</span></div>
         {chat.messages.length === 0 ? <div className="p-12 text-center text-slate-300 italic text-xs">协议已启用，等待数据同步...</div> :
           chat.messages.map((msg: any, idx: number) => {
-            const isMe = msg.sender === '陆陈安然';
+            const isMe = msg.sender === playerName;
             return (
               <div key={idx} className={`flex items-start gap-3 w-full animate-in fade-in slide-in-from-bottom-2 duration-300 ${isMe ? 'flex-row-reverse' : ''}`} style={{ animationDelay: `${idx * 50}ms` }}>
                 <div className={`w-9 h-9 rounded-lg shadow-sm flex items-center justify-center overflow-hidden shrink-0 ${isMe ? 'bg-cyan-500' : (chat.isGroup ? 'bg-slate-400' : 'bg-white')}`}>

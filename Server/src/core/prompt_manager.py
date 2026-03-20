@@ -1,5 +1,6 @@
 import os
 import csv
+import json
 
 from src.core.config import get_user_prompts_dir, DEFAULT_PROMPTS_DIR
 
@@ -28,7 +29,21 @@ class PromptManager:
         }
 
         # 动态角色文件映射
+        self.roster_data = self._load_roster_data()
         self.char_file_map = self._load_char_file_map()
+        self.player_name = self._resolve_player_name()
+
+    def _load_roster_data(self) -> dict:
+        mapping_file = os.path.join(self.chars_dir, "roster.json")
+        if os.path.exists(mapping_file):
+            try:
+                with open(mapping_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        return data
+            except Exception as e:
+                print(f"Failed to load dynamic roster data: {e}")
+        return {}
 
     def _skill_user_defined_loader(self, context: dict) -> str:
         """动态加载 skills/ 目录下除系统保留文件以外的所有 .md 技能块"""
@@ -44,6 +59,29 @@ class PromptManager:
         
         return "\n\n".join(user_skills) if user_skills else ""
 
+    def _resolve_player_name(self) -> str:
+        for _, profile in self.roster_data.items():
+            if isinstance(profile, dict) and bool(profile.get("is_player", False)):
+                name = str(profile.get("name", "")).strip()
+                if name:
+                    return name
+        return "陆陈安然"
+
+    def get_player_name(self) -> str:
+        return self.player_name
+
+    def get_roster_name_map(self) -> dict:
+        """
+        返回 {角色ID: 角色名}，供引擎把前端提交的 id 转换为名字。
+        """
+        out = {}
+        for cid, profile in self.roster_data.items():
+            if isinstance(profile, dict):
+                name = str(profile.get("name", "")).strip()
+                if name:
+                    out[str(cid)] = name
+        return out
+
     def _load_char_file_map(self) -> dict:
         default_map = {
             "陆陈安然": "player_anran.md",
@@ -55,19 +93,17 @@ class PromptManager:
             "林飒": "lin_sa.md"
         }
         
-        mapping_file = os.path.join(self.chars_dir, "roster.json")
-        if os.path.exists(mapping_file):
+        if self.roster_data:
             try:
-                import json
-                with open(mapping_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    # data format: { "id": { "name": "...", "file": "..." }, ... }
-                    new_map = {}
-                    for cid, profile in data.items():
-                        name = profile.get("name")
-                        filename = profile.get("file")
-                        if name and filename:
-                            new_map[name] = filename
+                new_map = {}
+                for _, profile in self.roster_data.items():
+                    if not isinstance(profile, dict):
+                        continue
+                    name = profile.get("name")
+                    filename = profile.get("file")
+                    if name and filename:
+                        new_map[str(name)] = str(filename)
+                if new_map:
                     return new_map
             except Exception as e:
                 print(f"Failed to load dynamic roster: {e}")
@@ -108,7 +144,8 @@ class PromptManager:
 
     def _skill_character_roster(self, context: dict) -> str:
         active_chars = context.get("active_chars", [])
-        if "陆陈安然" not in active_chars: active_chars.append("陆陈安然")
+        player_name = self.get_player_name()
+        if player_name not in active_chars: active_chars.append(player_name)
         profiles = []
         for char in active_chars:
             if char in self.char_file_map:
@@ -119,7 +156,8 @@ class PromptManager:
 
     def _skill_relationship_matrix(self, context: dict) -> str:
         active_chars = context.get("active_chars", [])
-        if "陆陈安然" not in active_chars: active_chars.append("陆陈安然")
+        player_name = self.get_player_name()
+        if player_name not in active_chars: active_chars.append(player_name)
         
         rel_csv_path = os.path.join(self.chars_dir, "relationship.csv")
         if not os.path.exists(rel_csv_path): return ""
@@ -147,6 +185,9 @@ class PromptManager:
         
     def get_main_system_prompt(self, context: dict) -> str:
         base_prompt = self._read_md("main_system.md")
+        player_name = context.get("player_name", self.get_player_name())
+        if player_name and player_name != "陆陈安然":
+            base_prompt = base_prompt.replace("陆陈安然", player_name)
         active_skills = []
         for skill_name, skill_func in self.skills.items():
             skill_text = skill_func(context)
@@ -169,8 +210,13 @@ class PromptManager:
         if "[ACTIVE_SKILLS]" in base_prompt: return base_prompt.replace("[ACTIVE_SKILLS]", skills_str)
         return base_prompt + skills_str
 
-    def get_main_author_note(self) -> str:
-        return self._read_md("main_author_note.md")
+    def get_main_author_note(self, context: dict = None) -> str:
+        context = context or {}
+        text = self._read_md("main_author_note.md")
+        player_name = context.get("player_name", self.get_player_name())
+        if player_name and player_name != "陆陈安然":
+            text = text.replace("陆陈安然", player_name)
+        return text
 
     def get_all_relationships(self) -> str:
         """提取全局角色认知网络与底层偏见"""

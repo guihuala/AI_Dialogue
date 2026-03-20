@@ -38,6 +38,8 @@ export const EditorModals = ({
     parsedCsvHeaders
 }: EditorModalsProps) => {
     const [isGenerating, setIsGenerating] = useState(false);
+    const [isPublishing, setIsPublishing] = useState(false);
+    const [publishReport, setPublishReport] = useState<any | null>(null);
 
     const handleAIGenerate = async () => {
         if (!newItemModal?.archetype || isGenerating || !onGenerateSkillPrompt) return;
@@ -69,6 +71,50 @@ export const EditorModals = ({
                             </div>
 
                             <div className="space-y-10">
+                                <div className="bg-[var(--color-cyan-light)]/20 border-2 border-[var(--color-cyan-main)]/10 rounded-2xl p-4">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">
+                                            发布前校验
+                                        </span>
+                                        <button
+                                            onClick={async () => {
+                                                try {
+                                                    const res = await gameApi.validateCurrentForPublish();
+                                                    setPublishReport(res.report || null);
+                                                } catch (e: any) {
+                                                    const detail = e?.response?.data?.detail || '校验失败';
+                                                    setPublishReport({ ok: false, errors: [detail], warnings: [], stats: {} });
+                                                }
+                                            }}
+                                            className="px-3 py-1 rounded-full text-[10px] font-black bg-white border border-[var(--color-cyan-main)]/20 text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-light)] transition-all"
+                                        >
+                                            立即校验
+                                        </button>
+                                    </div>
+                                    {publishReport ? (
+                                        <div className="mt-3 space-y-2">
+                                            <div className={`text-xs font-black ${publishReport.ok ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                {publishReport.ok ? '校验通过，可发布' : '校验未通过，请先修复错误'}
+                                            </div>
+                                            <div className="text-[10px] text-slate-500 font-bold">
+                                                文件统计：MD {publishReport?.stats?.md_files || 0} / CSV {publishReport?.stats?.csv_files || 0}
+                                            </div>
+                                            {Array.isArray(publishReport.errors) && publishReport.errors.length > 0 && (
+                                                <div className="text-[11px] text-red-500 font-bold">
+                                                    错误：{publishReport.errors.join('；')}
+                                                </div>
+                                            )}
+                                            {Array.isArray(publishReport.warnings) && publishReport.warnings.length > 0 && (
+                                                <div className="text-[11px] text-amber-600 font-bold">
+                                                    警告：{publishReport.warnings.join('；')}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="mt-2 text-[10px] text-slate-400 font-bold">建议先执行一次校验再发布</div>
+                                    )}
+                                </div>
+
                                 <div>
                                     <label className="block text-[10px] font-black text-[var(--color-cyan-main)] uppercase mb-4 tracking-[0.4em] ml-2">模组别名</label>
                                     <input
@@ -114,19 +160,30 @@ export const EditorModals = ({
                                 </button>
                                 <button
                                     onClick={async () => {
+                                        setIsPublishing(true);
                                         try {
+                                            const validateRes = await gameApi.validateCurrentForPublish();
+                                            setPublishReport(validateRes.report || null);
+                                            if (!validateRes?.report?.ok) {
+                                                return;
+                                            }
                                             const res = await gameApi.publishCurrentMod(publishMetadata);
                                             if (res.status === 'success') {
                                                 setShowPublishModal(false);
                                                 setPublishMetadata({ name: '', author: '', description: '' });
+                                                setPublishReport(null);
                                                 console.log('Mod published successfully:', res.id);
                                             }
                                         } catch (e) {
                                             console.error('Failed to publish mod:', e);
+                                        } finally {
+                                            setIsPublishing(false);
                                         }
                                     }}
-                                    className="flex-[1.5] py-6 bg-[var(--color-cyan-dark)] text-white rounded-[2.5rem] font-black hover:bg-[var(--color-cyan-main)] transition-all shadow-2xl shadow-cyan-900/40 uppercase tracking-widest text-xs"
+                                    disabled={isPublishing}
+                                    className="flex-[1.5] py-6 bg-[var(--color-cyan-dark)] disabled:opacity-50 text-white rounded-[2.5rem] font-black hover:bg-[var(--color-cyan-main)] transition-all shadow-2xl shadow-cyan-900/40 uppercase tracking-widest text-xs flex items-center justify-center gap-2"
                                 >
+                                    {isPublishing ? <Loader2 size={16} className="animate-spin" /> : null}
                                     确认上线
                                 </button>
                             </div>

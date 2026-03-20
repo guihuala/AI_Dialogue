@@ -64,7 +64,7 @@ export const CharacterEditor = ({
                                         />
                                     </div>
                                     <button 
-                                        onClick={() => onUpdateItem(id, 'is_player', !char.is_player)}
+                                        onClick={() => onUpdateItem(id, 'is_player', true)}
                                         className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center transition-all ${char.is_player ? 'bg-[var(--color-yellow-main)] text-white shadow-lg' : 'bg-[var(--color-soft-border)] text-slate-400 opacity-40 hover:opacity-100'}`}
                                     >
                                         <Star size={10} className={`mr-1 ${char.is_player ? 'fill-white' : ''}`} />

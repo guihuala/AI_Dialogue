@@ -21,6 +21,11 @@ export const ScenePortraits = ({ charactersInScene }: ScenePortraitsProps) => {
           if (index === 0) positionClass = "left-[20%] -translate-x-1/2";
           else if (index === 1) positionClass = "left-1/2 -translate-x-1/2";
           else positionClass = "right-[20%] translate-x-1/2";
+        } else if (count >= 4) {
+          if (index === 0) positionClass = "left-[12%] -translate-x-1/2";
+          else if (index === 1) positionClass = "left-[37%] -translate-x-1/2";
+          else if (index === 2) positionClass = "right-[37%] translate-x-1/2";
+          else positionClass = "right-[12%] translate-x-1/2";
         }
 
         return (
@@ -30,8 +35,8 @@ export const ScenePortraits = ({ charactersInScene }: ScenePortraitsProps) => {
               alt={char.id}
               className={`max-h-[105vh] max-w-none w-auto transform transition-all duration-700 origin-bottom object-contain ${
                 char.isSpeaking || charactersInScene.length === 1
-                ? 'scale-95 drop-shadow-[0_0_30px_rgba(255,255,255,0.2)] translate-y-24 z-20 brightness-110 blur-none'
-                : 'scale-[0.85] opacity-60 translate-y-36 z-10 brightness-50 blur-[2px]'
+                ? 'scale-[0.9] translate-y-28 z-20 brightness-100 saturate-100 blur-none'
+                : 'scale-[0.85] translate-y-36 z-10 brightness-[0.55] saturate-[0.75] blur-[1px]'
               }`}
               style={{ height: 'auto' }}
             />

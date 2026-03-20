@@ -12,42 +12,61 @@ import { GlobalContextMenu } from './components/layout/GlobalContextMenu';
 import { Toast } from './components/layout/Toast';
 import { CustomCursor } from './components/layout/CustomCursor';
 import { LoadingScreen } from './components/layout/LoadingScreen';
+import { TabId, locationToTab, tabToPath } from './router/tabs';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'game' | 'workshop' | 'mods' | 'settings' | 'editor' | 'admin'>('game');
+  const [activeTab, setActiveTab] = useState<TabId>(locationToTab(window.location));
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
   const [showUI, setShowUI] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const navigateToTab = (tab: TabId, options?: { replace?: boolean }) => {
+    const path = tabToPath(tab);
+    const currentPath = window.location.pathname;
+    const currentHash = window.location.hash;
+    if (currentPath === path && !currentHash) return;
+    if (options?.replace) {
+      window.history.replaceState({}, '', path);
+    } else {
+      window.history.pushState({}, '', path);
+    }
+  };
+
+  const setActiveTabWithRoute = (tab: TabId, options?: { replace?: boolean }) => {
+    setActiveTab(tab);
+    navigateToTab(tab, options);
+  };
+
   // Close context menu on click anywhere
   useEffect(() => {
-    // Check for admin route on initial load
-    const checkAdminRoute = () => {
-      if (window.location.pathname === '/admin' || window.location.hash === '#/admin') {
-        setActiveTab('admin');
+    const syncTabFromLocation = () => {
+      const tab = locationToTab(window.location);
+      setActiveTab(tab);
+      const canonical = tabToPath(tab);
+      if (window.location.pathname !== canonical || window.location.hash) {
+        window.history.replaceState({}, '', canonical);
       }
     };
-    const handleClick = () => setContextMenu(null);
-    const handleChangeTab = (e: any) => {
-      if (e.detail) setActiveTab(e.detail);
-    };
+    syncTabFromLocation();
 
-    const handlePopState = () => {
-      checkAdminRoute();
+    const handleClick = () => setContextMenu(null);
+    const handleChangeTab = (e: Event) => {
+      const detail = (e as CustomEvent<TabId>).detail;
+      if (detail) setActiveTabWithRoute(detail);
     };
 
     window.addEventListener('click', handleClick);
     window.addEventListener('changeTab', handleChangeTab);
-    window.addEventListener('popstate', handlePopState);
-    window.addEventListener('hashchange', checkAdminRoute);
+    window.addEventListener('popstate', syncTabFromLocation);
+    window.addEventListener('hashchange', syncTabFromLocation);
 
     return () => {
       window.removeEventListener('click', handleClick);
       window.removeEventListener('changeTab', handleChangeTab);
-      window.removeEventListener('popstate', handlePopState);
-      window.removeEventListener('hashchange', checkAdminRoute);
+      window.removeEventListener('popstate', syncTabFromLocation);
+      window.removeEventListener('hashchange', syncTabFromLocation);
     };
   }, []);
 
@@ -79,7 +98,7 @@ function App() {
         <GlobalContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          setActiveTab={setActiveTab}
+          setActiveTab={setActiveTabWithRoute}
           showUI={showUI}
           setShowUI={setShowUI}
           showToastMsg={showToastMsg}
@@ -91,7 +110,7 @@ function App() {
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={setActiveTabWithRoute}
         showUI={showUI}
       />
 
@@ -107,9 +126,9 @@ function App() {
         )}
 
         <div className={`flex-1 relative flex flex-col items-stretch justify-center w-full h-full custom-scrollbar transition-all duration-500 ${activeTab === 'game' ? (showUI ? 'p-4 md:px-4 md:py-6 overflow-hidden' : 'p-0 overflow-hidden') : 'p-4 md:px-8 md:py-8 pb-20 overflow-auto'}`}>
-          {activeTab === 'game' && <GameView onTabChange={setActiveTab} />}
-          {activeTab === 'mods' && <ModManager onTabChange={setActiveTab} />}
-          {activeTab === 'workshop' && <ModManager onTabChange={setActiveTab} />}
+          {activeTab === 'game' && <GameView onTabChange={setActiveTabWithRoute} />}
+          {activeTab === 'mods' && <ModManager onTabChange={setActiveTabWithRoute} />}
+          {activeTab === 'workshop' && <ModManager onTabChange={setActiveTabWithRoute} />}
           {activeTab === 'editor' && <PromptEditor />}
           {activeTab === 'settings' && <SettingsPanel />}
           {activeTab === 'admin' && <AdminDashboard />}

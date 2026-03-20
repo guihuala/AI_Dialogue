@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Layers, Cloud, BookOpen, Trash2, Download, Play, Plus, RefreshCw, X, Check, Lock, Search, Edit3 } from 'lucide-react';
+import { Layers, Cloud, BookOpen, Trash2, Download, Play, Plus, RefreshCw, X, Check, Lock, Search, Edit3, RotateCcw, ShieldCheck } from 'lucide-react';
 import { gameApi } from '../api/gameApi';
 import { ConfirmDialog } from './common/ConfirmDialog';
 
@@ -33,6 +33,8 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
 
     // Action state
     const [actionTarget, setActionTarget] = useState<string | null>(null);
+    const [userState, setUserState] = useState<any>(null);
+    const [snapshots, setSnapshots] = useState<any[]>([]);
 
     const showToast = (msg: string) => {
         setToast(msg);
@@ -48,6 +50,19 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
             console.error(e);
         } finally {
             setLoading(false);
+        }
+    }, []);
+
+    const loadSafetyData = useCallback(async () => {
+        try {
+            const [stateRes, snapsRes] = await Promise.all([
+                gameApi.getUserState(),
+                gameApi.getSnapshots()
+            ]);
+            setUserState(stateRes?.data || null);
+            setSnapshots(snapsRes?.data || []);
+        } catch (e) {
+            console.warn('Failed to load safety data', e);
         }
     }, []);
 
@@ -68,6 +83,10 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
         else loadWorkshop();
     }, [activeTab, loadLibrary, loadWorkshop]);
 
+    useEffect(() => {
+        loadSafetyData();
+    }, [loadSafetyData]);
+
     const handleSaveCurrent = async () => {
         if (!saveName.trim()) return;
         setIsSaving(true);
@@ -77,6 +96,7 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
             setShowSaveDialog(false);
             setSaveName(''); setSaveDesc('');
             loadLibrary();
+            loadSafetyData();
         } catch (e) {
             showToast('❌ 保存失败');
         } finally {
@@ -93,10 +113,18 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
             onConfirm: async () => {
                 setActionTarget(id);
                 try {
+                    const validateRes = await gameApi.validateLibraryItem(id);
+                    if (!validateRes?.report?.ok) {
+                        const errs = (validateRes?.report?.errors || []).join('；') || '模组校验失败';
+                        showToast(`❌ ${errs}`);
+                        return;
+                    }
                     await gameApi.applyFromLibrary(id);
                     showToast(`✅ [${name}] 已应用并完成热重载`);
+                    loadSafetyData();
                 } catch (e) {
-                    showToast('❌ 应用失败');
+                    const detail = (e as any)?.response?.data?.detail || '应用失败';
+                    showToast(`❌ ${detail}`);
                 } finally {
                     setActionTarget(null);
                 }
@@ -117,6 +145,7 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                     await gameApi.deleteFromLibrary(id);
                     showToast(`🗑 已删除 [${name}]`);
                     loadLibrary();
+                    loadSafetyData();
                 } catch (e) {
                     showToast('❌ 删除失败');
                 } finally {
@@ -131,12 +160,36 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
         try {
             await gameApi.downloadWorkshopItem(id);
             showToast(`✅ [${name}] 已添加到库`);
+            loadSafetyData();
             // Optional: switch to library or just show success
         } catch (e) {
             showToast('❌ 下载失败');
         } finally {
             setActionTarget(null);
         }
+    };
+
+    const handleRollback = async (snapshotId: string) => {
+        setConfirmDialog({
+            open: true,
+            title: '回滚配置',
+            message: `将回滚到快照 ${snapshotId}，当前活动配置会被覆盖。确认继续？`,
+            confirmText: '确认回滚',
+            danger: true,
+            onConfirm: async () => {
+                setActionTarget(`rb-${snapshotId}`);
+                try {
+                    await gameApi.rollbackSnapshot(snapshotId);
+                    showToast(`✅ 已回滚到 ${snapshotId}`);
+                    loadSafetyData();
+                } catch (e) {
+                    const detail = (e as any)?.response?.data?.detail || '回滚失败';
+                    showToast(`❌ ${detail}`);
+                } finally {
+                    setActionTarget(null);
+                }
+            }
+        });
     };
 
     const filteredLibrary = useMemo(() => {
@@ -224,6 +277,47 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                     >
                         <Edit3 size={16} /> 前往编辑器进行创作
                     </button>
+                </div>
+            )}
+
+            {activeTab === 'library' && (
+                <div className="mb-6 grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <div className="bg-white border-2 border-[var(--color-cyan-main)]/10 rounded-2xl p-4">
+                        <div className="text-[11px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] flex items-center gap-2">
+                            <ShieldCheck size={14} />
+                            当前激活状态
+                        </div>
+                        <div className="mt-3 text-sm font-bold text-[var(--color-cyan-dark)]">
+                            来源：{userState?.active_source || 'default'} · 模组：{userState?.active_mod_id || 'default'}
+                        </div>
+                        <div className="text-[11px] mt-1 text-gray-400 font-black">
+                            最近更新时间：{userState?.updated_at || '-'}
+                        </div>
+                        <div className="text-[11px] mt-1 text-gray-400 font-black">
+                            最近安全快照：{userState?.last_good_snapshot_id || '-'}
+                        </div>
+                    </div>
+                    <div className="bg-white border-2 border-[var(--color-cyan-main)]/10 rounded-2xl p-4">
+                        <div className="text-[11px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] flex items-center gap-2">
+                            <RotateCcw size={14} />
+                            快照回滚
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            {snapshots.slice(0, 4).map((s: any) => (
+                                <button
+                                    key={s.id}
+                                    onClick={() => handleRollback(s.id)}
+                                    disabled={actionTarget === `rb-${s.id}`}
+                                    className="px-3 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] border border-[var(--color-cyan-main)]/20 hover:bg-white transition-all disabled:opacity-50"
+                                >
+                                    {actionTarget === `rb-${s.id}` ? '回滚中...' : `回滚 ${s.id}`}
+                                </button>
+                            ))}
+                            {snapshots.length === 0 && (
+                                <span className="text-xs text-gray-400 font-bold">暂无快照</span>
+                            )}
+                        </div>
+                    </div>
                 </div>
             )}
 

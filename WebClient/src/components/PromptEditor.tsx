@@ -239,7 +239,8 @@ export const PromptEditor = () => {
                     archetype: data.archetype,
                     tags: ["待补完"],
                     description: data.description.slice(0, 50) + "...",
-                    file: fileName
+                    file: fileName,
+                    is_player: false
                 }
             };
             await handleSave(JSON.stringify(newRoster, null, 4));
