@@ -22,13 +22,14 @@ from src.core.config import (
 )
 from src.core.mod_manifest import build_manifest, validate_manifest
 from src.core.snapshot_manager import create_snapshot, list_snapshots, load_snapshot, trim_snapshots
-from src.routers.admin_router import register_admin_routes
-from src.routers.system_router import register_system_routes
-from src.routers.debug_router import register_debug_routes
-from src.routers.content_router import register_content_routes
-from src.routers.intervention_router import register_intervention_routes
-from src.routers.game_router import register_game_routes
+from src.routers.admin_router import build_admin_router
+from src.routers.system_router import build_system_router
+from src.routers.debug_router import build_debug_router
+from src.routers.content_router import build_content_router
+from src.routers.intervention_router import build_intervention_router
+from src.routers.game_router import build_game_router
 from src.services.roster_service import get_current_roster, normalize_roster_single_player
+from src.services.admin_auth_service import AdminAuthManager
 from src.services.state_service import (
     MAX_LIBRARY_ITEMS,
     MAX_LIBRARY_TOTAL_BYTES,
@@ -71,6 +72,7 @@ SAVE_DIR = SAVES_DIR
 PREFETCH_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=10)
 
 app = FastAPI(title="Roommate Survival Game API")
+admin_auth = AdminAuthManager()
 
 @app.on_event("shutdown")
 def _shutdown_background_pool():
@@ -116,90 +118,99 @@ if not os.path.exists(WORKSHOP_DIR):
 # ==========================================
 # 模块化路由注册
 # ==========================================
-register_system_routes(
-    app,
-    get_user_id=Depends(get_user_id),
-    get_engine=get_engine,
-    clamp=_clamp,
-    temp_min=TEMP_MIN,
-    temp_max=TEMP_MAX,
-    tokens_min=TOKENS_MIN,
-    tokens_max=TOKENS_MAX,
-    prompts_dir=PROMPTS_DIR,
-    get_user_prompts_dir=get_user_prompts_dir,
+app.include_router(
+    build_system_router(
+        get_user_id=Depends(get_user_id),
+        get_engine=get_engine,
+        clamp=_clamp,
+        temp_min=TEMP_MIN,
+        temp_max=TEMP_MAX,
+        tokens_min=TOKENS_MIN,
+        tokens_max=TOKENS_MAX,
+        prompts_dir=PROMPTS_DIR,
+        get_user_prompts_dir=get_user_prompts_dir,
+    )
 )
 
-register_game_routes(
-    app,
-    get_user_id=Depends(get_user_id),
-    get_engine=get_engine,
-    get_current_roster=get_current_roster,
-    get_user_saves_dir=get_user_saves_dir,
-    clamp=_clamp,
-    temp_min=TEMP_MIN,
-    temp_max=TEMP_MAX,
-    tokens_min=TOKENS_MIN,
-    tokens_max=TOKENS_MAX,
-    prompts_dir=PROMPTS_DIR,
-    prefetch_pool=PREFETCH_POOL,
+app.include_router(
+    build_game_router(
+        get_user_id=Depends(get_user_id),
+        get_engine=get_engine,
+        get_current_roster=get_current_roster,
+        get_user_saves_dir=get_user_saves_dir,
+        clamp=_clamp,
+        temp_min=TEMP_MIN,
+        temp_max=TEMP_MAX,
+        tokens_min=TOKENS_MIN,
+        tokens_max=TOKENS_MAX,
+        prompts_dir=PROMPTS_DIR,
+        prefetch_pool=PREFETCH_POOL,
+    )
 )
 
-register_admin_routes(
-    app,
-    get_user_id=Depends(get_user_id),
-    get_engine=get_engine,
-    get_user_prompts_dir=get_user_prompts_dir,
-    get_user_events_dir=get_user_events_dir,
-    default_prompts_dir=DEFAULT_PROMPTS_DIR,
-    default_events_dir=DEFAULT_EVENTS_DIR,
-    with_user_write_lock=with_user_write_lock,
-    append_audit_log=append_audit_log,
-    normalize_roster_single_player=normalize_roster_single_player,
+app.include_router(
+    build_admin_router(
+        get_user_id=Depends(get_user_id),
+        get_engine=get_engine,
+        get_user_prompts_dir=get_user_prompts_dir,
+        get_user_events_dir=get_user_events_dir,
+        default_prompts_dir=DEFAULT_PROMPTS_DIR,
+        default_events_dir=DEFAULT_EVENTS_DIR,
+        with_user_write_lock=with_user_write_lock,
+        append_audit_log=append_audit_log,
+        normalize_roster_single_player=normalize_roster_single_player,
+        admin_auth=admin_auth,
+        require_admin=Depends(admin_auth.require_admin),
+    )
 )
 
-register_content_routes(
-    app,
-    get_user_id=Depends(get_user_id),
-    get_engine=get_engine,
-    get_user_library_dir=get_user_library_dir,
-    get_user_data_root=get_user_data_root,
-    with_user_write_lock=with_user_write_lock,
-    append_audit_log=append_audit_log,
-    package_mod=package_mod,
-    build_validation_report=lambda content, manifest=None: build_validation_report(
-        content, normalize_roster_single_player, validate_manifest, manifest
-    ),
-    validate_mod_content=lambda content, manifest=None: validate_mod_content(
-        content, normalize_roster_single_player, validate_manifest, manifest
-    ),
-    apply_mod_content_atomic=lambda user_id, content: apply_mod_content_atomic(
-        user_id, content, normalize_roster_single_player, validate_manifest
-    ),
-    read_user_state=read_user_state,
-    write_user_state=write_user_state,
-    get_storage_quota_data=get_storage_quota_data,
-    cleanup_user_storage=cleanup_user_storage,
-    list_snapshots=list_snapshots,
-    load_snapshot=load_snapshot,
-    create_snapshot=create_snapshot,
-    trim_snapshots=trim_snapshots,
-    build_manifest=build_manifest,
-    max_library_items=MAX_LIBRARY_ITEMS,
-    max_library_total_bytes=MAX_LIBRARY_TOTAL_BYTES,
-    max_snapshots_keep=MAX_SNAPSHOTS_KEEP,
-    workshop_dir=WORKSHOP_DIR,
+app.include_router(
+    build_content_router(
+        get_user_id=Depends(get_user_id),
+        get_engine=get_engine,
+        get_user_library_dir=get_user_library_dir,
+        get_user_data_root=get_user_data_root,
+        with_user_write_lock=with_user_write_lock,
+        append_audit_log=append_audit_log,
+        package_mod=package_mod,
+        build_validation_report=lambda content, manifest=None: build_validation_report(
+            content, normalize_roster_single_player, validate_manifest, manifest
+        ),
+        validate_mod_content=lambda content, manifest=None: validate_mod_content(
+            content, normalize_roster_single_player, validate_manifest, manifest
+        ),
+        apply_mod_content_atomic=lambda user_id, content: apply_mod_content_atomic(
+            user_id, content, normalize_roster_single_player, validate_manifest
+        ),
+        read_user_state=read_user_state,
+        write_user_state=write_user_state,
+        get_storage_quota_data=get_storage_quota_data,
+        cleanup_user_storage=cleanup_user_storage,
+        list_snapshots=list_snapshots,
+        load_snapshot=load_snapshot,
+        create_snapshot=create_snapshot,
+        trim_snapshots=trim_snapshots,
+        build_manifest=build_manifest,
+        max_library_items=MAX_LIBRARY_ITEMS,
+        max_library_total_bytes=MAX_LIBRARY_TOTAL_BYTES,
+        max_snapshots_keep=MAX_SNAPSHOTS_KEEP,
+        workshop_dir=WORKSHOP_DIR,
+        require_admin=Depends(admin_auth.require_admin),
+    )
 )
 
-register_intervention_routes(
-    app,
-    get_user_id=Depends(get_user_id),
-    get_engine=get_engine,
+app.include_router(
+    build_intervention_router(
+        get_user_id=Depends(get_user_id),
+        get_engine=get_engine,
+    )
 )
 
-register_debug_routes(
-    app,
-    get_user_id=Depends(get_user_id),
-    get_engine=get_engine,
+app.include_router(
+    build_debug_router(
+        get_user_id=Depends(get_user_id),
+        get_engine=get_engine,
+    )
 )
 
 if __name__ == "__main__":

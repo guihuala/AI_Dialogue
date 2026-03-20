@@ -11,6 +11,10 @@ apiClient.interceptors.request.use((config) => {
   if (visitorId) {
     config.headers['X-Visitor-Id'] = visitorId;
   }
+  const adminToken = localStorage.getItem('admin_token');
+  if (adminToken) {
+    config.headers['X-Admin-Token'] = adminToken;
+  }
   return config;
 });
 
@@ -54,6 +58,21 @@ export const gameApi = {
   },
 
   // Admin/Editor Management
+  adminLogin: async (password: string) => {
+    const res = await apiClient.post(`/admin/login`, { password });
+    return res.data;
+  },
+
+  getAdminSession: async () => {
+    const res = await apiClient.get(`/admin/session`);
+    return res.data;
+  },
+
+  adminLogout: async () => {
+    const res = await apiClient.post(`/admin/logout`);
+    return res.data;
+  },
+
   getAdminFiles: async () => {
     const res = await apiClient.get(`/admin/files`);
     return res.data;

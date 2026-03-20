@@ -3,7 +3,9 @@
 # ==============================================================================
 # Python 编译文件和缓存
 Server/__pycache__/
+Server/**/__pycache__/
 Server/*.py[cod]
+Server/**/*.py[cod]
 Server/*$py.class
 
 # 虚拟环境 (根据你的命名习惯)
@@ -13,14 +15,21 @@ Server/env/
 
 # 环境变量与密钥 (⚠️ 非常重要，防止 API Key 泄露)
 Server/.env
+Server/.env.*
+!Server/.env.example
 
 # 运行时的数据库与存档数据
 # 这些数据随游戏运行频繁变化，且体积可能很大，不应提交到仓库
 Server/data/chroma_db/
+Server/data/saves/*
+Server/data/users/*
 Server/data/*.json
+Server/data/workshop/*.json
 
 # 仅保留 data 目录结构，但不提交内容（可选，如果你希望保留目录）
 !Server/data/.gitkeep
+!Server/data/users/.gitkeep
+!Server/data/saves/.gitkeep
 
 # VS Code / IDE 配置 (Python侧)
 Server/.vscode/
@@ -31,6 +40,12 @@ Server/.idea/
 # 🎮 Unity Client (Frontend)
 # 基于你上传的文件修改，添加了 'Client/' 前缀以匹配新的目录结构
 # ==============================================================================
+
+# WebClient 构建产物与依赖
+WebClient/dist/
+WebClient/node_modules/
+WebClient/*.tsbuildinfo
+WebClient/.vite/
 
 # 核心库文件夹 (由 Unity 自动生成)
 Client/[Ll]ibrary/

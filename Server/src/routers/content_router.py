@@ -4,7 +4,7 @@ import json
 import os
 import shutil
 
-from fastapi import HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 
@@ -31,8 +31,7 @@ class WorkshopUpdateReq(BaseModel):
     description: Optional[str] = None
 
 
-def register_content_routes(
-    app,
+def build_content_router(
     *,
     get_user_id,
     get_engine: Callable[[str], Any],
@@ -57,8 +56,11 @@ def register_content_routes(
     max_library_total_bytes: int,
     max_snapshots_keep: int,
     workshop_dir: str,
+    require_admin=None,
 ):
-    @app.post("/api/library/save_current")
+    router = APIRouter()
+
+    @router.post("/api/library/save_current")
     def save_to_library(req: LibrarySaveReq, user_id: str = get_user_id):
         """将当前活动配置另存为库中的一个模组包"""
         try:
@@ -102,7 +104,7 @@ def register_content_routes(
             append_audit_log(user_id, "save_to_library", "error", req.name, {"error": str(e)})
             raise HTTPException(status_code=500, detail=str(e))
 
-    @app.get("/api/library/list")
+    @router.get("/api/library/list")
     def list_library(user_id: str = get_user_id):
         """列出当前用户库中所有的模组包"""
         lib_dir = get_user_library_dir(user_id)
@@ -127,7 +129,7 @@ def register_content_routes(
                         pass
         return {"status": "success", "data": sorted(items, key=lambda x: x.get("timestamp", ""), reverse=True)}
 
-    @app.post("/api/library/apply/{item_id}")
+    @router.post("/api/library/apply/{item_id}")
     def apply_from_library(item_id: str, user_id: str = get_user_id):
         """从个人库中选择一个模组包并应用到当前活动环境"""
         lib_dir = get_user_library_dir(user_id)
@@ -175,7 +177,7 @@ def register_content_routes(
             append_audit_log(user_id, "apply_library_mod", "error", item_id, {"error": str(e)})
             raise HTTPException(status_code=500, detail=str(e))
 
-    @app.post("/api/library/validate/{item_id}")
+    @router.post("/api/library/validate/{item_id}")
     def validate_library_item(item_id: str, user_id: str = get_user_id):
         lib_dir = get_user_library_dir(user_id)
         file_path = os.path.join(lib_dir, f"{item_id}.json")
@@ -188,7 +190,7 @@ def register_content_routes(
         report = build_validation_report(content, manifest if isinstance(manifest, dict) else None)
         return {"status": "success" if report.get("ok") else "error", "report": report}
 
-    @app.delete("/api/library/{item_id}")
+    @router.delete("/api/library/{item_id}")
     def delete_from_library(item_id: str, user_id: str = get_user_id):
         lib_dir = get_user_library_dir(user_id)
         file_path = os.path.join(lib_dir, f"{item_id}.json")
@@ -198,16 +200,16 @@ def register_content_routes(
         append_audit_log(user_id, "delete_library_mod", "ok", item_id, {})
         return {"status": "success"}
 
-    @app.get("/api/user/state")
+    @router.get("/api/user/state")
     def get_user_state(user_id: str = get_user_id):
         return {"status": "success", "data": read_user_state(user_id)}
 
-    @app.get("/api/storage/quota")
+    @router.get("/api/storage/quota")
     def get_storage_quota(user_id: str = get_user_id):
         return {"status": "success", "data": get_storage_quota_data(user_id)}
 
-    @app.post("/api/storage/cleanup")
-    def cleanup_storage(req: StorageCleanupReq, user_id: str = get_user_id):
+    @router.post("/api/storage/cleanup")
+    def cleanup_storage(req: StorageCleanupReq, admin_session: Dict[str, Any] = require_admin, user_id: str = get_user_id):
         keep_lib = max(1, min(int(req.keep_recent_library), max_library_items))
         keep_snap = max(1, min(int(req.keep_recent_snapshots), max_snapshots_keep))
         try:
@@ -233,7 +235,7 @@ def register_content_routes(
             append_audit_log(user_id, "cleanup_storage", "error", str(e), {})
             raise HTTPException(status_code=500, detail=str(e))
 
-    @app.get("/api/user/audit")
+    @router.get("/api/user/audit")
     def get_user_audit(limit: int = 30, user_id: str = get_user_id):
         user_root = get_user_data_root(user_id)
         log_path = os.path.join(user_root, "audit.log")
@@ -256,11 +258,11 @@ def register_content_routes(
         except Exception as e:
             return {"status": "error", "message": str(e), "data": []}
 
-    @app.get("/api/user/snapshots")
+    @router.get("/api/user/snapshots")
     def get_user_snapshots(user_id: str = get_user_id):
         return {"status": "success", "data": list_snapshots(user_id)}
 
-    @app.post("/api/user/rollback/{snapshot_id}")
+    @router.post("/api/user/rollback/{snapshot_id}")
     def rollback_user_snapshot(snapshot_id: str, user_id: str = get_user_id):
         try:
             with with_user_write_lock(user_id):
@@ -289,14 +291,14 @@ def register_content_routes(
             append_audit_log(user_id, "rollback_snapshot", "error", snapshot_id, {"error": "not found"})
             raise HTTPException(status_code=404, detail="Snapshot not found")
 
-    @app.post("/api/workshop/validate_current")
+    @router.post("/api/workshop/validate_current")
     def validate_current_mod_for_publish(user_id: str = get_user_id):
         """发布前校验当前 active 内容，返回错误/警告清单。"""
         content = package_mod(user_id)
         report = build_validation_report(content, None)
         return {"status": "success" if report.get("ok") else "error", "report": report}
 
-    @app.post("/api/workshop/publish_current")
+    @router.post("/api/workshop/publish_current")
     def publish_current_mod(req: WorkshopPublishReq, user_id: str = get_user_id):
         """将该玩家当前的活动模组打包并在工坊发布"""
         print(f"📦 [Workshop] User {user_id} publishing mod: {req.name}")
@@ -339,7 +341,7 @@ def register_content_routes(
             append_audit_log(user_id, "publish_workshop_mod", "error", req.name, {"error": str(e.detail)})
             raise
 
-    @app.get("/api/workshop/list")
+    @router.get("/api/workshop/list")
     def get_workshop_list():
         """列出工坊中所有已发布的模组"""
         items = []
@@ -395,21 +397,21 @@ def register_content_routes(
         except Exception:
             pass
 
-    @app.post("/api/workshop/download/{item_id}")
+    @router.post("/api/workshop/download/{item_id}")
     def download_workshop_mod(item_id: str, user_id: str = get_user_id):
         """将工坊模组下载到个人模组库"""
         _download_workshop_mod(item_id, user_id)
         append_audit_log(user_id, "download_workshop_mod", "ok", item_id, {})
         return {"status": "success", "message": "模组已成功添加到您的收藏库"}
 
-    @app.post("/api/workshop/apply/{item_id}")
+    @router.post("/api/workshop/apply/{item_id}")
     def apply_workshop_mod(item_id: str, user_id: str = get_user_id):
         """从工坊直接应用 (内部包含下载到库的步骤)"""
         _download_workshop_mod(item_id, user_id)
         return apply_from_library(item_id, user_id)
 
-    @app.delete("/api/workshop/{item_id}")
-    def delete_workshop_item(item_id: str):
+    @router.delete("/api/workshop/{item_id}")
+    def delete_workshop_item(item_id: str, admin_session: Dict[str, Any] = require_admin):
         """从工坊仓库彻底删除指定的模组包文件"""
         file_path = os.path.join(workshop_dir, f"{item_id}.json")
         if os.path.exists(file_path):
@@ -420,8 +422,8 @@ def register_content_routes(
                 raise HTTPException(status_code=500, detail=str(e))
         raise HTTPException(status_code=404, detail="Not found")
 
-    @app.patch("/api/workshop/{item_id}")
-    def update_workshop_item(item_id: str, req: WorkshopUpdateReq):
+    @router.patch("/api/workshop/{item_id}")
+    def update_workshop_item(item_id: str, req: WorkshopUpdateReq, admin_session: Dict[str, Any] = require_admin):
         """更新工坊条目的基础元数据"""
         file_path = os.path.join(workshop_dir, f"{item_id}.json")
         if not os.path.exists(file_path):
@@ -443,3 +445,4 @@ def register_content_routes(
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
+    return router

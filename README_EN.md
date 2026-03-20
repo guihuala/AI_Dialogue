@@ -39,12 +39,13 @@ AI_Dialogue/
    cd Server
    pip install -r requirements.txt
    ```
-2. Configure the `.env` file with your API KEY:
+2. Create a local `Server/.env` from `Server/.env.example`, then fill in your API key and admin password:
    ```env
-   OPENAI_API_KEY=your_key_here
-   OPENAI_BASE_URL=https://api.yourprovider.com/v1
-   MODEL_NAME=gpt-4o-mini
+   DEEPSEEK_API_KEY=your_api_key_here
+   ADMIN_PASSWORD=change_me_to_a_strong_password
+   ADMIN_SESSION_TTL_SECONDS=43200
    ```
+   `Server/.env` is ignored by `.gitignore` and should not be committed.
 3. Start the backend service:
    ```bash
    python src/app.py
@@ -62,6 +63,11 @@ AI_Dialogue/
    npm run dev
    ```
    *Access the local port shown in the console via your browser by default.*
+
+### Admin Panel
+- The admin entry is `http://localhost:5173/admin`
+- Admin login is now verified by the backend using `ADMIN_PASSWORD`
+- The backend issues a short-lived admin token; tokens expire after a server restart in the current design
 
 ## Tech Stack
 - **Frontend**: React 18, Vite, Tailwind CSS, Lucide React, Framer Motion

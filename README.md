@@ -39,12 +39,13 @@ AI_Dialogue/
    cd Server
    pip install -r requirements.txt
    ```
-2. 配置 `.env` 文件，填入你的APIKEY：
+2. 以 `Server/.env.example` 为模板创建本地 `Server/.env`，填入你的密钥与后台口令：
    ```env
-   OPENAI_API_KEY=your_key_here
-   OPENAI_BASE_URL=https://api.yourprovider.com/v1
-   MODEL_NAME=gpt-4o-mini
+   DEEPSEEK_API_KEY=your_api_key_here
+   ADMIN_PASSWORD=change_me_to_a_strong_password
+   ADMIN_SESSION_TTL_SECONDS=43200
    ```
+   `Server/.env` 已被 `.gitignore` 忽略，不应提交到仓库。
 3. 启动后端服务：
    ```bash
    python src/app.py
@@ -62,6 +63,11 @@ AI_Dialogue/
    npm run dev
    ```
    *默认通过浏览器访问控制台中显示的本地端口*
+
+### 后台说明
+- 后台入口默认是 `http://localhost:5173/admin`
+- 后台登录现在由后端校验 `ADMIN_PASSWORD`，不再使用前端硬编码口令
+- 管理员会话会签发短期 token，服务重启后会失效，属于当前设计的正常行为
 
 ## 技术栈
 - **Frontend**: React 18, Vite, Tailwind CSS, Lucide React, Framer Motion

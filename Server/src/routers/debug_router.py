@@ -1,20 +1,23 @@
 from typing import Any, Callable
 
+from fastapi import APIRouter
 
-def register_debug_routes(
-    app,
+
+def build_debug_router(
     *,
     get_user_id,
     get_engine: Callable[[str], Any],
 ):
-    @app.get("/api/debug/chat_history")
+    router = APIRouter()
+
+    @router.get("/api/debug/chat_history")
     def get_chat_history(user_id: str = get_user_id):
         engine = get_engine(user_id)
         if not engine or not hasattr(engine, "mm"):
             return {"status": "error", "message": "Memory module not ready"}
         return {"status": "success", "history": engine.mm.game_history}
 
-    @app.get("/api/debug/state")
+    @router.get("/api/debug/state")
     def get_debug_state(user_id: str = get_user_id):
         engine = get_engine(user_id)
         if not engine:
@@ -33,7 +36,7 @@ def register_debug_routes(
             },
         }
 
-    @app.post("/api/debug/clear_cache")
+    @router.post("/api/debug/clear_cache")
     def clear_engine_cache(user_id: str = get_user_id):
         engine = get_engine(user_id)
         if engine:
@@ -42,3 +45,4 @@ def register_debug_routes(
             return {"status": "success", "message": "Cache cleared for this user"}
         return {"status": "error", "message": "Engine not found"}
 
+    return router

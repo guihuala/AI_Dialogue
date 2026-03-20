@@ -17,6 +17,10 @@ class GenerateSkillPromptReq(BaseModel):
     concept: str
 
 
+class AdminLoginReq(BaseModel):
+    password: str
+
+
 def build_admin_router(
     *,
     get_user_id,
@@ -28,11 +32,28 @@ def build_admin_router(
     with_user_write_lock: Callable[[str], Any],
     append_audit_log: Callable[[str, str, str, str, Dict[str, Any]], None],
     normalize_roster_single_player: Callable[[Dict[str, Any]], Dict[str, Any]],
+    admin_auth,
+    require_admin,
 ):
     router = APIRouter()
 
+    @router.post("/api/admin/login")
+    def admin_login(req: AdminLoginReq):
+        session = admin_auth.login(req.password)
+        return {"status": "success", "data": session}
+
+    @router.get("/api/admin/session")
+    def admin_session(admin_session: Dict[str, Any] = require_admin):
+        return {"status": "success", "data": admin_session}
+
+    @router.post("/api/admin/logout")
+    def admin_logout(admin_session: Dict[str, Any] = require_admin):
+        token = str(admin_session.get("token", "")).strip()
+        admin_auth.revoke(token)
+        return {"status": "success"}
+
     @router.get("/api/admin/files")
-    def get_admin_files(user_id: str = get_user_id):
+    def get_admin_files(admin_session: Dict[str, Any] = require_admin, user_id: str = get_user_id):
         """获取所有剧情配置文件列表"""
         user_prompts_dir = get_user_prompts_dir(user_id)
         user_events_dir = get_user_events_dir(user_id)
@@ -60,7 +81,7 @@ def build_admin_router(
         return {"status": "success", "md": sorted(md_files), "csv": sorted(csv_files)}
 
     @router.get("/api/admin/file")
-    def read_admin_file(type: str, name: str, user_id: str = get_user_id):
+    def read_admin_file(type: str, name: str, admin_session: Dict[str, Any] = require_admin, user_id: str = get_user_id):
         """读取单个文件内容"""
         base_dir = get_user_prompts_dir(user_id) if type == "md" else get_user_events_dir(user_id)
         file_path = os.path.join(base_dir, name)
@@ -75,7 +96,7 @@ def build_admin_router(
             return {"status": "success", "content": f.read()}
 
     @router.post("/api/admin/file")
-    def save_admin_file(req: AdminFileSaveReq, user_id: str = get_user_id):
+    def save_admin_file(req: AdminFileSaveReq, admin_session: Dict[str, Any] = require_admin, user_id: str = get_user_id):
         """保存单个文件内容 (保存到用户私有目录)"""
         base_dir = get_user_prompts_dir(user_id) if req.type == "md" else get_user_events_dir(user_id)
         file_path = os.path.join(base_dir, req.name)
@@ -105,7 +126,7 @@ def build_admin_router(
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.post("/api/admin/upload_portrait")
-    async def upload_portrait(file: UploadFile = File(...)):
+    async def upload_portrait(file: UploadFile = File(...), admin_session: Dict[str, Any] = require_admin):
         """上传角色立绘图片"""
         portraits_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -127,7 +148,7 @@ def build_admin_router(
         return {"status": "success", "url": f"/assets/portraits/{file.filename}"}
 
     @router.post("/api/admin/generate_skill_prompt")
-    def generate_skill_prompt(req: GenerateSkillPromptReq, user_id: str = get_user_id):
+    def generate_skill_prompt(req: GenerateSkillPromptReq, admin_session: Dict[str, Any] = require_admin, user_id: str = get_user_id):
         """调用 AI 一键生成 Skill 提示词"""
         engine = get_engine(user_id)
         if not engine or not engine.llm:

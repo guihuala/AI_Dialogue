@@ -1,6 +1,7 @@
 from typing import Any, Callable
 import uuid
 
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 
@@ -26,13 +27,14 @@ class StatsOverrideReq(BaseModel):
     reputation: int
 
 
-def register_intervention_routes(
-    app,
+def build_intervention_router(
     *,
     get_user_id,
     get_engine: Callable[[str], Any],
 ):
-    @app.get("/api/intervention/memory")
+    router = APIRouter()
+
+    @router.get("/api/intervention/memory")
     def get_intervention_memories(user_id: str = get_user_id):
         """提取底层向量数据库中的所有记忆节点"""
         engine = get_engine(user_id)
@@ -50,7 +52,7 @@ def register_intervention_routes(
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    @app.post("/api/intervention/memory")
+    @router.post("/api/intervention/memory")
     def add_memory(req: MemoryAddReq, user_id: str = get_user_id):
         """强制注入记忆片段"""
         engine = get_engine(user_id)
@@ -60,14 +62,14 @@ def register_intervention_routes(
         engine.mm.vector_store.add_memories([mem])
         return {"status": "success", "message": "思想钢印注入成功"}
 
-    @app.delete("/api/intervention/memory/{mem_id}")
+    @router.delete("/api/intervention/memory/{mem_id}")
     def delete_intervention_memory(mem_id: str, user_id: str = get_user_id):
         """抹除指定记忆节点"""
         engine = get_engine(user_id)
         engine.mm.vector_store.collection.delete(ids=[mem_id])
         return {"status": "success"}
 
-    @app.get("/api/intervention/tools")
+    @router.get("/api/intervention/tools")
     def get_tools(user_id: str = get_user_id):
         """获取所有可用的底层挂载工具"""
         engine = get_engine(user_id)
@@ -80,7 +82,7 @@ def register_intervention_routes(
         ]
         return {"status": "success", "data": methods}
 
-    @app.post("/api/intervention/tool")
+    @router.post("/api/intervention/tool")
     def trigger_tool(req: ToolTriggerReq, user_id: str = get_user_id):
         """强制越权调用系统工具"""
         engine = get_engine(user_id)
@@ -96,7 +98,7 @@ def register_intervention_routes(
                 engine.latest_game_state_cache["response"]["gpa"] += res["gpa_delta"]
         return {"status": "success", "result": res}
 
-    @app.post("/api/intervention/affinity")
+    @router.post("/api/intervention/affinity")
     def override_affinity(req: OverrideAffinityReq, user_id: str = get_user_id):
         """强制篡改当前会话的好感度缓存"""
         engine = get_engine(user_id)
@@ -104,7 +106,7 @@ def register_intervention_routes(
             engine.latest_game_state_cache["response"]["affinity"][req.char_name] = req.value
         return {"status": "success"}
 
-    @app.post("/api/intervention/stats")
+    @router.post("/api/intervention/stats")
     def override_stats(req: StatsOverrideReq, user_id: str = get_user_id):
         """强制篡改全局状态缓存中的主角数值"""
         engine = get_engine(user_id)
@@ -117,3 +119,4 @@ def register_intervention_routes(
             return {"status": "success", "message": "数值已强制同步"}
         return {"status": "error", "message": "当前没有运行中的游戏实例"}
 
+    return router

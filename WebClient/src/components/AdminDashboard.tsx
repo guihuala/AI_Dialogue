@@ -6,6 +6,7 @@ import { ConfirmDialog } from './common/ConfirmDialog';
 export const AdminDashboard = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [password, setPassword] = useState('');
+    const [authError, setAuthError] = useState<string | null>(null);
     const [items, setItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [cleaning, setCleaning] = useState(false);
@@ -23,9 +24,20 @@ export const AdminDashboard = () => {
         onConfirm?: () => Promise<void> | void;
     }>({ open: false, title: '', message: '' });
 
-    // Simple hardcoded admin password for demonstration
-    // In a real app, this should be verified against a backend
-    const ADMIN_PASSWORD = 'mokukeki';
+    useEffect(() => {
+        const bootstrapAdminSession = async () => {
+            const token = localStorage.getItem('admin_token');
+            if (!token) return;
+            try {
+                await gameApi.getAdminSession();
+                setIsAuthenticated(true);
+            } catch {
+                localStorage.removeItem('admin_token');
+                setIsAuthenticated(false);
+            }
+        };
+        bootstrapAdminSession();
+    }, []);
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -46,19 +58,35 @@ export const AdminDashboard = () => {
             setUserState(stateRes.data || null);
             setQuota(quotaRes.data || null);
             setAuditRows(auditRes.data || []);
+            setAuthError(null);
         } catch (e) {
             console.error(e);
+            const status = (e as any)?.response?.status;
+            if (status === 401) {
+                localStorage.removeItem('admin_token');
+                setIsAuthenticated(false);
+                setAuthError('管理员会话已失效，请重新验证。');
+            }
         } finally {
             setLoading(false);
         }
     };
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (password === ADMIN_PASSWORD) {
+        setAuthError(null);
+        try {
+            const res = await gameApi.adminLogin(password);
+            const token = res?.data?.token;
+            if (!token) {
+                throw new Error('missing token');
+            }
+            localStorage.setItem('admin_token', token);
             setIsAuthenticated(true);
-        } else {
-            alert('验证失败：口令不正确');
+            setPassword('');
+        } catch (e) {
+            const detail = (e as any)?.response?.data?.detail || '验证失败：口令不正确';
+            setAuthError(detail);
         }
     };
 
@@ -156,6 +184,11 @@ export const AdminDashboard = () => {
                         >
                             执行身份注入
                         </button>
+                        {authError && (
+                            <div className="text-center text-sm font-bold text-rose-500">
+                                {authError}
+                            </div>
+                        )}
                     </form>
 
                     <p className="mt-8 text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest">
@@ -208,7 +241,13 @@ export const AdminDashboard = () => {
                         <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
                     </button>
                     <button
-                        onClick={() => setIsAuthenticated(false)}
+                        onClick={async () => {
+                            try {
+                                await gameApi.adminLogout();
+                            } catch {}
+                            localStorage.removeItem('admin_token');
+                            setIsAuthenticated(false);
+                        }}
                         className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"
                         title="退出管理模式"
                     >
