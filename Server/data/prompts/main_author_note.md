@@ -10,7 +10,7 @@
   "narrator_transition": "简短过场旁白",
   "current_scene": "宿舍/教室/食堂/图书馆/商业街/办公室/未知 之一",
   "dialogue_sequence": [
-    {"speaker": "角色名", "content": "台词内容", "mood": "情绪标签"}
+    {"speaker": "角色名", "content": "台词内容"}
   ],
   "next_options": ["选项1", "选项2", "选项3"],
   "effects": ["san:-2", "affinity:林飒:+1"],

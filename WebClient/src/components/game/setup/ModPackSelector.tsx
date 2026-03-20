@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Layers, Cloud, BookOpen, Save, Trash2, Download, Play, Plus, RefreshCw, X, Check, Lock } from 'lucide-react';
+import { Layers, Cloud, BookOpen, Save, Trash2, Download, Plus, RefreshCw, X, Check, Lock } from 'lucide-react';
 import { gameApi } from '../../../api/gameApi';
 
 interface ModPackSelectorProps {
@@ -24,7 +24,7 @@ export const ModPackSelector = ({ selectedMod, setSelectedMod, onTabChange }: Mo
 
   // Action feedback states
   const [actionTarget, setActionTarget] = useState<string | null>(null);
-  const [actionType, setActionType] = useState<'apply' | 'delete' | 'download' | null>(null);
+  const [actionType, setActionType] = useState<'delete' | 'download' | null>(null);
 
   const loadLibrary = useCallback(async () => {
     setIsLoading(true);
@@ -64,16 +64,6 @@ export const ModPackSelector = ({ selectedMod, setSelectedMod, onTabChange }: Mo
     }
   };
 
-  const handleApply = async (id: string) => {
-    setActionTarget(id); setActionType('apply');
-    try {
-      await gameApi.applyFromLibrary(id);
-      setSelectedMod(id);
-    } finally {
-      setActionTarget(null); setActionType(null);
-    }
-  };
-
   const handleDelete = async (id: string) => {
     setActionTarget(id); setActionType('delete');
     try {
@@ -88,9 +78,13 @@ export const ModPackSelector = ({ selectedMod, setSelectedMod, onTabChange }: Mo
   const handleDownload = async (id: string) => {
     setActionTarget(id); setActionType('download');
     try {
-      await gameApi.downloadWorkshopItem(id);
+      const res = await gameApi.downloadWorkshopItem(id);
+      if (res?.library_id) {
+        setSelectedMod(res.library_id);
+      }
       // Switch to library tab after download
       setActiveTab('library');
+      loadLibrary();
     } finally {
       setActionTarget(null); setActionType(null);
     }
@@ -108,7 +102,7 @@ export const ModPackSelector = ({ selectedMod, setSelectedMod, onTabChange }: Mo
         </h3>
         <p className="text-[9px] text-amber-600/80 font-bold mb-3 leading-tight flex items-start gap-1">
           <Lock size={10} className="mt-0.5 shrink-0" />
-          <span>一旦开启对局并产生存档，该对局所使用的模组将被锁定，无法中途更换。</span>
+          <span>这里只是为新对局选择起始模组。真正生效发生在点击“开始游戏”时，局外不会立即替换当前内容。</span>
         </p>
         {/* Tabs */}
         <div className="flex rounded-xl border border-[var(--color-cyan-main)]/20 overflow-hidden text-[10px] font-black uppercase tracking-widest">
@@ -164,15 +158,18 @@ export const ModPackSelector = ({ selectedMod, setSelectedMod, onTabChange }: Mo
                 <h4 className="font-black text-xs truncate">{mod.name}</h4>
                 <p className="text-[9px] mt-0.5 opacity-60 font-bold">{mod.timestamp}</p>
                 {mod.description && <p className="text-[9px] mt-1 opacity-70 line-clamp-2">{mod.description}</p>}
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <span className="px-2 py-0.5 rounded-full text-[8px] font-black tracking-widest bg-[var(--color-cyan-main)]/10 text-[var(--color-cyan-main)]">
+                    开局可选
+                  </span>
+                  {mod.visibility === 'public' && (
+                    <span className="px-2 py-0.5 rounded-full text-[8px] font-black tracking-widest bg-emerald-50 text-emerald-600">
+                      已公开
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex flex-col gap-1 shrink-0">
-                <button
-                  onClick={() => handleApply(mod.id)}
-                  title="应用此模组"
-                  className={`p-1.5 rounded-lg transition-all ${selectedMod === mod.id ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-[var(--color-cyan-main)]/10 hover:bg-[var(--color-cyan-main)]/20 text-[var(--color-cyan-main)]'}`}
-                >
-                  {isActing(mod.id, 'apply') ? <RefreshCw size={11} className="animate-spin" /> : <Play size={11} />}
-                </button>
                 <button
                   onClick={() => handleDelete(mod.id)}
                   title="删除"

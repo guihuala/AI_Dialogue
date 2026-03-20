@@ -36,6 +36,10 @@ class PromptManager:
         self.char_file_map = self._load_char_file_map()
         self.player_name = self._resolve_player_name()
         self.player_file = self.char_file_map.get(self.player_name, "")
+        self._compact_author_note_cache = None
+
+    def _nonempty_blocks(self, blocks):
+        return [str(block).strip() for block in blocks if str(block).strip()]
 
     def _load_roster_data(self) -> dict:
         mapping_file = os.path.join(self.chars_dir, "roster.json")
@@ -251,7 +255,10 @@ class PromptManager:
         event_desc = context.get("event_description", "")
         event_name = context.get("event_name", "")
         if any(keyword in event_desc + event_name for keyword in ["课", "教室", "期末", "老师", "班长", "作业", "发表", "图书馆"]):
-            world_text += "\n" + self._read_md("world/academic_npcs.md")
+            if str(context.get("prompt_budget", "full")).lower() == "compact":
+                world_text += "\n" + self._get_compact_academic_npcs()
+            else:
+                world_text += "\n" + self._read_md("world/academic_npcs.md")
             world_text += "\n⚠️【指令】：当前处于教学区，请在对话中自然引入上述老师或同学的互动，维持他们的性格设定；如果配角是第一次在本事件出场，务必顺手交代她/他是谁。\n"
         return world_text
 
@@ -259,6 +266,23 @@ class PromptManager:
         active_chars = self._get_active_chars(context)
         player_name = context.get("player_name", self.get_player_name())
         if player_name not in active_chars: active_chars.append(player_name)
+        if str(context.get("prompt_budget", "full")).lower() == "compact":
+            compact_profiles = []
+            for _, profile in self.roster_data.items():
+                if not isinstance(profile, dict):
+                    continue
+                name = str(profile.get("name", "")).strip()
+                if not name or name not in active_chars:
+                    continue
+                archetype = str(profile.get("archetype", "")).strip()
+                description = str(profile.get("description", "")).strip()
+                tags = [str(tag).strip() for tag in profile.get("tags", []) if str(tag).strip()]
+                compact_profiles.append(
+                    f"- {name}：{archetype or '角色'}。{description[:48]}{'…' if len(description) > 48 else ''}"
+                    + (f" 关键词：{'、'.join(tags[:3])}" if tags else "")
+                )
+            if compact_profiles:
+                return "👥【在场角色速览】\n" + "\n".join(compact_profiles)
         profiles = []
         for char in active_chars:
             if char in self.char_file_map:
@@ -267,10 +291,21 @@ class PromptManager:
         if profiles: return "👥【在场角色核心级设定与语料库】（请严格遵循以下设定描写细节与语气）：\n" + "\n---\n".join(profiles)
         return ""
 
+    def _get_compact_academic_npcs(self) -> str:
+        return (
+            "【教学区常见配角速览】\n"
+            "- 陈砚秋：编导专业老师，毒舌但负责，抓作业细节很狠。\n"
+            "- 张桂芳：宿管阿姨，查寝严格，但关键时刻会护学生。\n"
+            "- 林一航：大四学长，影视工作室主理人，技术强、话少。\n"
+            "- 苏念：同班卷王，成绩和比赛都很强，小组作业能带飞全场。\n"
+            "- 这些配角若首次出场，要顺手让玩家知道“她/他是谁”。"
+        )
+
     def _skill_relationship_matrix(self, context: dict) -> str:
         active_chars = self._get_active_chars(context)
         player_name = context.get("player_name", self.get_player_name())
         if player_name not in active_chars: active_chars.append(player_name)
+        compact_mode = str(context.get("prompt_budget", "full")).lower() == "compact"
 
         relations = []
         try:
@@ -283,26 +318,39 @@ class PromptManager:
                 if source in active_chars and target in active_chars:
                     surface = row.get("表面态度", "").strip()
                     inner = row.get("内心真实评价", "").strip()
-                    relations.append(f"- 【{source}】对待【{target}】：表面上展现出[{surface}]，内心实际上觉得[{inner}]。")
+                    if compact_mode:
+                        summary = inner or surface
+                        if len(summary) > 24:
+                            summary = summary[:24] + "…"
+                        relations.append(f"- {source} -> {target}：{summary}")
+                    else:
+                        relations.append(f"- 【{source}】对待【{target}】：表面上展现出[{surface}]，内心实际上觉得[{inner}]。")
         except Exception as e:
             print(f"关系矩阵读取失败: {e}")
         
         if relations:
+            if compact_mode:
+                return "【在场关系速览】\n" + "\n".join(relations[:8])
             return "【人物社交网络】（请根据以下关系，精准把控在场角色的语言温度、暗场动作及阴阳怪气程度）：\n" + "\n".join(relations)
         return ""
         
-    def get_main_system_prompt(self, context: dict) -> str:
+    def get_main_system_prompt_bundle(self, context: dict) -> dict:
         base_prompt = self.render_prompt_file("main_system.md", context)
         active_skills = []
         for skill_name, skill_func in self.skills.items():
             skill_text = skill_func(context)
             if skill_text: active_skills.append(skill_text)
-                
-        rag_lore = context.get("rag_lore", "")
-        if rag_lore: active_skills.append(f"【专属语料检索命中】（如果以下语料符合当前情境，请优先引用）：\n{rag_lore}")
 
-        skills_str = "\n\n[已加载的系统动态插件 (Skills)]\n" + "\n".join(active_skills) if active_skills else ""
-        
+        rag_lore = context.get("rag_lore", "")
+        trimmable_blocks = []
+        if rag_lore:
+            trimmable_blocks.append(f"【专属语料检索命中】（如果以下语料符合当前情境，请优先引用）：\n{rag_lore}")
+
+        repeated_blocks = list(active_skills)
+        skills_payload = self._nonempty_blocks(repeated_blocks + trimmable_blocks)
+        skills_str = "\n\n[已加载的系统动态插件 (Skills)]\n" + "\n".join(skills_payload) if skills_payload else ""
+
+        mod_override = ""
         custom_prompts = context.get("custom_prompts", {}) or {}
         c_world, c_events, c_char = custom_prompts.get("world"), custom_prompts.get("events"), custom_prompts.get("character")
         if c_world or c_events or c_char:
@@ -312,11 +360,41 @@ class PromptManager:
             if c_char: mod_override += f"👤 [角色灵魂修正]:\n{c_char}\n"
             skills_str += mod_override
 
-        if "[ACTIVE_SKILLS]" in base_prompt: return base_prompt.replace("[ACTIVE_SKILLS]", skills_str)
-        return base_prompt + skills_str
+        if "[ACTIVE_SKILLS]" in base_prompt:
+            final_prompt = base_prompt.replace("[ACTIVE_SKILLS]", skills_str)
+        else:
+            final_prompt = base_prompt + skills_str
 
-    def get_main_author_note(self, context: dict = None) -> str:
+        return {
+            "static_blocks": self._nonempty_blocks([base_prompt.replace("[ACTIVE_SKILLS]", "").strip()]),
+            "repeated_blocks": self._nonempty_blocks(repeated_blocks),
+            "dynamic_blocks": self._nonempty_blocks([mod_override]),
+            "trimmable_blocks": self._nonempty_blocks(trimmable_blocks),
+            "final_prompt": final_prompt,
+        }
+
+    def get_main_system_prompt(self, context: dict) -> str:
+        bundle = self.get_main_system_prompt_bundle(context)
+        return bundle.get("final_prompt", "")
+
+    def get_main_author_note(self, context: dict = None, compact: bool = False) -> str:
         context = context or {}
+        if compact:
+            if self._compact_author_note_cache is None:
+                self._compact_author_note_cache = (
+                    "[稳定输出简表]\n"
+                    "1. 只输出一个合法 JSON 对象。\n"
+                    "2. 必须包含 narrator_transition/current_scene/dialogue_sequence/next_options/effects/is_end。\n"
+                    "3. dialogue_sequence 的每一项都必须是对象，且只能包含 speaker/content/mood 三个字段。\n"
+                    "4. 严禁输出 _note、_comment、placeholder、explanation、数组长度说明、自我校验说明。\n"
+                    "5. 不要把“内部备注”“模型思考”“为了满足 schema”之类内容写进 JSON。\n"
+                    "6. 内心独白也必须写成正常 dialogue item，例如 speaker='陆陈安然'、content='(内心独白)...'、mood='nervous'。\n"
+                    "7. dialogue_sequence 优先给 4-8 条有效互动。\n"
+                    "8. next_options 给 3-4 个有明显策略差异的可执行选项。\n"
+                    "9. 只用 effects 表达数值或微信变化，不要输出多余字段。\n"
+                    "10. 不要解释规则，不要输出代码块。"
+                )
+            return self._render_prompt_template(self._compact_author_note_cache, context)
         return self.render_prompt_file("main_author_note.md", context)
 
     def get_wechat_system_prompt(self, context: dict = None) -> str:

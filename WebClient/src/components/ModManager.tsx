@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Layers, Cloud, BookOpen, Trash2, Download, Play, Plus, RefreshCw, X, Check, Lock, Search, Edit3, RotateCcw, ShieldCheck } from 'lucide-react';
+import { Layers, Cloud, BookOpen, Trash2, Download, Plus, RefreshCw, X, Check, Lock, Search, Edit3, RotateCcw, ShieldCheck } from 'lucide-react';
 import { gameApi } from '../api/gameApi';
 import { ConfirmDialog } from './common/ConfirmDialog';
 
@@ -10,6 +10,10 @@ interface ModManagerProps {
 }
 
 export const ModManager = ({ onTabChange }: ModManagerProps) => {
+    const [libraryFilter, setLibraryFilter] = useState<'all' | 'original' | 'downloaded' | 'public'>('all');
+    const [librarySort, setLibrarySort] = useState<'updated' | 'name'>('updated');
+    const [workshopFilter, setWorkshopFilter] = useState<'all' | 'original' | 'forked' | 'mine'>('all');
+    const [workshopSort, setWorkshopSort] = useState<'updated' | 'downloads' | 'name'>('updated');
     const [activeTab, setActiveTab] = useState<TabType>('library');
     const [libraryMods, setLibraryMods] = useState<any[]>([]);
     const [workshopMods, setWorkshopMods] = useState<any[]>([]);
@@ -35,6 +39,7 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
     const [actionTarget, setActionTarget] = useState<string | null>(null);
     const [userState, setUserState] = useState<any>(null);
     const [snapshots, setSnapshots] = useState<any[]>([]);
+    const [selectedWorkshopMod, setSelectedWorkshopMod] = useState<any | null>(null);
 
     const showToast = (msg: string) => {
         setToast(msg);
@@ -104,34 +109,6 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
         }
     };
 
-    const handleApply = async (id: string, name: string) => {
-        setConfirmDialog({
-            open: true,
-            title: '应用模组',
-            message: `将应用模组 [${name}] 到当前活动环境。\n注意：新对局开启后，存档将与该模组绑定。\n\n确认继续？`,
-            confirmText: '确认应用',
-            onConfirm: async () => {
-                setActionTarget(id);
-                try {
-                    const validateRes = await gameApi.validateLibraryItem(id);
-                    if (!validateRes?.report?.ok) {
-                        const errs = (validateRes?.report?.errors || []).join('；') || '模组校验失败';
-                        showToast(`❌ ${errs}`);
-                        return;
-                    }
-                    await gameApi.applyFromLibrary(id);
-                    showToast(`✅ [${name}] 已应用并完成热重载`);
-                    loadSafetyData();
-                } catch (e) {
-                    const detail = (e as any)?.response?.data?.detail || '应用失败';
-                    showToast(`❌ ${detail}`);
-                } finally {
-                    setActionTarget(null);
-                }
-            }
-        });
-    };
-
     const handleDelete = async (id: string, name: string) => {
         setConfirmDialog({
             open: true,
@@ -160,10 +137,39 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
         try {
             await gameApi.downloadWorkshopItem(id);
             showToast(`✅ [${name}] 已添加到库`);
+            loadLibrary();
             loadSafetyData();
             // Optional: switch to library or just show success
         } catch (e) {
             showToast('❌ 下载失败');
+        } finally {
+            setActionTarget(null);
+        }
+    };
+
+    const handleEdit = async (id: string, name: string) => {
+        setActionTarget(`edit-${id}`);
+        try {
+            await gameApi.selectLibraryItemForEdit(id);
+            showToast(`✍️ 正在编辑 [${name}]`);
+            onTabChange('editor');
+        } catch (e) {
+            const detail = (e as any)?.response?.data?.detail || '切换编辑目标失败';
+            showToast(`❌ ${detail}`);
+        } finally {
+            setActionTarget(null);
+        }
+    };
+
+    const handleViewDefault = async () => {
+        setActionTarget('edit-default');
+        try {
+            await gameApi.selectDefaultForEdit();
+            showToast('📘 正在查看默认模组');
+            onTabChange('editor');
+        } catch (e) {
+            const detail = (e as any)?.response?.data?.detail || '切换默认模组失败';
+            showToast(`❌ ${detail}`);
         } finally {
             setActionTarget(null);
         }
@@ -194,13 +200,74 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
 
     const filteredLibrary = useMemo(() => {
         const q = searchQuery.toLowerCase();
-        return libraryMods.filter(m => m.name?.toLowerCase().includes(q) || m.description?.toLowerCase().includes(q));
-    }, [libraryMods, searchQuery]);
+        const defaultMod = {
+            id: 'default',
+            name: '默认模组',
+            description: '官方默认内容，只可查看，不能直接覆盖。若要微调，请另存为新的本地模组。',
+            timestamp: '系统内置',
+            visibility: 'readonly',
+            isDefault: true,
+            source_type: 'system',
+            version: 1
+        };
+        const merged = [defaultMod, ...libraryMods];
+        const filtered = merged.filter((m) => {
+            const matchesSearch = m.name?.toLowerCase().includes(q) || m.description?.toLowerCase().includes(q);
+            if (!matchesSearch) return false;
+            if (libraryFilter === 'original') return !!m.isDefault || (m.source_type !== 'downloaded' && m.source_type !== 'forked');
+            if (libraryFilter === 'downloaded') return m.source_type === 'downloaded';
+            if (libraryFilter === 'public') return m.visibility === 'public';
+            return true;
+        });
+        return filtered.sort((a, b) => {
+            if (a.isDefault) return -1;
+            if (b.isDefault) return 1;
+            if (librarySort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+            return String(b.updated_at || b.timestamp || '').localeCompare(String(a.updated_at || a.timestamp || ''));
+        });
+    }, [libraryMods, searchQuery, libraryFilter, librarySort]);
 
     const filteredWorkshop = useMemo(() => {
         const q = searchQuery.toLowerCase();
-        return workshopMods.filter(m => m.name?.toLowerCase().includes(q) || m.description?.toLowerCase().includes(q) || m.author?.toLowerCase().includes(q));
-    }, [workshopMods, searchQuery]);
+        const filtered = workshopMods.filter((m) => {
+            const matchesSearch = m.name?.toLowerCase().includes(q) || m.description?.toLowerCase().includes(q) || m.author?.toLowerCase().includes(q);
+            if (!matchesSearch) return false;
+            if (workshopFilter === 'original') return m.source_type !== 'forked';
+            if (workshopFilter === 'forked') return m.source_type === 'forked';
+            if (workshopFilter === 'mine') return !!m.is_owned_by_current_user;
+            return true;
+        });
+        return filtered.sort((a, b) => {
+            if (workshopSort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+            if (workshopSort === 'downloads') return Number(b.downloads || 0) - Number(a.downloads || 0);
+            return String(b.updated_at || b.timestamp || '').localeCompare(String(a.updated_at || a.timestamp || ''));
+        });
+    }, [workshopMods, searchQuery, workshopFilter, workshopSort]);
+
+    const getWorkshopFocusTags = (mod: any) => {
+        const summary = mod?.summary || {};
+        const tags: string[] = [];
+        const characterCount = Number(summary.character_count || 0);
+        const skillCount = Number(summary.skill_count || 0);
+        const csvCount = Number(summary.csv_files || 0);
+        const worldCount = Number(summary.world_count || 0);
+
+        if (characterCount >= 4) tags.push('偏角色向');
+        if (csvCount >= 3) tags.push('偏剧情向');
+        if (skillCount >= 2 || worldCount >= 3) tags.push('偏系统向');
+        if (tags.length === 0) {
+            if (characterCount >= Math.max(skillCount, csvCount)) tags.push('轻角色向');
+            else if (csvCount >= Math.max(characterCount, skillCount)) tags.push('轻剧情向');
+            else tags.push('轻系统向');
+        }
+        return tags.slice(0, 3);
+    };
+
+    const getSourceLabel = (sourceType?: string) => {
+        if (sourceType === 'downloaded') return '下载副本';
+        if (sourceType === 'forked') return '派生作品';
+        return '原创';
+    };
 
     return (
         <div className="flex-1 flex flex-col h-full bg-white/80 backdrop-blur-md rounded-2xl border-2 border-[var(--color-cyan-main)]/20 shadow-xl overflow-hidden p-8 relative animate-fade-in-up">
@@ -280,21 +347,56 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                 </div>
             )}
 
+            <div className="mb-6 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+                <div className="flex flex-wrap gap-2">
+                    {activeTab === 'library' ? (
+                        <>
+                            <button onClick={() => setLibraryFilter('all')} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border ${libraryFilter === 'all' ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]' : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'}`}>全部</button>
+                            <button onClick={() => setLibraryFilter('original')} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border ${libraryFilter === 'original' ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]' : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'}`}>原创</button>
+                            <button onClick={() => setLibraryFilter('downloaded')} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border ${libraryFilter === 'downloaded' ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]' : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'}`}>下载副本</button>
+                            <button onClick={() => setLibraryFilter('public')} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border ${libraryFilter === 'public' ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]' : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'}`}>已公开</button>
+                        </>
+                    ) : (
+                        <>
+                            <button onClick={() => setWorkshopFilter('all')} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border ${workshopFilter === 'all' ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]' : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'}`}>全部</button>
+                            <button onClick={() => setWorkshopFilter('original')} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border ${workshopFilter === 'original' ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]' : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'}`}>原创</button>
+                            <button onClick={() => setWorkshopFilter('forked')} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border ${workshopFilter === 'forked' ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]' : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'}`}>派生</button>
+                            <button onClick={() => setWorkshopFilter('mine')} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border ${workshopFilter === 'mine' ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]' : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'}`}>我的作品</button>
+                        </>
+                    )}
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">排序</span>
+                    {activeTab === 'library' ? (
+                        <select value={librarySort} onChange={(e) => setLibrarySort(e.target.value as 'updated' | 'name')} className="px-3 py-2 rounded-xl border-2 border-[var(--color-cyan-main)]/10 bg-white text-[11px] font-black text-[var(--color-cyan-dark)] outline-none">
+                            <option value="updated">最近更新</option>
+                            <option value="name">名称</option>
+                        </select>
+                    ) : (
+                        <select value={workshopSort} onChange={(e) => setWorkshopSort(e.target.value as 'updated' | 'downloads' | 'name')} className="px-3 py-2 rounded-xl border-2 border-[var(--color-cyan-main)]/10 bg-white text-[11px] font-black text-[var(--color-cyan-dark)] outline-none">
+                            <option value="updated">最近更新</option>
+                            <option value="downloads">下载量</option>
+                            <option value="name">名称</option>
+                        </select>
+                    )}
+                </div>
+            </div>
+
             {activeTab === 'library' && (
                 <div className="mb-6 grid grid-cols-1 xl:grid-cols-2 gap-4">
                     <div className="bg-white border-2 border-[var(--color-cyan-main)]/10 rounded-2xl p-4">
                         <div className="text-[11px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] flex items-center gap-2">
                             <ShieldCheck size={14} />
-                            当前激活状态
+                            当前编辑目标
                         </div>
                         <div className="mt-3 text-sm font-bold text-[var(--color-cyan-dark)]">
-                            来源：{userState?.active_source || 'default'} · 模组：{userState?.active_mod_id || 'default'}
+                            来源：{userState?.editor_source || 'default'} · 模组：{userState?.editor_mod_id || 'default'}
                         </div>
                         <div className="text-[11px] mt-1 text-gray-400 font-black">
-                            最近更新时间：{userState?.updated_at || '-'}
+                            这里只表示编辑器当前正在改哪份内容；真正用于游戏的模组会在新游戏开始时读取
                         </div>
                         <div className="text-[11px] mt-1 text-gray-400 font-black">
-                            最近安全快照：{userState?.last_good_snapshot_id || '-'}
+                            最近更新时间：{userState?.updated_at || '-'} · 最近安全快照：{userState?.last_good_snapshot_id || '-'}
                         </div>
                     </div>
                     <div className="bg-white border-2 border-[var(--color-cyan-main)]/10 rounded-2xl p-4">
@@ -345,22 +447,44 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                                         <p className="text-sm text-gray-500 font-semibold mb-6 line-clamp-2 min-h-[2.5rem] flex-1">
                                             {mod.description || '无描述'}
                                         </p>
+                                        <div className="mb-4 flex flex-wrap gap-2">
+                                            <span className="px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] border border-[var(--color-cyan-main)]/20">
+                                                {mod.isDefault ? '只读模板' : '开局可选'}
+                                            </span>
+                                            {mod.isDefault && (
+                                                <span className="px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase bg-amber-50 text-amber-600 border border-amber-200">
+                                                    修改请另存为
+                                                </span>
+                                            )}
+                                            {mod.visibility === 'public' && !mod.isDefault && (
+                                                <span className="px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase bg-emerald-50 text-emerald-600 border border-emerald-200">
+                                                    已公开同步
+                                                </span>
+                                            )}
+                                            {!mod.isDefault && (
+                                                <span className="px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase bg-white border border-[var(--color-cyan-main)]/15 text-[var(--color-cyan-main)]">
+                                                    {getSourceLabel(mod.source_type)} · v{mod.version || 1}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="flex gap-3">
                                             <button
-                                                onClick={() => handleApply(mod.id, mod.name)}
-                                                disabled={actionTarget === mod.id}
-                                                className="flex-1 py-3 bg-[var(--color-cyan-main)] text-white rounded-2xl flex items-center justify-center gap-2 font-black hover:bg-[var(--color-cyan-dark)] transition shadow-md uppercase tracking-widest text-xs disabled:opacity-50"
+                                                onClick={() => mod.isDefault ? handleViewDefault() : handleEdit(mod.id, mod.name)}
+                                                disabled={actionTarget === `edit-${mod.id}`}
+                                                className="flex-1 py-3 bg-white border-2 border-[var(--color-cyan-main)]/20 text-[var(--color-cyan-main)] rounded-2xl flex items-center justify-center gap-2 font-black hover:bg-[var(--color-cyan-main)]/10 transition shadow-sm uppercase tracking-widest text-xs disabled:opacity-50"
                                             >
-                                                {actionTarget === mod.id ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} />}
-                                                应用此设置
+                                                {actionTarget === `edit-${mod.id}` ? <RefreshCw size={14} className="animate-spin" /> : <Edit3 size={14} />}
+                                                {mod.isDefault ? '查看默认内容' : '编辑这个模组'}
                                             </button>
-                                            <button
-                                                onClick={() => handleDelete(mod.id, mod.name)}
-                                                disabled={actionTarget === `del-${mod.id}`}
-                                                className="p-3 bg-red-50 text-red-400 rounded-2xl hover:bg-red-500 hover:text-white transition shadow-sm disabled:opacity-50"
-                                            >
-                                                {actionTarget === `del-${mod.id}` ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={16} />}
-                                            </button>
+                                            {!mod.isDefault && (
+                                                <button
+                                                    onClick={() => handleDelete(mod.id, mod.name)}
+                                                    disabled={actionTarget === `del-${mod.id}`}
+                                                    className="p-3 bg-red-50 text-red-400 rounded-2xl hover:bg-red-500 hover:text-white transition shadow-sm disabled:opacity-50"
+                                                >
+                                                    {actionTarget === `del-${mod.id}` ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={16} />}
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 ))
@@ -386,13 +510,33 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                                             <span>作者: {mod.author}</span>
                                             <span className="flex items-center gap-1"><Download size={10} /> {mod.downloads} 下载</span>
                                         </div>
+                                        <div className="mb-4 flex flex-wrap gap-2">
+                                            {mod.is_owned_by_current_user ? (
+                                                <span className="px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase bg-emerald-50 text-emerald-600 border border-emerald-200">
+                                                    我的公开模组
+                                                </span>
+                                            ) : (
+                                                <span className="px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] border border-[var(--color-cyan-main)]/20">
+                                                    下载后可在开局选择
+                                                </span>
+                                            )}
+                                            <span className="px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase bg-white border border-[var(--color-cyan-main)]/15 text-[var(--color-cyan-main)]">
+                                                {getSourceLabel(mod.source_type)} · v{mod.version || 1}
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={() => setSelectedWorkshopMod(mod)}
+                                            className="mb-4 w-full py-3 bg-white border-2 border-[var(--color-cyan-main)]/10 text-[var(--color-cyan-main)] rounded-2xl font-black hover:bg-[var(--color-cyan-main)]/10 transition shadow-sm uppercase tracking-widest text-xs"
+                                        >
+                                            查看详情
+                                        </button>
                                         <button
                                             onClick={() => handleDownload(mod.id, mod.name)}
                                             disabled={actionTarget === `dl-${mod.id}`}
                                             className="w-full py-4 bg-[var(--color-cyan-main)] text-white rounded-2xl flex items-center justify-center gap-2 font-black hover:bg-[var(--color-cyan-dark)] transition shadow-md uppercase tracking-widest text-xs disabled:opacity-50"
                                         >
                                             {actionTarget === `dl-${mod.id}` ? <RefreshCw size={14} className="animate-spin" /> : <Download size={16} />}
-                                            下载到我的库
+                                            {mod.is_owned_by_current_user ? '查看我的库副本' : '下载到我的库'}
                                         </button>
                                     </div>
                                 ))
@@ -443,6 +587,106 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                             >
                                 {isSaving ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} />}
                                 {isSaving ? '正在打包...' : '确认保存'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {selectedWorkshopMod && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-6" onClick={() => setSelectedWorkshopMod(null)}>
+                    <div
+                        className="bg-white rounded-[2rem] shadow-2xl p-8 w-full max-w-2xl border-2 border-[var(--color-cyan-main)]/20 animate-scale-in"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-start justify-between gap-6 mb-6">
+                            <div className="min-w-0">
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                    <span className="text-[10px] bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] px-3 py-1 rounded-full font-black tracking-widest uppercase">
+                                        {selectedWorkshopMod.type === 'prompt_pack' ? '剧情包' : '独立角色'}
+                                    </span>
+                                    {getWorkshopFocusTags(selectedWorkshopMod).map((tag) => (
+                                        <span key={tag} className="text-[10px] bg-amber-50 text-amber-700 px-3 py-1 rounded-full font-black tracking-widest uppercase border border-amber-200">
+                                            {tag}
+                                        </span>
+                                    ))}
+                                </div>
+                                <h3 className="text-3xl font-black text-[var(--color-cyan-dark)] tracking-tight break-words">
+                                    {selectedWorkshopMod.name}
+                                </h3>
+                                <div className="mt-2 text-sm font-bold text-gray-500">
+                                    作者：{selectedWorkshopMod.author} · 下载：{selectedWorkshopMod.downloads} · 版本：v{selectedWorkshopMod.version || 1}
+                                </div>
+                            </div>
+                            <button onClick={() => setSelectedWorkshopMod(null)} className="text-gray-400 hover:text-black transition-colors shrink-0">
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <div className="mb-6 rounded-2xl border border-[var(--color-cyan-main)]/10 bg-[var(--color-cyan-light)]/20 p-5">
+                            <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] mb-3">
+                                基本信息
+                            </div>
+                            <div className="mb-4 flex flex-wrap gap-2">
+                                <span className="text-[10px] bg-white text-[var(--color-cyan-main)] px-3 py-1 rounded-full font-black tracking-widest uppercase border border-[var(--color-cyan-main)]/15">
+                                    {getSourceLabel(selectedWorkshopMod.source_type)}
+                                </span>
+                                {selectedWorkshopMod.published_at && (
+                                    <span className="text-[10px] bg-white text-gray-500 px-3 py-1 rounded-full font-black tracking-widest uppercase border border-gray-200">
+                                        首次公开：{String(selectedWorkshopMod.published_at).split(' ')[0]}
+                                    </span>
+                                )}
+                                {selectedWorkshopMod.updated_at && (
+                                    <span className="text-[10px] bg-white text-gray-500 px-3 py-1 rounded-full font-black tracking-widest uppercase border border-gray-200">
+                                        最近更新：{String(selectedWorkshopMod.updated_at).split(' ')[0]}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-sm text-gray-600 font-semibold leading-7">
+                                {selectedWorkshopMod.description || '作者还没有填写模组简介。'}
+                            </p>
+                        </div>
+
+                        <div className="mb-8 rounded-2xl border border-[var(--color-cyan-main)]/10 bg-[var(--color-cyan-light)]/25 p-5">
+                            <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] mb-3">
+                                模组概要
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px] font-bold text-[var(--color-cyan-dark)]">
+                                <div className="rounded-xl bg-white/85 px-3 py-3">
+                                    角色：{selectedWorkshopMod.summary?.character_count ?? 0}
+                                </div>
+                                <div className="rounded-xl bg-white/85 px-3 py-3">
+                                    技能：{selectedWorkshopMod.summary?.skill_count ?? 0}
+                                </div>
+                                <div className="rounded-xl bg-white/85 px-3 py-3">
+                                    世界文件：{selectedWorkshopMod.summary?.world_count ?? 0}
+                                </div>
+                                <div className="rounded-xl bg-white/85 px-3 py-3">
+                                    事件文件：{selectedWorkshopMod.summary?.csv_files ?? 0}
+                                </div>
+                            </div>
+                            <div className="mt-3 text-[10px] text-gray-400 font-black">
+                                共包含 {(selectedWorkshopMod.summary?.md_files ?? 0) + (selectedWorkshopMod.summary?.csv_files ?? 0)} 个内容文件
+                            </div>
+                        </div>
+
+                        <div className="flex gap-4">
+                            <button
+                                onClick={() => setSelectedWorkshopMod(null)}
+                                className="flex-1 py-4 bg-white border-2 border-[var(--color-cyan-main)]/15 text-[var(--color-cyan-main)] rounded-2xl font-black uppercase tracking-widest hover:bg-[var(--color-cyan-main)]/10 transition-all"
+                            >
+                                关闭
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    await handleDownload(selectedWorkshopMod.id, selectedWorkshopMod.name);
+                                    setSelectedWorkshopMod(null);
+                                }}
+                                disabled={actionTarget === `dl-${selectedWorkshopMod.id}`}
+                                className="flex-[1.3] py-4 bg-[var(--color-cyan-main)] text-white rounded-2xl flex items-center justify-center gap-2 font-black hover:bg-[var(--color-cyan-dark)] transition shadow-md uppercase tracking-widest text-xs disabled:opacity-50"
+                            >
+                                {actionTarget === `dl-${selectedWorkshopMod.id}` ? <RefreshCw size={14} className="animate-spin" /> : <Download size={16} />}
+                                {selectedWorkshopMod.is_owned_by_current_user ? '查看我的库副本' : '下载到我的库'}
                             </button>
                         </div>
                     </div>

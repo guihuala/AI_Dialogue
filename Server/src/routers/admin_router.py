@@ -1,4 +1,5 @@
 from typing import Any, Callable, Dict
+from datetime import datetime
 import json
 import os
 import shutil
@@ -27,15 +28,81 @@ def build_admin_router(
     get_engine: Callable[[str], Any],
     get_user_prompts_dir: Callable[[str], str],
     get_user_events_dir: Callable[[str], str],
+    get_user_library_dir: Callable[[str], str],
     default_prompts_dir: str,
     default_events_dir: str,
     with_user_write_lock: Callable[[str], Any],
     append_audit_log: Callable[[str, str, str, str, Dict[str, Any]], None],
     normalize_roster_single_player: Callable[[Dict[str, Any]], Dict[str, Any]],
+    read_user_state: Callable[[str], Dict[str, Any]],
+    write_user_state: Callable[[str, Dict[str, Any]], None],
+    build_manifest: Callable[..., Dict[str, Any]],
+    workshop_dir: str,
     admin_auth,
     require_admin,
 ):
     router = APIRouter()
+
+    def _library_file_path(user_id: str, item_id: str) -> str:
+        return os.path.join(get_user_library_dir(user_id), f"{item_id}.json")
+
+    def _workshop_file_path(item_id: str) -> str:
+        return os.path.join(workshop_dir, f"{item_id}.json")
+
+    def _read_json(path: str) -> Dict[str, Any]:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+
+    def _write_json(path: str, data: Dict[str, Any]) -> None:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def _editor_target(user_id: str) -> Dict[str, str]:
+        st = read_user_state(user_id)
+        return {
+            "source": str(st.get("editor_source", "default") or "default"),
+            "mod_id": str(st.get("editor_mod_id", "default") or "default"),
+        }
+
+    def _load_editor_content(user_id: str) -> Dict[str, Dict[str, str]]:
+        target = _editor_target(user_id)
+        if target["source"] == "library" and target["mod_id"] != "default":
+            file_path = _library_file_path(user_id, target["mod_id"])
+            if os.path.exists(file_path):
+                data = _read_json(file_path)
+                content = data.get("content", {})
+                if isinstance(content, dict):
+                    return {
+                        "md": dict(content.get("md", {}) or {}),
+                        "csv": dict(content.get("csv", {}) or {}),
+                    }
+        return {"md": {}, "csv": {}}
+
+    def _sync_linked_workshop_if_needed(user_id: str, library_data: Dict[str, Any]) -> None:
+        workshop_id = str(library_data.get("linked_workshop_id", "") or "").strip()
+        if not workshop_id:
+            return
+        workshop_path = _workshop_file_path(workshop_id)
+        if not os.path.exists(workshop_path):
+            return
+        workshop_data = _read_json(workshop_path)
+        if str(workshop_data.get("owner_user_id", "")) != str(user_id):
+            raise HTTPException(status_code=403, detail="无权更新该公开模组")
+        content = library_data.get("content", {})
+        workshop_data["name"] = library_data.get("name", workshop_data.get("name"))
+        workshop_data["description"] = library_data.get("description", workshop_data.get("description"))
+        workshop_data["content"] = content
+        workshop_data["manifest"] = build_manifest(
+            mod_id=workshop_id,
+            name=workshop_data.get("name", workshop_id),
+            author=workshop_data.get("author", library_data.get("author", "")),
+            source="workshop",
+            content=content,
+        )
+        workshop_data["updated_at"] = library_data.get("timestamp")
+        _write_json(workshop_path, workshop_data)
 
     @router.post("/api/admin/login")
     def admin_login(req: AdminLoginReq):
@@ -53,12 +120,10 @@ def build_admin_router(
         return {"status": "success"}
 
     @router.get("/api/admin/files")
-    def get_admin_files(admin_session: Dict[str, Any] = require_admin, user_id: str = get_user_id):
+    def get_admin_files(user_id: str = get_user_id):
         """获取所有剧情配置文件列表"""
-        user_prompts_dir = get_user_prompts_dir(user_id)
-        user_events_dir = get_user_events_dir(user_id)
-
-        dirs_to_scan = [default_prompts_dir, user_prompts_dir]
+        editor_content = _load_editor_content(user_id)
+        dirs_to_scan = [default_prompts_dir]
         md_files_set = set()
         for d in dirs_to_scan:
             if os.path.exists(d):
@@ -67,28 +132,35 @@ def build_admin_router(
                         if file.endswith((".md", ".json", ".csv")):
                             rel_path = os.path.relpath(os.path.join(root, file), d).replace("\\", "/")
                             md_files_set.add(rel_path)
+        for rel_path in (editor_content.get("md", {}) or {}).keys():
+            md_files_set.add(str(rel_path).replace("\\", "/"))
         md_files = list(md_files_set)
 
-        event_dirs = [default_events_dir, user_events_dir]
+        event_dirs = [default_events_dir]
         csv_files_set = set()
         for d in event_dirs:
             if os.path.exists(d):
-                for file in os.listdir(d):
-                    if file.endswith((".csv", ".json")):
-                        csv_files_set.add(file)
+                for root, _, files in os.walk(d):
+                    for file in files:
+                        if file.endswith((".csv", ".json")):
+                            rel_path = os.path.relpath(os.path.join(root, file), d).replace("\\", "/")
+                            csv_files_set.add(rel_path)
+        for rel_path in (editor_content.get("csv", {}) or {}).keys():
+            csv_files_set.add(str(rel_path).replace("\\", "/"))
         csv_files = list(csv_files_set)
 
         return {"status": "success", "md": sorted(md_files), "csv": sorted(csv_files)}
 
     @router.get("/api/admin/file")
-    def read_admin_file(type: str, name: str, admin_session: Dict[str, Any] = require_admin, user_id: str = get_user_id):
+    def read_admin_file(type: str, name: str, user_id: str = get_user_id):
         """读取单个文件内容"""
-        base_dir = get_user_prompts_dir(user_id) if type == "md" else get_user_events_dir(user_id)
-        file_path = os.path.join(base_dir, name)
+        editor_content = _load_editor_content(user_id)
+        content_group = "md" if type == "md" else "csv"
+        if name in editor_content.get(content_group, {}):
+            return {"status": "success", "content": editor_content[content_group][name]}
 
-        if not os.path.exists(file_path):
-            default_base = default_prompts_dir if type == "md" else default_events_dir
-            file_path = os.path.join(default_base, name)
+        default_base = default_prompts_dir if type == "md" else default_events_dir
+        file_path = os.path.join(default_base, name)
 
         if not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail="File not found")
@@ -96,21 +168,40 @@ def build_admin_router(
             return {"status": "success", "content": f.read()}
 
     @router.post("/api/admin/file")
-    def save_admin_file(req: AdminFileSaveReq, admin_session: Dict[str, Any] = require_admin, user_id: str = get_user_id):
-        """保存单个文件内容 (保存到用户私有目录)"""
-        base_dir = get_user_prompts_dir(user_id) if req.type == "md" else get_user_events_dir(user_id)
-        file_path = os.path.join(base_dir, req.name)
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    def save_admin_file(req: AdminFileSaveReq, user_id: str = get_user_id):
+        """保存单个文件内容到当前选中的本地模组；默认模组只读。"""
         try:
             with with_user_write_lock(user_id):
+                target = _editor_target(user_id)
+                if target["source"] != "library" or target["mod_id"] == "default":
+                    raise HTTPException(status_code=400, detail="默认模组不可直接修改，请先另存到模组库")
+                library_path = _library_file_path(user_id, target["mod_id"])
+                if not os.path.exists(library_path):
+                    raise HTTPException(status_code=404, detail="当前编辑模组不存在")
+                library_data = _read_json(library_path)
+                content = library_data.get("content", {})
+                md_files = dict(content.get("md", {}) or {})
+                csv_files = dict(content.get("csv", {}) or {})
                 content_to_write = req.content
                 if req.type == "md" and req.name.endswith("roster.json"):
                     parsed = json.loads(req.content)
                     parsed = normalize_roster_single_player(parsed)
                     content_to_write = json.dumps(parsed, ensure_ascii=False, indent=4)
-
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(content_to_write)
+                if req.type == "md":
+                    md_files[req.name] = content_to_write
+                else:
+                    csv_files[req.name] = content_to_write
+                library_data["content"] = {"md": md_files, "csv": csv_files}
+                library_data["manifest"] = build_manifest(
+                    mod_id=str(library_data.get("id", target["mod_id"])),
+                    name=str(library_data.get("name", target["mod_id"])),
+                    author=str(library_data.get("author", f"User_{user_id[:4]}")),
+                    source="library",
+                    content=library_data["content"],
+                )
+                library_data["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                _write_json(library_path, library_data)
+                _sync_linked_workshop_if_needed(user_id, library_data)
 
                 if req.type == "md" and req.name.endswith("roster.json"):
                     engine = get_engine(user_id)
@@ -123,12 +214,15 @@ def build_admin_router(
                             engine.tm.set_player_name(engine.player_name)
             append_audit_log(user_id, "save_admin_file", "ok", f"{req.type}:{req.name}", {})
             return {"status": "success", "message": f"{req.name} 保存成功"}
+        except HTTPException as e:
+            append_audit_log(user_id, "save_admin_file", "error", f"{req.type}:{req.name}", {"error": str(e.detail)})
+            raise
         except Exception as e:
             append_audit_log(user_id, "save_admin_file", "error", f"{req.type}:{req.name}", {"error": str(e)})
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.post("/api/admin/upload_portrait")
-    async def upload_portrait(file: UploadFile = File(...), admin_session: Dict[str, Any] = require_admin):
+    async def upload_portrait(file: UploadFile = File(...)):
         """上传角色立绘图片"""
         portraits_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -150,7 +244,7 @@ def build_admin_router(
         return {"status": "success", "url": f"/assets/portraits/{file.filename}"}
 
     @router.post("/api/admin/generate_skill_prompt")
-    def generate_skill_prompt(req: GenerateSkillPromptReq, admin_session: Dict[str, Any] = require_admin, user_id: str = get_user_id):
+    def generate_skill_prompt(req: GenerateSkillPromptReq, user_id: str = get_user_id):
         """调用 AI 一键生成 Skill 提示词"""
         engine = get_engine(user_id)
         if not engine or not engine.llm:

@@ -60,6 +60,169 @@ def build_content_router(
 ):
     router = APIRouter()
 
+    def _now_str() -> str:
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    def _library_file_path(user_id: str, item_id: str) -> str:
+        return os.path.join(get_user_library_dir(user_id), f"{item_id}.json")
+
+    def _workshop_file_path(item_id: str) -> str:
+        return os.path.join(workshop_dir, f"{item_id}.json")
+
+    def _read_json(path: str) -> Dict[str, Any]:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+
+    def _write_json(path: str, data: Dict[str, Any]) -> None:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def _summarize_content(content: Dict[str, Any]) -> Dict[str, Any]:
+        md_files = content.get("md", {}) if isinstance(content, dict) else {}
+        csv_files = content.get("csv", {}) if isinstance(content, dict) else {}
+        roster_text = md_files.get("characters/roster.json") or md_files.get("roster.json")
+        character_count = 0
+        if roster_text:
+            try:
+                roster = json.loads(roster_text)
+                if isinstance(roster, dict):
+                    character_count = len([k for k in roster.keys() if str(k).strip()])
+            except Exception:
+                character_count = 0
+        skill_count = len([p for p in md_files.keys() if str(p).startswith("skills/")])
+        world_count = len([p for p in md_files.keys() if str(p).startswith("world/") or str(p) == "main_system.md"])
+        return {
+            "md_files": len(md_files),
+            "csv_files": len(csv_files),
+            "character_count": character_count,
+            "skill_count": skill_count,
+            "world_count": world_count,
+        }
+
+    def _normalize_library_record(record: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+        data = dict(record or {})
+        item_id = str(data.get("id", "") or "").strip()
+        content = data.get("content", {}) if isinstance(data.get("content"), dict) else {"md": {}, "csv": {}}
+        data["visibility"] = str(data.get("visibility", "private") or "private")
+        data["version"] = max(1, int(data.get("version", 1) or 1))
+        data["source_type"] = str(data.get("source_type", "original") or "original")
+        data["source_mod_id"] = str(data.get("source_mod_id", "") or "")
+        data["parent_workshop_id"] = str(data.get("parent_workshop_id", data.get("origin_workshop_id", "")) or "")
+        data["linked_workshop_id"] = str(data.get("linked_workshop_id", "") or "")
+        data["origin_workshop_id"] = str(data.get("origin_workshop_id", data["parent_workshop_id"]) or "")
+        data["owner_user_id"] = str(data.get("owner_user_id", user_id) or user_id)
+        data["published_at"] = str(data.get("published_at", "") or "")
+        data["updated_at"] = str(data.get("updated_at", data.get("timestamp", _now_str())) or _now_str())
+        data["timestamp"] = str(data.get("timestamp", data["updated_at"]) or data["updated_at"])
+        data["summary"] = _summarize_content(content)
+        return data
+
+    def _normalize_workshop_record(record: Dict[str, Any]) -> Dict[str, Any]:
+        data = dict(record or {})
+        content = data.get("content", {}) if isinstance(data.get("content"), dict) else {"md": {}, "csv": {}}
+        data["version"] = max(1, int(data.get("version", 1) or 1))
+        data["visibility"] = "public"
+        data["source_type"] = str(data.get("source_type", "original") or "original")
+        data["source_mod_id"] = str(data.get("source_mod_id", "") or "")
+        data["parent_workshop_id"] = str(data.get("parent_workshop_id", data.get("source_mod_id", "")) or "")
+        data["published_at"] = str(data.get("published_at", data.get("timestamp", _now_str())) or _now_str())
+        data["updated_at"] = str(data.get("updated_at", data.get("published_at", _now_str())) or _now_str())
+        data["summary"] = _summarize_content(content)
+        return data
+
+    def _build_library_record(
+        *,
+        item_id: str,
+        user_id: str,
+        name: str,
+        description: str,
+        content: Dict[str, Any],
+        linked_workshop_id: str = "",
+        origin_workshop_id: str = "",
+        visibility: str = "private",
+        version: int = 1,
+        source_type: str = "original",
+        source_mod_id: str = "",
+        parent_workshop_id: str = "",
+        published_at: str = "",
+    ) -> Dict[str, Any]:
+        author = f"User_{user_id[:4]}"
+        manifest = build_manifest(
+            mod_id=item_id,
+            name=name,
+            author=author,
+            source="library",
+            content=content,
+        )
+        return {
+            "id": item_id,
+            "name": name,
+            "author": author,
+            "description": description,
+            "content": content,
+            "manifest": manifest,
+            "linked_workshop_id": linked_workshop_id,
+            "origin_workshop_id": origin_workshop_id,
+            "visibility": visibility,
+            "version": max(1, int(version or 1)),
+            "source_type": source_type,
+            "source_mod_id": source_mod_id,
+            "parent_workshop_id": parent_workshop_id or origin_workshop_id,
+            "owner_user_id": user_id,
+            "published_at": published_at,
+            "timestamp": _now_str(),
+            "updated_at": _now_str(),
+            "summary": _summarize_content(content),
+        }
+
+    def _build_workshop_record(
+        *,
+        item_id: str,
+        linked_library_id: str,
+        owner_user_id: str,
+        name: str,
+        author: str,
+        description: str,
+        content: Dict[str, Any],
+        existing_downloads: int = 0,
+        existing_timestamp: Optional[str] = None,
+        version: int = 1,
+        source_type: str = "original",
+        source_mod_id: str = "",
+        parent_workshop_id: str = "",
+        published_at: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        manifest = build_manifest(
+            mod_id=item_id,
+            name=name,
+            author=author,
+            source="workshop",
+            content=content,
+        )
+        return {
+            "id": item_id,
+            "type": "prompt_pack",
+            "name": name,
+            "author": author,
+            "description": description,
+            "content": content,
+            "manifest": manifest,
+            "downloads": existing_downloads,
+            "timestamp": existing_timestamp or _now_str(),
+            "updated_at": _now_str(),
+            "published_at": published_at or existing_timestamp or _now_str(),
+            "owner_user_id": owner_user_id,
+            "linked_library_id": linked_library_id,
+            "version": max(1, int(version or 1)),
+            "visibility": "public",
+            "source_type": source_type,
+            "source_mod_id": source_mod_id,
+            "parent_workshop_id": parent_workshop_id or source_mod_id,
+            "summary": _summarize_content(content),
+        }
+
     @router.post("/api/library/save_current")
     def save_to_library(req: LibrarySaveReq, user_id: str = get_user_id):
         """将当前活动配置另存为库中的一个模组包"""
@@ -75,26 +238,17 @@ def build_content_router(
                 import uuid
 
                 item_id = str(uuid.uuid4())[:8]
-                manifest = build_manifest(
-                    mod_id=item_id,
+                data = _build_library_record(
+                    item_id=item_id,
+                    user_id=user_id,
                     name=req.name,
-                    author=f"User_{user_id[:4]}",
-                    source="library",
+                    description=req.description,
                     content=content,
+                    visibility="private",
+                    version=1,
+                    source_type="original",
                 )
-                data = {
-                    "id": item_id,
-                    "name": req.name,
-                    "author": f"User_{user_id[:4]}",
-                    "description": req.description,
-                    "content": content,
-                    "manifest": manifest,
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                }
-                lib_dir = get_user_library_dir(user_id)
-                file_path = os.path.join(lib_dir, f"{item_id}.json")
-                with open(file_path, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
+                _write_json(_library_file_path(user_id, item_id), data)
             append_audit_log(user_id, "save_to_library", "ok", req.name, {"mod_id": item_id})
             return {"status": "success", "id": item_id}
         except HTTPException as e:
@@ -114,15 +268,26 @@ def build_content_router(
                 if fn.endswith(".json"):
                     try:
                         with open(os.path.join(lib_dir, fn), "r", encoding="utf-8") as f:
-                            d = json.load(f)
+                            d = _normalize_library_record(json.load(f), user_id)
                             items.append(
                                 {
                                     "id": d.get("id"),
                                     "name": d.get("name"),
                                     "description": d.get("description"),
+                                    "author": d.get("author"),
                                     "timestamp": d.get("timestamp"),
                                     "source": d.get("manifest", {}).get("source", "library"),
                                     "base_version": d.get("manifest", {}).get("base_version", "default-v1"),
+                                    "linked_workshop_id": d.get("linked_workshop_id", ""),
+                                    "origin_workshop_id": d.get("origin_workshop_id", ""),
+                                    "visibility": d.get("visibility", "private"),
+                                    "version": d.get("version", 1),
+                                    "source_type": d.get("source_type", "original"),
+                                    "source_mod_id": d.get("source_mod_id", ""),
+                                    "parent_workshop_id": d.get("parent_workshop_id", ""),
+                                    "published_at": d.get("published_at", ""),
+                                    "updated_at": d.get("updated_at", d.get("timestamp", "")),
+                                    "summary": d.get("summary", {}),
                                 }
                             )
                     except Exception:
@@ -131,53 +296,7 @@ def build_content_router(
 
     @router.post("/api/library/apply/{item_id}")
     def apply_from_library(item_id: str, user_id: str = get_user_id):
-        """从个人库中选择一个模组包并应用到当前活动环境"""
-        lib_dir = get_user_library_dir(user_id)
-        file_path = os.path.join(lib_dir, f"{item_id}.json")
-        if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail="Mod not found in library")
-
-        try:
-            with with_user_write_lock(user_id):
-                with open(file_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-
-                content = data.get("content", {})
-                manifest = data.get("manifest", {})
-                validate_mod_content(content, manifest if isinstance(manifest, dict) else None)
-
-                snapshot = create_snapshot(user_id, package_mod(user_id), reason=f"before_apply:{item_id}")
-                trim_snapshots(user_id, keep=max_snapshots_keep)
-
-                apply_mod_content_atomic(user_id, content)
-
-                st = read_user_state(user_id)
-                st["active_mod_id"] = item_id
-                st["active_source"] = manifest.get("source", "library") if isinstance(manifest, dict) else "library"
-                st["active_content_hash"] = manifest.get("mod_id", item_id)
-                st["last_good_snapshot_id"] = snapshot.get("id", "")
-                st["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                write_user_state(user_id, st)
-
-            engine = get_engine(user_id)
-            if engine:
-                if hasattr(engine, "director"):
-                    engine.director.reload_timeline()
-                if hasattr(engine, "pm"):
-                    engine.pm = type(engine.pm)(user_id)
-                    if hasattr(engine, "player_name") and hasattr(engine.pm, "get_player_name"):
-                        engine.player_name = engine.pm.get_player_name()
-                    if hasattr(engine, "tm") and hasattr(engine.tm, "set_player_name") and hasattr(engine, "player_name"):
-                        engine.tm.set_player_name(engine.player_name)
-
-            append_audit_log(user_id, "apply_library_mod", "ok", item_id, {"name": data.get("name")})
-            return {"status": "success", "message": f"模组 [{data.get('name')}] 已成功应用"}
-        except HTTPException as e:
-            append_audit_log(user_id, "apply_library_mod", "error", item_id, {"error": str(e.detail)})
-            raise
-        except Exception as e:
-            append_audit_log(user_id, "apply_library_mod", "error", item_id, {"error": str(e)})
-            raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail="模组不能在局外直接应用，请在开始新游戏时选择")
 
     @router.post("/api/library/validate/{item_id}")
     def validate_library_item(item_id: str, user_id: str = get_user_id):
@@ -186,7 +305,7 @@ def build_content_router(
         if not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail="Mod not found in library")
         with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            data = _normalize_library_record(json.load(f), user_id)
         content = data.get("content", {})
         manifest = data.get("manifest", {})
         report = build_validation_report(content, manifest if isinstance(manifest, dict) else None)
@@ -194,17 +313,60 @@ def build_content_router(
 
     @router.delete("/api/library/{item_id}")
     def delete_from_library(item_id: str, user_id: str = get_user_id):
-        lib_dir = get_user_library_dir(user_id)
-        file_path = os.path.join(lib_dir, f"{item_id}.json")
+        file_path = _library_file_path(user_id, item_id)
         with with_user_write_lock(user_id):
             if os.path.exists(file_path):
+                linked_workshop_id = ""
+                try:
+                    linked_workshop_id = str(_normalize_library_record(_read_json(file_path), user_id).get("linked_workshop_id", "")).strip()
+                except Exception:
+                    linked_workshop_id = ""
                 os.remove(file_path)
+                if linked_workshop_id:
+                    workshop_path = _workshop_file_path(linked_workshop_id)
+                    if os.path.exists(workshop_path):
+                        try:
+                            workshop_data = _read_json(workshop_path)
+                            if str(workshop_data.get("owner_user_id", "")) == str(user_id):
+                                os.remove(workshop_path)
+                        except Exception:
+                            pass
         append_audit_log(user_id, "delete_library_mod", "ok", item_id, {})
         return {"status": "success"}
 
     @router.get("/api/user/state")
     def get_user_state(user_id: str = get_user_id):
-        return {"status": "success", "data": read_user_state(user_id)}
+        st = read_user_state(user_id)
+        if "editor_mod_id" not in st:
+            st["editor_mod_id"] = "default"
+        if "editor_source" not in st:
+            st["editor_source"] = "default"
+        return {"status": "success", "data": st}
+
+    @router.post("/api/library/edit/{item_id}")
+    def select_library_item_for_edit(item_id: str, user_id: str = get_user_id):
+        file_path = _library_file_path(user_id, item_id)
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="Mod not found in library")
+        with with_user_write_lock(user_id):
+            st = read_user_state(user_id)
+            st["editor_mod_id"] = item_id
+            st["editor_source"] = "library"
+            st["updated_at"] = _now_str()
+            write_user_state(user_id, st)
+        append_audit_log(user_id, "select_editor_library_mod", "ok", item_id, {})
+        return {"status": "success", "editor_mod_id": item_id, "editor_source": "library"}
+
+    @router.post("/api/editor/default")
+    def select_default_for_edit(user_id: str = get_user_id):
+        with with_user_write_lock(user_id):
+            st = read_user_state(user_id)
+            st["editor_mod_id"] = "default"
+            st["editor_source"] = "default"
+            st["updated_at"] = _now_str()
+            write_user_state(user_id, st)
+        append_audit_log(user_id, "select_editor_default", "ok", "default", {})
+        return {"status": "success", "editor_mod_id": "default", "editor_source": "default"}
 
     @router.get("/api/storage/quota")
     def get_storage_quota(user_id: str = get_user_id):
@@ -297,56 +459,155 @@ def build_content_router(
 
     @router.post("/api/workshop/validate_current")
     def validate_current_mod_for_publish(user_id: str = get_user_id):
-        """发布前校验当前 active 内容，返回错误/警告清单。"""
-        content = package_mod(user_id)
+        """发布前校验当前编辑目标，仅允许发布库中的自定义模组。"""
+        st = read_user_state(user_id)
+        editor_source = str(st.get("editor_source", "default"))
+        editor_mod_id = str(st.get("editor_mod_id", "default"))
+        if editor_source != "library" or not editor_mod_id or editor_mod_id == "default":
+            raise HTTPException(status_code=400, detail="默认模组不可直接公开，请先另存到本地模组库再编辑")
+        file_path = _library_file_path(user_id, editor_mod_id)
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="当前编辑模组不存在")
+        content = _read_json(file_path).get("content", {})
         report = build_validation_report(content, None)
         return {"status": "success" if report.get("ok") else "error", "report": report}
 
-    @router.post("/api/workshop/publish_current")
-    def publish_current_mod(req: WorkshopPublishReq, user_id: str = get_user_id):
-        """将该玩家当前的活动模组打包并在工坊发布"""
-        print(f"📦 [Workshop] User {user_id} publishing mod: {req.name}")
+    def _publish_current_mod(req: WorkshopPublishReq, user_id: str, mode: str):
+        """mode=create|update|fork"""
+        print(f"📦 [Workshop] User {user_id} publishing mod: {req.name} mode={mode}")
         try:
             with with_user_write_lock(user_id):
-                pack_content = package_mod(user_id)
+                st = read_user_state(user_id)
+                editor_source = str(st.get("editor_source", "default"))
+                editor_mod_id = str(st.get("editor_mod_id", "default"))
+                if editor_source != "library" or not editor_mod_id or editor_mod_id == "default":
+                    raise HTTPException(status_code=400, detail="默认模组不可直接公开，请先另存到本地模组库再编辑")
+                editor_library_path = _library_file_path(user_id, editor_mod_id)
+                if not os.path.exists(editor_library_path):
+                    raise HTTPException(status_code=404, detail="当前编辑模组不存在")
+                current_library_item = _normalize_library_record(_read_json(editor_library_path), user_id)
+                pack_content = current_library_item.get("content", {})
                 pre_report = build_validation_report(pack_content, None)
                 if not pre_report.get("ok"):
                     raise HTTPException(status_code=400, detail="发布校验失败: " + "; ".join(pre_report.get("errors", [])))
+                current_library_id = editor_mod_id
+                current_source_type = str(current_library_item.get("source_type", "original") or "original")
+                current_linked_workshop_id = str(current_library_item.get("linked_workshop_id", "") or "")
+
+                if mode == "update":
+                    if not current_linked_workshop_id or str(current_library_item.get("visibility", "")) != "public":
+                        raise HTTPException(status_code=400, detail="当前模组还没有公开版本，不能执行更新")
+                elif mode == "fork":
+                    if current_source_type != "downloaded":
+                        raise HTTPException(status_code=400, detail="只有下载副本才能发布为派生作品")
+                elif mode == "create":
+                    if current_linked_workshop_id and str(current_library_item.get("visibility", "")) == "public":
+                        raise HTTPException(status_code=400, detail="当前模组已有公开版本，请使用更新公开版本")
 
                 import uuid
 
-                item_id = str(uuid.uuid4())[:8]
-                manifest = build_manifest(
-                    mod_id=item_id,
+                library_item = None
+                library_id = current_library_id
+                if library_id:
+                    library_path = _library_file_path(user_id, library_id)
+                    if os.path.exists(library_path):
+                        library_item = _normalize_library_record(_read_json(library_path), user_id)
+                    else:
+                        library_id = ""
+
+                if not library_id:
+                    library_id = str(uuid.uuid4())[:8]
+
+                linked_workshop_id = str((library_item or {}).get("linked_workshop_id", "")).strip()
+                if mode == "update":
+                    workshop_id = linked_workshop_id or str(uuid.uuid4())[:8]
+                else:
+                    workshop_id = str(uuid.uuid4())[:8]
+                workshop_path = _workshop_file_path(workshop_id)
+                existing_workshop = _normalize_workshop_record(_read_json(workshop_path)) if os.path.exists(workshop_path) else {}
+                if existing_workshop and str(existing_workshop.get("owner_user_id", "")) not in ("", str(user_id)):
+                    raise HTTPException(status_code=403, detail="无权更新该公开模组")
+
+                source_type = str(current_library_item.get("source_type", "original") or "original")
+                source_mod_id = str(current_library_item.get("source_mod_id", "") or "")
+                parent_workshop_id = str(current_library_item.get("parent_workshop_id", "") or "")
+                if mode == "fork":
+                    source_type = "forked"
+                    source_mod_id = source_mod_id or current_library_item.get("origin_workshop_id", "")
+                    parent_workshop_id = parent_workshop_id or source_mod_id
+                elif mode == "create":
+                    source_type = "original"
+                    source_mod_id = ""
+                    parent_workshop_id = ""
+                next_version = int(existing_workshop.get("version", 0) or 0) + 1 if mode == "update" and existing_workshop else 1
+                published_at = existing_workshop.get("published_at") if mode == "update" and existing_workshop else _now_str()
+
+                workshop_record = _build_workshop_record(
+                    item_id=workshop_id,
+                    linked_library_id=library_id,
+                    owner_user_id=user_id,
                     name=req.name,
                     author=req.author,
-                    source="workshop",
+                    description=req.description,
                     content=pack_content,
+                    existing_downloads=int(existing_workshop.get("downloads", 0) or 0),
+                    existing_timestamp=existing_workshop.get("timestamp"),
+                    version=next_version,
+                    source_type=source_type,
+                    source_mod_id=source_mod_id,
+                    parent_workshop_id=parent_workshop_id,
+                    published_at=published_at,
                 )
-                validate_mod_content(pack_content, manifest)
-                data = {
-                    "id": item_id,
-                    "type": "prompt_pack",
-                    "name": req.name,
-                    "author": req.author,
-                    "description": req.description,
-                    "content": pack_content,
-                    "manifest": manifest,
-                    "downloads": 0,
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                }
+                validate_mod_content(pack_content, workshop_record.get("manifest"))
 
-                file_path = os.path.join(workshop_dir, f"{item_id}.json")
-                with open(file_path, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-            append_audit_log(user_id, "publish_workshop_mod", "ok", req.name, {"mod_id": item_id})
-            return {"status": "success", "id": item_id}
+                library_record = _build_library_record(
+                    item_id=library_id,
+                    user_id=user_id,
+                    name=req.name,
+                    description=req.description,
+                    content=pack_content,
+                    linked_workshop_id=workshop_id,
+                    visibility="public",
+                    version=next_version,
+                    source_type=source_type,
+                    source_mod_id=source_mod_id,
+                    parent_workshop_id=parent_workshop_id,
+                    published_at=published_at or _now_str(),
+                )
+
+                _write_json(_library_file_path(user_id, library_id), library_record)
+                _write_json(workshop_path, workshop_record)
+
+                st["active_mod_id"] = library_id
+                st["active_source"] = "library"
+                st["active_content_hash"] = library_record.get("manifest", {}).get("mod_id", library_id)
+                st["updated_at"] = _now_str()
+                write_user_state(user_id, st)
+
+            append_audit_log(user_id, f"publish_workshop_mod_{mode}", "ok", req.name, {"mod_id": workshop_id, "library_id": library_id})
+            return {"status": "success", "id": workshop_id, "library_id": library_id, "workshop_id": workshop_id, "mode": mode}
         except HTTPException as e:
-            append_audit_log(user_id, "publish_workshop_mod", "error", req.name, {"error": str(e.detail)})
+            append_audit_log(user_id, f"publish_workshop_mod_{mode}", "error", req.name, {"error": str(e.detail)})
             raise
 
+    @router.post("/api/workshop/publish_current")
+    def publish_current_mod(req: WorkshopPublishReq, user_id: str = get_user_id):
+        return _publish_current_mod(req, user_id, "create")
+
+    @router.post("/api/workshop/publish_create")
+    def publish_create_mod(req: WorkshopPublishReq, user_id: str = get_user_id):
+        return _publish_current_mod(req, user_id, "create")
+
+    @router.post("/api/workshop/publish_update")
+    def publish_update_mod(req: WorkshopPublishReq, user_id: str = get_user_id):
+        return _publish_current_mod(req, user_id, "update")
+
+    @router.post("/api/workshop/publish_fork")
+    def publish_fork_mod(req: WorkshopPublishReq, user_id: str = get_user_id):
+        return _publish_current_mod(req, user_id, "fork")
+
     @router.get("/api/workshop/list")
-    def get_workshop_list():
+    def get_workshop_list(user_id: str = get_user_id):
         """列出工坊中所有已发布的模组"""
         items = []
         if os.path.exists(workshop_dir):
@@ -354,7 +615,7 @@ def build_content_router(
                 if filename.endswith(".json"):
                     try:
                         with open(os.path.join(workshop_dir, filename), "r", encoding="utf-8") as f:
-                            data = json.load(f)
+                            data = _normalize_workshop_record(json.load(f))
                             items.append(
                                 {
                                     "id": data.get("id"),
@@ -364,6 +625,16 @@ def build_content_router(
                                     "description": data.get("description"),
                                     "downloads": data.get("downloads", 0),
                                     "timestamp": data.get("timestamp"),
+                                    "updated_at": data.get("updated_at", ""),
+                                    "published_at": data.get("published_at", ""),
+                                    "summary": data.get("summary", {}),
+                                    "version": data.get("version", 1),
+                                    "source_type": data.get("source_type", "original"),
+                                    "source_mod_id": data.get("source_mod_id", ""),
+                                    "parent_workshop_id": data.get("parent_workshop_id", ""),
+                                    "owner_user_id": data.get("owner_user_id", ""),
+                                    "linked_library_id": data.get("linked_library_id", ""),
+                                    "is_owned_by_current_user": str(data.get("owner_user_id", "")) == str(user_id),
                                 }
                             )
                     except Exception as e:
@@ -371,48 +642,67 @@ def build_content_router(
         return {"status": "success", "data": items}
 
     def _download_workshop_mod(item_id: str, user_id: str):
-        workshop_path = os.path.join(workshop_dir, f"{item_id}.json")
+        workshop_path = _workshop_file_path(item_id)
         if not os.path.exists(workshop_path):
             raise HTTPException(status_code=404, detail="Item not found")
 
-        with open(workshop_path, "r", encoding="utf-8") as f:
-            ws_data = json.load(f)
+        ws_data = _normalize_workshop_record(_read_json(workshop_path))
         content = ws_data.get("content", {})
         manifest = ws_data.get("manifest", {})
         validate_mod_content(content, manifest if isinstance(manifest, dict) else None)
 
         with with_user_write_lock(user_id):
+            owner_user_id = str(ws_data.get("owner_user_id", ""))
+            linked_library_id = str(ws_data.get("linked_library_id", "")).strip()
+            if owner_user_id == str(user_id) and linked_library_id:
+                owned_library_path = _library_file_path(user_id, linked_library_id)
+                if os.path.exists(owned_library_path):
+                    return linked_library_id
+
             quota = get_storage_quota_data(user_id)
             if quota["usage"]["library_items"] >= max_library_items:
                 raise HTTPException(status_code=400, detail="library 模组数量已达上限，请先清理")
             if quota["usage"]["library_bytes"] >= max_library_total_bytes:
                 raise HTTPException(status_code=400, detail="library 存储已达上限，请先清理")
 
-            lib_dir = get_user_library_dir(user_id)
-            lib_path = os.path.join(lib_dir, f"{item_id}.json")
-            shutil.copy2(workshop_path, lib_path)
+            import uuid
+
+            library_id = str(uuid.uuid4())[:8]
+            library_source_type = "downloaded"
+            source_mod_id = str(ws_data.get("id", item_id) or item_id)
+            library_record = _build_library_record(
+                item_id=library_id,
+                user_id=user_id,
+                name=ws_data.get("name") or item_id,
+                description=ws_data.get("description") or "",
+                content=content,
+                origin_workshop_id=item_id,
+                visibility="private",
+                version=1,
+                source_type=library_source_type,
+                source_mod_id=source_mod_id,
+                parent_workshop_id=source_mod_id,
+            )
+            _write_json(_library_file_path(user_id, library_id), library_record)
 
         try:
-            with open(workshop_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            data["downloads"] = data.get("downloads", 0) + 1
-            with open(workshop_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            if str(ws_data.get("owner_user_id", "")) != str(user_id):
+                ws_data["downloads"] = ws_data.get("downloads", 0) + 1
+                _write_json(workshop_path, ws_data)
         except Exception:
             pass
+        return library_id
 
     @router.post("/api/workshop/download/{item_id}")
     def download_workshop_mod(item_id: str, user_id: str = get_user_id):
         """将工坊模组下载到个人模组库"""
-        _download_workshop_mod(item_id, user_id)
+        library_id = _download_workshop_mod(item_id, user_id)
         append_audit_log(user_id, "download_workshop_mod", "ok", item_id, {})
-        return {"status": "success", "message": "模组已成功添加到您的收藏库"}
+        return {"status": "success", "message": "模组已成功添加到您的收藏库", "library_id": library_id}
 
     @router.post("/api/workshop/apply/{item_id}")
     def apply_workshop_mod(item_id: str, user_id: str = get_user_id):
-        """从工坊直接应用 (内部包含下载到库的步骤)"""
-        _download_workshop_mod(item_id, user_id)
-        return apply_from_library(item_id, user_id)
+        raise HTTPException(status_code=400, detail="模组不能在局外直接应用，请在开始新游戏时选择")
 
     @router.delete("/api/workshop/{item_id}")
     def delete_workshop_item(item_id: str, admin_session: Dict[str, Any] = require_admin):

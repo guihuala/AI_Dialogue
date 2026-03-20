@@ -88,7 +88,7 @@ export const GameSetup = ({ onBack, onStartGame, onTabChange }: GameSetupProps) 
                         <StartGameButton 
                             disabled={selectedRoommates.length !== 3} 
                             isLoading={isGameLoading} 
-                            onClick={() => onStartGame(selectedRoommates, selectedMod === 'default' ? undefined : selectedMod)} 
+                            onClick={() => onStartGame(selectedRoommates, selectedMod)} 
                         />
                     </div>
                 </div>

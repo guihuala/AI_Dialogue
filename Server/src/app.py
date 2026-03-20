@@ -138,12 +138,29 @@ app.include_router(
         get_engine=get_engine,
         get_current_roster=get_current_roster,
         get_user_saves_dir=get_user_saves_dir,
+        get_user_library_dir=get_user_library_dir,
+        with_user_write_lock=with_user_write_lock,
+        append_audit_log=append_audit_log,
+        apply_mod_content_atomic=lambda user_id, content: apply_mod_content_atomic(
+            user_id, content, normalize_roster_single_player, validate_manifest
+        ),
+        validate_mod_content=lambda content, manifest=None: validate_mod_content(
+            content, normalize_roster_single_player, validate_manifest, manifest
+        ),
+        package_mod=package_mod,
+        read_user_state=read_user_state,
+        write_user_state=write_user_state,
+        create_snapshot=create_snapshot,
+        trim_snapshots=trim_snapshots,
+        max_snapshots_keep=MAX_SNAPSHOTS_KEEP,
         clamp=_clamp,
         temp_min=TEMP_MIN,
         temp_max=TEMP_MAX,
         tokens_min=TOKENS_MIN,
         tokens_max=TOKENS_MAX,
         prompts_dir=PROMPTS_DIR,
+        default_prompts_dir=DEFAULT_PROMPTS_DIR,
+        default_events_dir=DEFAULT_EVENTS_DIR,
         prefetch_pool=PREFETCH_POOL,
     )
 )
@@ -154,11 +171,16 @@ app.include_router(
         get_engine=get_engine,
         get_user_prompts_dir=get_user_prompts_dir,
         get_user_events_dir=get_user_events_dir,
+        get_user_library_dir=get_user_library_dir,
         default_prompts_dir=DEFAULT_PROMPTS_DIR,
         default_events_dir=DEFAULT_EVENTS_DIR,
         with_user_write_lock=with_user_write_lock,
         append_audit_log=append_audit_log,
         normalize_roster_single_player=normalize_roster_single_player,
+        read_user_state=read_user_state,
+        write_user_state=write_user_state,
+        build_manifest=build_manifest,
+        workshop_dir=WORKSHOP_DIR,
         admin_auth=admin_auth,
         require_admin=Depends(admin_auth.require_admin),
     )

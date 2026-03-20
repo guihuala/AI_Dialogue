@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 class StartGameRequest(BaseModel):
     roommates: List[str] = []
+    mod_id: Optional[str] = "default"
     custom_prompts: Optional[Dict[str, str]] = None
     is_prefetch: bool = False
     save_id: str = "slot_0"
@@ -55,15 +56,97 @@ def build_game_router(
     get_engine: Callable[[str], Any],
     get_current_roster: Callable[[str], Dict[str, Any]],
     get_user_saves_dir: Callable[[str], str],
+    get_user_library_dir: Callable[[str], str],
+    with_user_write_lock: Callable[[str], Any],
+    append_audit_log: Callable[[str, str, str, str, Dict[str, Any]], None],
+    apply_mod_content_atomic: Callable[[str, dict], None],
+    validate_mod_content: Callable[[dict, Optional[dict]], Dict[str, Any]],
+    package_mod: Callable[[str], Dict[str, Dict[str, str]]],
+    read_user_state: Callable[[str], Dict[str, Any]],
+    write_user_state: Callable[[str, Dict[str, Any]], None],
+    create_snapshot: Callable[..., Dict[str, Any]],
+    trim_snapshots: Callable[..., None],
+    max_snapshots_keep: int,
     clamp: Callable[[Any, Any, Any], Any],
     temp_min: float,
     temp_max: float,
     tokens_min: int,
     tokens_max: int,
     prompts_dir: str,
+    default_prompts_dir: str,
+    default_events_dir: str,
     prefetch_pool,
 ):
     router = APIRouter()
+
+    def _now_str() -> str:
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    def _load_fs_content(base_prompts_dir: str, base_events_dir: str) -> Dict[str, Dict[str, str]]:
+        content: Dict[str, Dict[str, str]] = {"md": {}, "csv": {}}
+        if os.path.exists(base_prompts_dir):
+            for root, _, files in os.walk(base_prompts_dir):
+                for file in files:
+                    if file.endswith((".md", ".json")):
+                        rel_path = os.path.relpath(os.path.join(root, file), base_prompts_dir)
+                        with open(os.path.join(root, file), "r", encoding="utf-8") as f:
+                            content["md"][rel_path] = f.read()
+        if os.path.exists(base_events_dir):
+            for root, _, files in os.walk(base_events_dir):
+                for file in files:
+                    if file.endswith((".csv", ".json")):
+                        rel_path = os.path.relpath(os.path.join(root, file), base_events_dir)
+                        with open(os.path.join(root, file), "r", encoding="utf-8-sig") as f:
+                            content["csv"][rel_path] = f.read()
+        return content
+
+    def _reload_engine_runtime(user_id: str) -> None:
+        engine = get_engine(user_id)
+        if not engine:
+            return
+        if hasattr(engine, "director"):
+            engine.director.reload_timeline()
+        if hasattr(engine, "pm"):
+            engine.pm = type(engine.pm)(user_id)
+            if hasattr(engine, "player_name") and hasattr(engine.pm, "get_player_name"):
+                engine.player_name = engine.pm.get_player_name()
+            if hasattr(engine, "tm") and hasattr(engine.tm, "set_player_name") and hasattr(engine, "player_name"):
+                engine.tm.set_player_name(engine.player_name)
+
+    def _activate_mod_for_new_game(user_id: str, mod_id: Optional[str]) -> None:
+        selected_mod_id = str(mod_id or "default").strip() or "default"
+        with with_user_write_lock(user_id):
+            snapshot = create_snapshot(user_id, package_mod(user_id), reason=f"before_start:{selected_mod_id}")
+            trim_snapshots(user_id, keep=max_snapshots_keep)
+
+            if selected_mod_id == "default":
+                content = _load_fs_content(default_prompts_dir, default_events_dir)
+                active_source = "default"
+                active_hash = "default-v1"
+            else:
+                file_path = os.path.join(get_user_library_dir(user_id), f"{selected_mod_id}.json")
+                if not os.path.exists(file_path):
+                    raise HTTPException(status_code=404, detail="选择的模组不存在于本地库中")
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                content = data.get("content", {})
+                manifest = data.get("manifest", {})
+                validate_mod_content(content, manifest if isinstance(manifest, dict) else None)
+                active_source = "library"
+                active_hash = manifest.get("mod_id", selected_mod_id) if isinstance(manifest, dict) else selected_mod_id
+
+            apply_mod_content_atomic(user_id, content)
+
+            st = read_user_state(user_id)
+            st["active_mod_id"] = selected_mod_id
+            st["active_source"] = active_source
+            st["active_content_hash"] = active_hash
+            st["last_good_snapshot_id"] = snapshot.get("id", "")
+            st["updated_at"] = _now_str()
+            write_user_state(user_id, st)
+
+        _reload_engine_runtime(user_id)
+        append_audit_log(user_id, "activate_mod_for_new_game", "ok", selected_mod_id, {"source": active_source})
 
     @router.get("/api/game/candidates")
     def get_candidates(user_id: str = get_user_id):
@@ -92,16 +175,18 @@ def build_game_router(
         if not engine:
             raise HTTPException(status_code=500, detail="GameEngine not initialized.")
 
-        engine.reset()
-
-        selected_ids = req.roommates
-        roster = get_current_roster(user_id)
-
-        if not selected_ids:
-            all_ids = [cid for cid, info in roster.items() if not bool((info or {}).get("is_player", False))]
-            selected_ids = random.sample(all_ids, min(3, len(all_ids)))
-
         try:
+            _activate_mod_for_new_game(user_id, req.mod_id)
+            engine = get_engine(user_id)
+            engine.reset()
+
+            selected_ids = req.roommates
+            roster = get_current_roster(user_id)
+
+            if not selected_ids:
+                all_ids = [cid for cid, info in roster.items() if not bool((info or {}).get("is_player", False))]
+                selected_ids = random.sample(all_ids, min(3, len(all_ids)))
+
             if engine and hasattr(engine, "mm"):
                 engine.mm.current_save_id = req.save_id
             runtime_tmp = clamp(float(getattr(engine.llm, "temperature", 0.7)), temp_min, temp_max)

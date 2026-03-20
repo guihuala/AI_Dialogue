@@ -18,6 +18,8 @@ interface EditorModalsProps {
     onRemoveCsvRow: (index: number) => void;
     onGenerateSkillPrompt?: (concept: string) => Promise<string>;
     parsedCsvHeaders: string[];
+    publishIntent?: 'create' | 'update' | 'fork';
+    currentEditingMod?: any;
 }
 
 export const EditorModals = ({
@@ -35,7 +37,9 @@ export const EditorModals = ({
     onRemoveRosterItem,
     onRemoveCsvRow,
     onGenerateSkillPrompt,
-    parsedCsvHeaders
+    parsedCsvHeaders,
+    publishIntent = 'create',
+    currentEditingMod
 }: EditorModalsProps) => {
     const [isGenerating, setIsGenerating] = useState(false);
     const [isPublishing, setIsPublishing] = useState(false);
@@ -54,6 +58,18 @@ export const EditorModals = ({
         }
     };
 
+    const publishActionLabel = publishIntent === 'update'
+        ? '更新公开版本'
+        : publishIntent === 'fork'
+            ? '发布为派生作品'
+            : '首次公开';
+
+    const publishDescription = publishIntent === 'update'
+        ? '你正在更新自己已经公开的模组。本次发布会保留同一个工坊作品，并递增版本号。'
+        : publishIntent === 'fork'
+            ? '你当前编辑的是下载副本。本次发布会创建一个新的派生作品，不会覆盖原作者的公共模组。'
+            : '你当前编辑的是私有模组。本次发布会把它首次公开到工坊，并与本地模组保持同步。';
+
     return (
         <>
             {/* Modern Publish Modal */}
@@ -63,15 +79,33 @@ export const EditorModals = ({
                         <div className="absolute top-0 left-0 w-full h-2 bg-[var(--color-cyan-main)]" />
 
                         <div className="overflow-y-auto pr-4 custom-scrollbar">
-                            <div className="flex items-center mb-10">
-                                <div className="w-16 h-16 rounded-2xl bg-[var(--color-cyan-light)] text-[var(--color-cyan-main)] flex items-center justify-center mr-6 shrink-0 shadow-lg border-2 border-white">
-                                    <UploadCloud size={36} />
+                                <div className="flex items-center mb-10">
+                                    <div className="w-16 h-16 rounded-2xl bg-[var(--color-cyan-light)] text-[var(--color-cyan-main)] flex items-center justify-center mr-6 shrink-0 shadow-lg border-2 border-white">
+                                        <UploadCloud size={36} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-4xl font-black text-[var(--color-cyan-dark)] tracking-tighter leading-none">{publishActionLabel}</h3>
+                                        <div className="mt-2 text-[11px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">
+                                            当前模组：{currentEditingMod?.name || publishMetadata.name || '未命名模组'}
+                                        </div>
+                                    </div>
                                 </div>
-                                <h3 className="text-4xl font-black text-[var(--color-cyan-dark)] tracking-tighter leading-none">发布</h3>
-                            </div>
 
                             <div className="space-y-10">
                                 <div className="bg-[var(--color-cyan-light)]/20 border-2 border-[var(--color-cyan-main)]/10 rounded-2xl p-4">
+                                    <div className="text-[10px] text-slate-500 font-bold mb-3 leading-relaxed">
+                                        {publishDescription}
+                                    </div>
+                                    <div className="mb-3 flex flex-wrap gap-2">
+                                        <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-white border border-[var(--color-cyan-main)]/15 text-[var(--color-cyan-main)]">
+                                            {publishIntent === 'update' ? `当前版本 v${currentEditingMod?.version || 1}` : publishIntent === 'fork' ? '将创建新作品' : '首次公开'}
+                                        </span>
+                                        {publishIntent === 'fork' && currentEditingMod?.source_mod_id && (
+                                            <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-50 border border-amber-200 text-amber-700">
+                                                来源作品：{currentEditingMod.source_mod_id}
+                                            </span>
+                                        )}
+                                    </div>
                                     <div className="flex items-center justify-between gap-3">
                                         <span className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">
                                             发布前校验
@@ -167,7 +201,11 @@ export const EditorModals = ({
                                             if (!validateRes?.report?.ok) {
                                                 return;
                                             }
-                                            const res = await gameApi.publishCurrentMod(publishMetadata);
+                                            const res = publishIntent === 'update'
+                                                ? await gameApi.publishUpdateMod(publishMetadata)
+                                                : publishIntent === 'fork'
+                                                    ? await gameApi.publishForkMod(publishMetadata)
+                                                    : await gameApi.publishCreateMod(publishMetadata);
                                             if (res.status === 'success') {
                                                 setShowPublishModal(false);
                                                 setPublishMetadata({ name: '', author: '', description: '' });
@@ -184,7 +222,7 @@ export const EditorModals = ({
                                     className="flex-[1.5] py-6 bg-[var(--color-cyan-dark)] disabled:opacity-50 text-white rounded-[2.5rem] font-black hover:bg-[var(--color-cyan-main)] transition-all shadow-2xl shadow-cyan-900/40 uppercase tracking-widest text-xs flex items-center justify-center gap-2"
                                 >
                                     {isPublishing ? <Loader2 size={16} className="animate-spin" /> : null}
-                                    确认上线
+                                    {publishIntent === 'update' ? '确认更新公开版本' : publishIntent === 'fork' ? '确认发布派生作品' : '确认首次公开'}
                                 </button>
                             </div>
                         </div>

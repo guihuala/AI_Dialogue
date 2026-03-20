@@ -232,6 +232,66 @@ class GameEngine:
         }
         return normalized
 
+    def _sanitize_dialogue_sequence(self, sequence, player_name: str):
+        if isinstance(sequence, dict):
+            sequence = [sequence]
+        if not isinstance(sequence, list):
+            return []
+
+        cleaned = []
+        for item in sequence:
+            if not isinstance(item, dict):
+                continue
+
+            lower_keys = {str(k).strip().lower() for k in item.keys()}
+            # 过滤只包含注释/占位字段的脏对象
+            if lower_keys and all(
+                key.startswith("_note") or key.startswith("_comment") or "placeholder" in key
+                for key in lower_keys
+            ):
+                continue
+
+            speaker = str(item.get("speaker", "") or "").strip()
+            content = str(item.get("content", "") or "").strip()
+            mood = str(item.get("mood", "") or "").strip()
+
+            if not content:
+                # 从非标准字段中尽量抢救文本内容
+                candidate_pairs = []
+                for k, v in item.items():
+                    key = str(k or "").strip()
+                    if key in {"speaker", "content", "mood"}:
+                        continue
+                    if key.startswith("_") or "placeholder" in key.lower():
+                        continue
+                    val = str(v or "").strip()
+                    if val:
+                        candidate_pairs.append((len(val), val))
+                    elif key:
+                        candidate_pairs.append((len(key), key))
+                if candidate_pairs:
+                    content = max(candidate_pairs, key=lambda x: x[0])[1].strip()
+
+            if not content:
+                continue
+
+            if not speaker:
+                if content.startswith("(内心独白)") or content.startswith("（内心独白）") or "内心独白" in content:
+                    speaker = player_name
+                else:
+                    speaker = "系统提示"
+
+            if not mood:
+                mood = "neutral"
+
+            cleaned.append({
+                "speaker": speaker,
+                "content": content,
+                "mood": mood,
+            })
+
+        return cleaned
+
     def _normalize_options(self, raw_options, next_evt=None):
         """
         容错解析 next_options，处理模型把多个选项粘成一个字符串的情况。
@@ -546,6 +606,123 @@ class GameEngine:
         lines.append("- 演出要求：不要只复述事件描述，要让事件被当前关系状态和情绪局势重新染色。")
         return "\n".join(lines)
 
+    def _trim_prompt_block(self, text: str, max_lines: int = 8, max_chars: int = 700) -> str:
+        raw = str(text or "").strip()
+        if not raw:
+            return ""
+        lines = [line.rstrip() for line in raw.splitlines() if line.strip()]
+        if len(lines) > max_lines:
+            lines = lines[:max_lines]
+        trimmed = "\n".join(lines)
+        if len(trimmed) > max_chars:
+            trimmed = trimmed[:max_chars].rstrip() + "…"
+        return trimmed
+
+    def _build_wechat_summary(self, wechat_data_dict, compact: bool = False) -> str:
+        lines = []
+        items = list((wechat_data_dict or {}).items())
+        if compact:
+            items = items[-2:]
+        for chat_name, messages in items:
+            if not messages:
+                continue
+            recent_msgs = messages[-1:] if compact else messages[-2:]
+            for msg in recent_msgs:
+                msg_content = msg[0] if msg[0] else str(msg[1]).replace("**", "")
+                lines.append(f"- {chat_name}：{msg_content}")
+        if not lines:
+            return ""
+        return "【近期微信动态】\n" + "\n".join(lines)
+
+    def _summarize_block_sizes(self, blocks):
+        summary = []
+        for idx, block in enumerate(blocks, 1):
+            if isinstance(block, tuple):
+                label, content = block
+            else:
+                label, content = f"block_{idx}", block
+            text = str(content or "").strip()
+            if not text:
+                continue
+            summary.append({
+                "label": label,
+                "chars": len(text),
+                "lines": len(text.splitlines()),
+            })
+        return summary
+
+    def _build_user_prompt_sections(
+        self,
+        *,
+        event_context: str,
+        recent_opt_hint: str,
+        player_name: str,
+        action_text: str,
+        reactions_str: str,
+        event_story_brief: str,
+        narrative_summary: str,
+        safe_keys: str,
+        wechat_summary: str,
+        san,
+        money,
+        author_note: str,
+        prompt_budget: str,
+    ) -> dict:
+        dynamic_blocks = [
+            ("event_context", f"{event_context}{recent_opt_hint}"),
+            ("player_role", f"【玩家角色】{player_name}"),
+            ("player_intent", f"【玩家意图】: {action_text}{reactions_str}"),
+            ("current_status", f"[状态] SAN:{san}, 资金:{money}。"),
+        ]
+        repeated_blocks = [
+            ("event_story_brief", event_story_brief),
+            ("narrative_summary", narrative_summary),
+        ]
+        static_blocks = [
+            ("author_note", author_note),
+        ]
+        trimmable_blocks = []
+        if safe_keys and prompt_budget == "full":
+            trimmable_blocks.append(("wechat_contacts", f"【现有微信通讯录】{safe_keys}"))
+        if wechat_summary:
+            trimmable_blocks.append(("wechat_summary", wechat_summary))
+        return {
+            "static_blocks": [(k, v) for k, v in static_blocks if str(v).strip()],
+            "repeated_blocks": [(k, v) for k, v in repeated_blocks if str(v).strip()],
+            "dynamic_blocks": [(k, v) for k, v in dynamic_blocks if str(v).strip()],
+            "trimmable_blocks": [(k, v) for k, v in trimmable_blocks if str(v).strip()],
+        }
+
+    def _compose_prompt_from_sections(self, sections: dict) -> str:
+        ordered_keys = ["dynamic_blocks", "repeated_blocks", "trimmable_blocks", "static_blocks"]
+        chunks = []
+        for key in ordered_keys:
+            for _, content in sections.get(key, []):
+                text = str(content or "").strip()
+                if text:
+                    chunks.append(text)
+        return "\n\n".join(chunks)
+
+    def _build_prompt_diagnostics(self, system_bundle: dict, user_sections: dict, sys_prm: str, user_prm: str) -> dict:
+        return {
+            "system": {
+                "static_blocks": self._summarize_block_sizes(system_bundle.get("static_blocks", [])),
+                "repeated_blocks": self._summarize_block_sizes(system_bundle.get("repeated_blocks", [])),
+                "dynamic_blocks": self._summarize_block_sizes(system_bundle.get("dynamic_blocks", [])),
+                "trimmable_blocks": self._summarize_block_sizes(system_bundle.get("trimmable_blocks", [])),
+                "total_chars": len(sys_prm),
+                "total_lines": len(sys_prm.splitlines()),
+            },
+            "user": {
+                "static_blocks": self._summarize_block_sizes(user_sections.get("static_blocks", [])),
+                "repeated_blocks": self._summarize_block_sizes(user_sections.get("repeated_blocks", [])),
+                "dynamic_blocks": self._summarize_block_sizes(user_sections.get("dynamic_blocks", [])),
+                "trimmable_blocks": self._summarize_block_sizes(user_sections.get("trimmable_blocks", [])),
+                "total_chars": len(user_prm),
+                "total_lines": len(user_prm.splitlines()),
+            },
+        }
+
     def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, hygiene, reputation, arg_count, chapter, turn, affinity, wechat_data_dict, is_prefetch=False, custom_prompts=None):
         turn_started_at = time.perf_counter()
         timings = {}
@@ -836,6 +1013,7 @@ class GameEngine:
             )
 
         lore_started_at = time.perf_counter()
+        prompt_budget = "full" if self.latency_mode == "story" else "compact"
         try:
             relevant_docs = self.mm.vector_store.search(f"{next_evt.name} {action_text}", n_results=6)
             valid_lores = []
@@ -844,20 +1022,13 @@ class GameEngine:
                 content = d.get('content', '')
                 if "语录" in content and any(f"[{c}" in content for c in active_plus_player):
                     valid_lores.append(content)
-            lore_str = "\n".join(valid_lores[:3])
+            lore_limit = 3 if prompt_budget == "full" else 2
+            lore_str = "\n".join(valid_lores[:lore_limit])
         except: 
             lore_str = ""
         mark_timing("lore_search", lore_started_at)
 
-        wechat_summary = "【近期微信动态】\n"
-        has_recent_wechat = False
-        for chat_name, messages in wechat_data_dict.items():
-            if messages:
-                last_msg = messages[-1]
-                msg_content = last_msg[0] if last_msg[0] else last_msg[1].replace("**", "")
-                wechat_summary += f"- 在 {chat_name} 中，最后消息：“{msg_content}”。\n"
-                has_recent_wechat = True
-        if not has_recent_wechat: wechat_summary += "无\n"
+        wechat_summary = self._build_wechat_summary(wechat_data_dict, compact=(prompt_budget == "compact"))
 
         game_context = {
             "chapter": chapter,
@@ -867,11 +1038,13 @@ class GameEngine:
             "active_chars": selected_chars,
             "player_name": player_name,
             "rag_lore": lore_str,
-            "custom_prompts": custom_prompts
+            "custom_prompts": custom_prompts,
+            "prompt_budget": prompt_budget,
         }
 
         prompt_started_at = time.perf_counter()
-        sys_prm = self.pm.get_main_system_prompt(game_context)
+        system_prompt_bundle = self.pm.get_main_system_prompt_bundle(game_context)
+        sys_prm = system_prompt_bundle.get("final_prompt", "")
         safe_keys = ", ".join([str(k) for k in wechat_data_dict.keys()])
         narrative_summary = ""
         if hasattr(self, "narrative_state_mgr"):
@@ -889,6 +1062,9 @@ class GameEngine:
             turn=turn,
             is_new_event_entry=is_new_event_entry,
         )
+        if prompt_budget == "compact":
+            narrative_summary = self._trim_prompt_block(narrative_summary, max_lines=7, max_chars=520)
+            event_story_brief = self._trim_prompt_block(event_story_brief, max_lines=7, max_chars=520)
         mark_timing("prompt_build", prompt_started_at)
 
         # ========================================================
@@ -964,11 +1140,26 @@ class GameEngine:
         if recent_opts:
             recent_opt_hint = "\n【上一轮选项（避免复读）】" + " | ".join(recent_opts[-1])
 
-        user_prm = (
-            f"{event_context}{recent_opt_hint}\n\n【玩家角色】{player_name}\n\n【玩家意图】: {action_text}{reactions_str}\n\n"
-            f"{event_story_brief}\n\n{narrative_summary}\n\n【现有微信通讯录】: {safe_keys}\n{wechat_summary}\n[状态] SAN:{san}, 资金:{money}。\n\n"
-            f"{self.pm.get_main_author_note({'player_name': player_name})}"
+        author_note = self.pm.get_main_author_note(
+            {"player_name": player_name},
+            compact=(prompt_budget == "compact"),
         )
+        user_prompt_sections = self._build_user_prompt_sections(
+            event_context=event_context,
+            recent_opt_hint=recent_opt_hint,
+            player_name=player_name,
+            action_text=action_text,
+            reactions_str=reactions_str,
+            event_story_brief=event_story_brief,
+            narrative_summary=narrative_summary,
+            safe_keys=safe_keys,
+            wechat_summary=wechat_summary,
+            san=san,
+            money=money,
+            author_note=author_note,
+            prompt_budget=prompt_budget,
+        )
+        user_prm = self._compose_prompt_from_sections(user_prompt_sections)
 
         try:
             if getattr(next_evt, 'is_cg', False):
@@ -1083,6 +1274,11 @@ class GameEngine:
                         parsed = self.parse_and_repair_json(json.dumps({"error": safe_err}, ensure_ascii=False))
                         parsed = self._normalize_parsed_payload(parsed)
                         res_text = json.dumps(parsed, ensure_ascii=False)
+
+            parsed["dialogue_sequence"] = self._sanitize_dialogue_sequence(
+                parsed.get("dialogue_sequence", []),
+                player_name,
+            )
 
             # 新事件开场时，补充主角视角导语，避免玩家“直接进入角色台词”产生割裂感。
             if is_new_event_entry and not getattr(next_evt, 'is_cg', False):
@@ -1353,10 +1549,23 @@ class GameEngine:
             }
             timings["total"] = round(time.perf_counter() - turn_started_at, 4)
             if self.profile_turns:
+                prompt_diagnostics = self._build_prompt_diagnostics(
+                    system_prompt_bundle,
+                    user_prompt_sections,
+                    sys_prm,
+                    user_prm,
+                )
+                result["prompt_diagnostics"] = prompt_diagnostics
                 result["timings"] = timings
                 print(
                     "[TURN PROFILE] "
                     + " | ".join(f"{k}={v}s" for k, v in timings.items()),
+                    flush=True,
+                )
+                print(
+                    "[PROMPT SIZE] "
+                    f"system_chars={prompt_diagnostics['system']['total_chars']} | "
+                    f"user_chars={prompt_diagnostics['user']['total_chars']}",
                     flush=True,
                 )
             if self.debug_turn_payload:

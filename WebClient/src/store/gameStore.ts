@@ -99,10 +99,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   startGame: async (roommates = [], modId?: string) => {
     set({ isLoading: true, pendingChoice: null });
     try {
-      if (modId) {
-        await gameApi.applyWorkshopMod(modId);
-      }
-      const data = await gameApi.startGame(roommates, undefined, 'slot_0');
+      const data = await gameApi.startGame(roommates, modId || 'default', undefined, 'slot_0');
       set({
         currentSaveId: 'slot_0',
         isPlaying: true,

@@ -4,9 +4,14 @@ interface EditorHeaderProps {
     sidebarCollapsed: boolean;
     setSidebarCollapsed: (v: boolean) => void;
     selectedFile: { type: 'md' | 'csv', name: string } | null;
+    activeSourceLabel?: string;
+    activeModLabel?: string;
+    contextHint?: string;
     editMode: 'visual' | 'code';
     setEditMode: (v: 'visual' | 'code') => void;
     isSaving: boolean;
+    canEdit?: boolean;
+    canPublish?: boolean;
     onSave: () => void;
     onPublish: () => void;
     onShowGuide: () => void;
@@ -16,9 +21,14 @@ export const EditorHeader = ({
     sidebarCollapsed,
     setSidebarCollapsed,
     selectedFile,
+    activeSourceLabel,
+    activeModLabel,
+    contextHint,
     editMode,
     setEditMode,
     isSaving,
+    canEdit = true,
+    canPublish = true,
     onSave,
     onPublish,
     onShowGuide
@@ -41,6 +51,25 @@ export const EditorHeader = ({
                         <Sparkles size={10} className="text-[var(--color-yellow-main)]" />
                         <span>内容中枢</span>
                     </div>
+                    {(activeSourceLabel || activeModLabel || contextHint) && (
+                        <div className="mt-3 flex flex-wrap gap-2 items-center">
+                            {activeSourceLabel && (
+                                <span className="px-2 py-1 rounded-full bg-white/80 border border-[var(--color-cyan-main)]/15 text-[10px] font-black text-[var(--color-cyan-dark)]">
+                                    当前来源：{activeSourceLabel}
+                                </span>
+                            )}
+                            {activeModLabel && (
+                                <span className="px-2 py-1 rounded-full bg-[var(--color-cyan-light)]/70 border border-[var(--color-cyan-main)]/15 text-[10px] font-black text-[var(--color-cyan-main)]">
+                                    当前模组：{activeModLabel}
+                                </span>
+                            )}
+                            {contextHint && (
+                                <span className="text-[10px] font-bold text-[var(--color-cyan-dark)]/55">
+                                    {contextHint}
+                                </span>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -70,6 +99,7 @@ export const EditorHeader = ({
                 </button>
                 <button
                     onClick={onPublish}
+                    disabled={!canPublish}
                     className="flex items-center px-8 py-4 bg-[var(--color-yellow-main)] hover:bg-[var(--color-yellow-light)] text-[var(--color-cyan-dark)] rounded-3xl font-black transition-all text-xs shadow-xl shadow-yellow-900/10 active:scale-95 group"
                 >
                     <UploadCloud size={20} className="mr-3 group-hover:-translate-y-1 transition-transform" />
@@ -77,7 +107,7 @@ export const EditorHeader = ({
                 </button>
                 <button
                     onClick={onSave}
-                    disabled={isSaving || !selectedFile}
+                    disabled={isSaving || !selectedFile || !canEdit}
                     className="flex items-center px-10 py-4 bg-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-main)] text-white rounded-3xl font-black transition-all shadow-2xl shadow-cyan-900/20 text-xs active:scale-95 disabled:opacity-20 flex-shrink-0"
                 >
                     <Save size={20} className="mr-3 text-[var(--color-cyan-main)]" />

@@ -185,6 +185,8 @@ def read_user_state(user_id: str) -> Dict[str, Any]:
     return {
         "active_mod_id": "default",
         "active_source": "default",
+        "editor_mod_id": "default",
+        "editor_source": "default",
         "active_content_hash": "",
         "last_good_snapshot_id": "",
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -195,4 +197,3 @@ def write_user_state(user_id: str, state: Dict[str, Any]) -> None:
     p = get_user_state_path(user_id)
     with open(p, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
-

@@ -26,6 +26,9 @@ export const PromptEditor = () => {
     const [stableRoster, setStableRoster] = useState<any>(null);
     const [showExplorer, setShowExplorer] = useState(true);
     const [eventFilter, setEventFilter] = useState<{ chapter?: string, type?: string } | undefined>(undefined);
+    const [userState, setUserState] = useState<any>(null);
+    const [libraryMods, setLibraryMods] = useState<any[]>([]);
+    const [workshopMods, setWorkshopMods] = useState<any[]>([]);
 
     const [message, setMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -60,11 +63,19 @@ export const PromptEditor = () => {
 
     const fetchFiles = async () => {
         try {
-            const res = await gameApi.getAdminFiles();
-            if (res.status === 'success') {
-                setFiles({ md: res.md || [], csv: res.csv || [] });
+            const [filesRes, stateRes, libraryRes, workshopRes] = await Promise.all([
+                gameApi.getAdminFiles(),
+                gameApi.getUserState(),
+                gameApi.getLibraryList(),
+                gameApi.getWorkshopList()
+            ]);
+            if (filesRes.status === 'success') {
+                setFiles({ md: filesRes.md || [], csv: filesRes.csv || [] });
+                setUserState(stateRes?.data || null);
+                setLibraryMods(libraryRes?.data || []);
+                setWorkshopMods(workshopRes?.data || []);
                 if (activeCategory === 'char' && !selectedFile) {
-                    const roster = res.md.find((f: string) => f.endsWith('roster.json'));
+                    const roster = filesRes.md.find((f: string) => f.endsWith('roster.json'));
                     if (roster) {
                         setSelectedFile({ type: 'md', name: roster });
                         setShowExplorer(false);
@@ -159,6 +170,11 @@ export const PromptEditor = () => {
 
     const handleSave = async (contentToSave = fileContent) => {
         if (!selectedFile) return;
+        if (String(userState?.editor_source || 'default') !== 'library') {
+            setMessage('默认模组为只读，请先另存到本地模组库后再编辑');
+            setTimeout(() => setMessage(''), 3000);
+            return;
+        }
         setIsSaving(true);
         try {
             await gameApi.saveAdminFile(selectedFile.type, selectedFile.name, contentToSave);
@@ -515,6 +531,60 @@ ${data.content}`;
         setShowExplorer(false);
     };
 
+    const activeSourceLabel = useMemo(() => {
+        const source = String(userState?.editor_source || 'default');
+        if (source === 'library') return '个人模组库';
+        if (source === 'workshop') return '创意工坊';
+        return '默认内容';
+    }, [userState]);
+
+    const activeModLabel = useMemo(() => {
+        const source = String(userState?.editor_source || 'default');
+        const modId = String(userState?.editor_mod_id || 'default');
+        if (!modId || modId === 'default') return '默认内容';
+        const pool = source === 'workshop' ? workshopMods : libraryMods;
+        const matched = pool.find((item: any) => String(item.id) === modId);
+        return matched?.name || modId;
+    }, [userState, libraryMods, workshopMods]);
+
+    const contextHint = useMemo(() => {
+        if (String(userState?.editor_source || 'default') !== 'library') {
+            return '当前正在查看默认模组。默认模组为只读，若想微调，请先在模组中心另存为本地模组后再进入编辑。';
+        }
+        return '当前正在编辑本地模组。公开后的模组仍保留在你的本地库中，再次发布会同步更新工坊版本。';
+    }, []);
+
+    const canEditCurrentMod = useMemo(() => {
+        return String(userState?.editor_source || 'default') === 'library';
+    }, [userState]);
+
+    const currentEditingMod = useMemo(() => {
+        const modId = String(userState?.editor_mod_id || 'default');
+        if (!modId || modId === 'default') return null;
+        return libraryMods.find((item: any) => String(item.id) === modId) || null;
+    }, [userState, libraryMods]);
+
+    const publishIntent = useMemo<'create' | 'update' | 'fork'>(() => {
+        if (!currentEditingMod) return 'create';
+        if (currentEditingMod.linked_workshop_id && currentEditingMod.visibility === 'public') {
+            return 'update';
+        }
+        if (currentEditingMod.source_type === 'downloaded') {
+            return 'fork';
+        }
+        return 'create';
+    }, [currentEditingMod]);
+
+    const openPublishModal = () => {
+        if (!canEditCurrentMod) return;
+        setPublishMetadata({
+            name: currentEditingMod?.name || '我的自定义模组',
+            author: currentEditingMod?.author || '佚名',
+            description: currentEditingMod?.description || '包含了我修改过的世界观和角色设定。'
+        });
+        setShowPublishModal(true);
+    };
+
     return (
         <>
         <div
@@ -524,11 +594,16 @@ ${data.content}`;
                 sidebarCollapsed={sidebarCollapsed}
                 setSidebarCollapsed={setSidebarCollapsed}
                 selectedFile={selectedFile}
+                activeSourceLabel={activeSourceLabel}
+                activeModLabel={activeModLabel}
+                contextHint={contextHint}
                 editMode={editMode}
                 setEditMode={setEditMode}
                 isSaving={isSaving}
+                canEdit={canEditCurrentMod}
+                canPublish={canEditCurrentMod}
                 onSave={() => handleSave()}
-                onPublish={() => setShowPublishModal(true)}
+                onPublish={openPublishModal}
                 onShowGuide={() => setShowGuide(true)}
             />
 
@@ -648,6 +723,8 @@ ${data.content}`;
                 onRemoveCsvRow={removeCsvRow}
                 onGenerateSkillPrompt={handleGenerateSkillPrompt}
                 parsedCsvHeaders={parsedCsv?.headers || []}
+                publishIntent={publishIntent}
+                currentEditingMod={currentEditingMod}
             />
 
             <EditorGuide

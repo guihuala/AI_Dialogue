@@ -19,9 +19,10 @@ apiClient.interceptors.request.use((config) => {
 });
 
 export const gameApi = {
-  startGame: async (roommates: string[] = [], customPrompts?: Record<string, string>, saveId: string = "slot_0") => {
+  startGame: async (roommates: string[] = [], modId: string = "default", customPrompts?: Record<string, string>, saveId: string = "slot_0") => {
     const res = await apiClient.post(`/game/start`, { 
         roommates,
+        mod_id: modId,
         custom_prompts: customPrompts,
         save_id: saveId
     });
@@ -99,6 +100,16 @@ export const gameApi = {
     return res.data;
   },
 
+  selectLibraryItemForEdit: async (itemId: string) => {
+    const res = await apiClient.post(`/library/edit/${itemId}`);
+    return res.data;
+  },
+
+  selectDefaultForEdit: async () => {
+    const res = await apiClient.post(`/editor/default`);
+    return res.data;
+  },
+
   applyFromLibrary: async (itemId: string) => {
     const res = await apiClient.post(`/library/apply/${itemId}`);
     return res.data;
@@ -157,6 +168,21 @@ export const gameApi = {
 
   publishCurrentMod: async (metadata: { name: string, author: string, description: string }) => {
     const res = await apiClient.post(`/workshop/publish_current`, metadata);
+    return res.data;
+  },
+
+  publishCreateMod: async (metadata: { name: string, author: string, description: string }) => {
+    const res = await apiClient.post(`/workshop/publish_create`, metadata);
+    return res.data;
+  },
+
+  publishUpdateMod: async (metadata: { name: string, author: string, description: string }) => {
+    const res = await apiClient.post(`/workshop/publish_update`, metadata);
+    return res.data;
+  },
+
+  publishForkMod: async (metadata: { name: string, author: string, description: string }) => {
+    const res = await apiClient.post(`/workshop/publish_fork`, metadata);
     return res.data;
   },
 
