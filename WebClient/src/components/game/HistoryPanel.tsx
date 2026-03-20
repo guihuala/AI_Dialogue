@@ -5,6 +5,7 @@ interface HistoryItem {
   turn: number;
   text: string;
   rawJson?: string;
+  narrativeState?: Record<string, any>;
 }
 
 interface HistoryPanelProps {
@@ -66,6 +67,81 @@ export const HistoryPanel = ({
                 <pre className="mt-2 text-[11px] leading-relaxed text-cyan-100/95 bg-black/40 border border-white/10 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
                   {h.rawJson}
                 </pre>
+              </details>
+            )}
+            {h.narrativeState && Object.keys(h.narrativeState).length > 0 && (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-[10px] tracking-widest uppercase font-black text-emerald-300/90">
+                  查看剧情状态摘要
+                </summary>
+                <div className="mt-2 flex justify-end">
+                  <button
+                    onClick={() => navigator.clipboard.writeText(JSON.stringify(h.narrativeState || {}, null, 2))}
+                    className="text-[10px] px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/40 transition-colors font-black tracking-widest uppercase"
+                  >
+                    复制状态
+                  </button>
+                </div>
+                <div className="mt-2 bg-black/40 border border-white/10 rounded-lg p-3 space-y-3">
+                  {Array.isArray(h.narrativeState.player_arc) && h.narrativeState.player_arc.length > 0 && (
+                    <div>
+                      <div className="text-[10px] font-black tracking-widest uppercase text-emerald-300/80 mb-1">主角弧光</div>
+                      <div className="space-y-1">
+                        {h.narrativeState.player_arc.map((item: string, idx: number) => (
+                          <div key={idx} className="text-[11px] text-white/90 leading-relaxed">- {item}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {h.narrativeState.room_tension && (
+                    <div>
+                      <div className="text-[10px] font-black tracking-widest uppercase text-emerald-300/80 mb-1">宿舍局势</div>
+                      <div className="text-[11px] text-white/90 leading-relaxed">{h.narrativeState.room_tension}</div>
+                    </div>
+                  )}
+                  {Array.isArray(h.narrativeState.recent_impressions) && h.narrativeState.recent_impressions.length > 0 && (
+                    <div>
+                      <div className="text-[10px] font-black tracking-widest uppercase text-emerald-300/80 mb-1">最近形成的印象</div>
+                      <div className="space-y-1">
+                        {h.narrativeState.recent_impressions.map((item: string, idx: number) => (
+                          <div key={idx} className="text-[11px] text-white/90 leading-relaxed">- {item}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {Array.isArray(h.narrativeState.active_threads) && h.narrativeState.active_threads.length > 0 && (
+                    <div>
+                      <div className="text-[10px] font-black tracking-widest uppercase text-emerald-300/80 mb-1">发酵中的线头</div>
+                      <div className="space-y-1">
+                        {h.narrativeState.active_threads.map((item: string, idx: number) => (
+                          <div key={idx} className="text-[11px] text-white/90 leading-relaxed">- {item}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {h.narrativeState.mood_flags && Object.keys(h.narrativeState.mood_flags).length > 0 && (
+                    <div>
+                      <div className="text-[10px] font-black tracking-widest uppercase text-emerald-300/80 mb-1">情绪标签</div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {Object.entries(h.narrativeState.mood_flags).map(([name, mood]) => (
+                          <div key={name} className="text-[11px] text-white/90 leading-relaxed">
+                            <span className="text-emerald-200 font-black">{name}</span>
+                            <span className="text-white/70"> : </span>
+                            <span>{String(mood)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <details className="pt-1">
+                    <summary className="cursor-pointer text-[10px] tracking-widest uppercase font-black text-white/45">
+                      查看完整状态 JSON
+                    </summary>
+                    <pre className="mt-2 text-[11px] leading-relaxed text-emerald-100/95 bg-black/30 border border-white/10 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
+                      {JSON.stringify(h.narrativeState, null, 2)}
+                    </pre>
+                  </details>
+                </div>
               </details>
             )}
           </div>

@@ -23,7 +23,7 @@ export interface SystemSettings {
     max_tokens: number;
     typewriter_speed: number;
     latency_mode: 'balanced' | 'fast' | 'story';
-    dialogue_mode: 'single_dm' | 'npc_dm';
+    dialogue_mode: 'single_dm' | 'npc_dm' | 'hybrid' | 'tree_only';
     stability_mode: 'stable' | 'balanced';
 }
 

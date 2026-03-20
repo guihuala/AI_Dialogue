@@ -18,6 +18,7 @@ from src.core.agent_system import NPCAgent
 from src.core.tool_manager import ToolManager
 from src.core.prefetch_manager import PrefetchManager
 from src.core.script_runner import ScriptRunner
+from src.core.narrative_state_manager import NarrativeStateManager
 from src.core.config import (
     DATA_ROOT, CHROMA_DB_PATH, PROFILE_PATH, 
     get_user_chroma_path, get_user_saves_dir
@@ -53,18 +54,23 @@ class GameEngine:
         self.player_name = default_player_name
         if hasattr(self.tm, "set_player_name"):
             self.tm.set_player_name(self.player_name)
+        self.narrative_state_mgr = NarrativeStateManager()
         self.prefetch_mgr = PrefetchManager()
         self.event_completion_count = 0
         self.recent_event_ids = []
         self.prefetch_futures = {}
         self.event_repeat_state = {}
         self.recent_options_by_event = {}
+        self.debug_turn_payload = str(os.getenv("DEBUG_TURN_PAYLOAD", "")).strip().lower() in {"1", "true", "yes", "on"}
+        self.profile_turns = str(os.getenv("PROFILE_TURNS", "")).strip().lower() in {"1", "true", "yes", "on"}
 
     def reset(self):
         self.director.reset()
         self.player_name = self.pm.get_player_name() if hasattr(self.pm, "get_player_name") else self.player_name
         if hasattr(self.tm, "set_player_name"):
             self.tm.set_player_name(self.player_name)
+        if hasattr(self, "narrative_state_mgr"):
+            self.narrative_state_mgr.reset()
         self.event_completion_count = 0
         self.recent_event_ids = []
         self.event_repeat_state = {}
@@ -287,6 +293,7 @@ class GameEngine:
         if not isinstance(options, list):
             options = []
         options = [str(o).strip() for o in options if str(o).strip()]
+        original_count = len(options)
 
         def norm(txt):
             return re.sub(r'[\s\W_]+', '', str(txt or "").lower())
@@ -308,38 +315,38 @@ class GameEngine:
             diversified.append(opt)
             seen.add(n)
 
-        fallback_pool = []
-        if next_evt is not None:
-            raw_evt_options = getattr(next_evt, "options", {})
-            if isinstance(raw_evt_options, dict):
-                fallback_pool.extend([str(v).strip() for v in raw_evt_options.values() if str(v).strip()])
-        fallback_pool.extend([
-            "推动当事人给出明确方案",
-            "追问关键细节与真实顾虑",
-            "提出折中规则先试行一晚",
-            "让全员表态并记录执行",
-            "暂时退一步观察后续变化"
-        ])
-
-        for cand in fallback_pool:
-            n = norm(cand)
-            if not n or n in seen or n in recent_norm:
-                continue
-            diversified.append(cand)
-            seen.add(n)
-            if len(diversified) >= 4:
-                break
-
-        if len(diversified) < 3:
-            for cand in ["继续推进当前矛盾", "把争议转成可执行步骤", "请求第三方给建议"]:
+        if not diversified:
+            fallback_pool = []
+            if next_evt is not None:
+                raw_evt_options = getattr(next_evt, "options", {})
+                if isinstance(raw_evt_options, dict):
+                    fallback_pool.extend([str(v).strip() for v in raw_evt_options.values() if str(v).strip()])
+            fallback_pool.extend([
+                "推动当事人给出明确方案",
+                "追问关键细节与真实顾虑",
+                "提出折中规则先试行一晚",
+            ])
+            for cand in fallback_pool:
                 n = norm(cand)
-                if n not in seen:
-                    diversified.append(cand)
-                    seen.add(n)
+                if not n or n in seen:
+                    continue
+                diversified.append(cand)
+                seen.add(n)
                 if len(diversified) >= 3:
                     break
 
-        final_options = diversified[:4]
+        if len(diversified) < min(3, max(1, original_count)):
+            for cand in ["继续推进当前矛盾", "把争议转成可执行步骤", "请求第三方给建议"]:
+                n = norm(cand)
+                if n not in seen and n not in recent_norm:
+                    diversified.append(cand)
+                    seen.add(n)
+                if len(diversified) >= min(3, max(1, original_count)):
+                    break
+
+        target_count = original_count if original_count > 0 else len(diversified)
+        target_count = max(1, min(4, target_count))
+        final_options = diversified[:target_count]
         self.recent_options_by_event.setdefault(event_id, []).append(final_options)
         self.recent_options_by_event[event_id] = self.recent_options_by_event[event_id][-4:]
         return final_options
@@ -474,16 +481,88 @@ class GameEngine:
                 continue
         return result
 
+    def _get_narrative_state_snapshot(self):
+        if hasattr(self, "narrative_state_mgr") and hasattr(self.narrative_state_mgr, "export"):
+            return self.narrative_state_mgr.export()
+        return {}
+
+    def _pick_event_goal(self, event_obj, turn: int, is_new_event_entry: bool) -> str:
+        if is_new_event_entry:
+            return str(getattr(event_obj, "opening_goal", "") or "").strip()
+        if turn <= 2:
+            return str(getattr(event_obj, "pressure_goal", "") or "").strip()
+        beats = getattr(event_obj, "progress_beats", []) or []
+        if beats:
+            beat_idx = min(max(turn - 1, 0), len(beats) - 1)
+            return str(beats[beat_idx] or "").strip()
+        if turn <= max(3, int(getattr(event_obj, "min_turn_for_end", 5) or 5) - 1):
+            return str(getattr(event_obj, "turning_goal", "") or "").strip()
+        return str(getattr(event_obj, "settlement_goal", "") or "").strip()
+
+    def _build_event_story_brief(self, event_obj, player_name: str, affinity: dict, active_chars: list, turn: int, is_new_event_entry: bool) -> str:
+        lines = ["【本事件戏剧驱动】"]
+        tags = [str(item).strip() for item in (getattr(event_obj, "narrative_tags", []) or []) if str(item).strip()]
+        if tags:
+            lines.append(f"- 叙事标签：{'、'.join(tags[:5])}")
+
+        potential_conflicts = [str(item).strip() for item in (getattr(event_obj, "potential_conflicts", []) or []) if str(item).strip()]
+        if potential_conflicts:
+            lines.append(f"- 本轮优先放大的冲突：{'、'.join(potential_conflicts[:3])}")
+
+        goal = self._pick_event_goal(event_obj, turn, is_new_event_entry)
+        if goal:
+            lines.append(f"- 当前推进目标：{goal}")
+
+        state_hooks = [str(item).strip() for item in (getattr(event_obj, "state_hooks", []) or []) if str(item).strip()]
+        if state_hooks:
+            lines.append("- 状态改写提示：")
+            lines.extend([f"  * {item}" for item in state_hooks[:3]])
+
+        relationship_hooks = [str(item).strip() for item in (getattr(event_obj, "relationship_hooks", []) or []) if str(item).strip()]
+        if relationship_hooks:
+            lines.append("- 关系改写提示：")
+            lines.extend([f"  * {item}" for item in relationship_hooks[:3]])
+        else:
+            relationship_lines = []
+            for name in active_chars:
+                if name == player_name or name not in affinity:
+                    continue
+                try:
+                    score = float(affinity.get(name, 50))
+                except Exception:
+                    score = 50.0
+                if score >= 70:
+                    relationship_lines.append(f"{name} 这轮更容易偏向 {player_name}，必要时可以帮腔或递台阶。")
+                elif score <= 30:
+                    relationship_lines.append(f"{name} 这轮对 {player_name} 明显带刺，很容易借题发挥。")
+            if relationship_lines:
+                lines.append("- 本轮关系张力：")
+                lines.extend([f"  * {item}" for item in relationship_lines[:3]])
+
+        fallback_consequence = str(getattr(event_obj, "fallback_consequence", "") or "").strip()
+        if fallback_consequence:
+            lines.append(f"- 如果场面僵住，可导向：{fallback_consequence}")
+
+        lines.append("- 演出要求：不要只复述事件描述，要让事件被当前关系状态和情绪局势重新染色。")
+        return "\n".join(lines)
+
     def play_main_turn(self, action_text, selected_chars, current_evt_id, is_transition, api_key, base_url, model, tmp, top_p, max_t, pres_p, freq_p, san, money, gpa, hygiene, reputation, arg_count, chapter, turn, affinity, wechat_data_dict, is_prefetch=False, custom_prompts=None):
+        turn_started_at = time.perf_counter()
+        timings = {}
+
+        def mark_timing(name: str, started_at: float):
+            timings[name] = round(time.perf_counter() - started_at, 4)
+
         self.llm.update_config(api_key=api_key, base_url=base_url, model=model)
         player_name = self.pm.get_player_name() if hasattr(self.pm, "get_player_name") else self.player_name
         self.player_name = player_name
         if hasattr(self.tm, "set_player_name"):
             self.tm.set_player_name(player_name)
         effective_dialogue_mode = self.dialogue_mode
+        use_branch_tree = effective_dialogue_mode in ["tree_only", "hybrid"]
         if effective_dialogue_mode in ["tree_only", "hybrid"]:
+            # 分支树模式依旧由单一 DM 兜底实时生成，只是额外启用剧本预生成/缓存能力。
             effective_dialogue_mode = "single_dm"
-        use_branch_tree = False
         
         # --- 动态映射逻辑 ---
         roster_name_map = self.pm.get_roster_name_map() if hasattr(self.pm, "get_roster_name_map") else {}
@@ -508,20 +587,32 @@ class GameEngine:
         is_new_event_entry = bool(is_transition or current_evt_id == "")
         
         if is_transition or current_evt_id == "":
+            event_select_started_at = time.perf_counter()
             if turn == 0 and not is_prefetch: 
                 self.mm.clear_game_history()
                 self.director.reset()
                 self.director.current_chapter = chapter
                 
-            next_evt = self.director.get_next_event(player_stats, selected_chars, affinity)
+            next_evt = self.director.get_next_event(
+                player_stats,
+                selected_chars,
+                affinity,
+                self._get_narrative_state_snapshot(),
+            )
             if not next_evt:
                 # 不走全剧终：循环回到第一章继续生成新的校园日常。
                 self.director.reset()
                 self.director.current_chapter = 1
                 chapter = 1
-                next_evt = self.director.get_next_event(player_stats, selected_chars, affinity)
+                next_evt = self.director.get_next_event(
+                    player_stats,
+                    selected_chars,
+                    affinity,
+                    self._get_narrative_state_snapshot(),
+                )
                 if not next_evt:
                     return {"error": "事件池为空，请检查事件 CSV 配置。"}
+            mark_timing("event_select", event_select_started_at)
 
             if next_evt.chapter > chapter:
                 money -= 800  
@@ -582,7 +673,8 @@ class GameEngine:
                         "player_name": player_name,
                         "event_id": next_evt.id,
                         "turn": 1,
-                        "event_script": cached_script # Return full script to frontend
+                        "event_script": cached_script, # Return full script to frontend
+                        "narrative_state": self._get_narrative_state_snapshot(),
                     }
             elif not is_prefetch and not getattr(next_evt, 'is_cg', False):
                 prefetcher.mark_fallback()
@@ -591,17 +683,22 @@ class GameEngine:
             opening_conflicts = opening_conflicts or "无"
             opening_beats = getattr(next_evt, "progress_beats", []) or []
             opening_beat_hint = f"\n【建议推进节点】{opening_beats[0]}" if opening_beats else ""
+            opening_goal = str(getattr(next_evt, "opening_goal", "") or "").strip()
+            opening_goal_hint = f"\n【开场目标】{opening_goal}" if opening_goal else ""
             event_context = (
                 f"【系统指令】开始以下事件，不要写任何开场白或过场旁白。"
                 f"\n【新事件】:{next_evt.name}"
                 f"\n【场景描述】:{next_evt.description}"
                 f"\n【潜在冲突参考】:{opening_conflicts}"
+                f"{opening_goal_hint}"
                 f"{opening_beat_hint}"
             )
         else:
+            event_load_started_at = time.perf_counter()
             next_evt = self.director.event_database.get(current_evt_id)
             if not next_evt:
                 return {"error": "事件丢失，请重置游戏。"}
+            mark_timing("event_load", event_load_started_at)
             
             # --- [DEEP PREFETCH CONSUMPTION: IN-EVENT TURN] ---
             prefetcher = self.prefetch_mgr.get_prefetcher(self.user_id, self.llm, self.pm)
@@ -670,6 +767,24 @@ class GameEngine:
                     if res_data.get("is_end"):
                         prefetcher.clear_cache(next_evt.id)
 
+                    if hasattr(self, "narrative_state_mgr"):
+                        self.narrative_state_mgr.update_after_turn(
+                            player_name=player_name,
+                            event_obj=next_evt,
+                            action_text=action_text,
+                            san=san,
+                            affinity=affinity,
+                            active_chars=selected_chars,
+                            effects_data={
+                                "san_delta": stats_data.get("san_delta", 0),
+                                "money_delta": stats_data.get("money_delta", 0),
+                                "arg_delta": 1 if stats_data.get("is_argument") else 0,
+                                "affinity_changes": stats_data.get("affinity_changes", {}),
+                            },
+                            dialogue_sequence=res_data.get("dialogue_sequence", []),
+                            is_end=bool(res_data.get("is_end", False)),
+                        )
+
                     return {
                         "is_game_over": False,
                         "display_text": display_text,
@@ -689,7 +804,8 @@ class GameEngine:
                         "player_name": player_name,
                         "next_options": res_data.get("next_options", []),
                         "dialogue_sequence": res_data.get("dialogue_sequence", []),
-                        "narrator_transition": res_data.get("narrator_transition", "")
+                        "narrator_transition": res_data.get("narrator_transition", ""),
+                        "narrative_state": self._get_narrative_state_snapshot(),
                     }
             elif not is_prefetch:
                 prefetcher.mark_fallback()
@@ -706,6 +822,8 @@ class GameEngine:
             if beats:
                 beat_idx = min(max(turn - 1, 0), len(beats) - 1)
                 beat_hint = f"\n【本回合建议推进节点】{beats[beat_idx]}"
+            current_goal = self._pick_event_goal(next_evt, turn, False)
+            current_goal_hint = f"\n【本回合目标】{current_goal}" if current_goal else ""
             end_signals = "、".join((getattr(next_evt, "end_signals", []) or [])[:3])
             end_hint = f"\n【收束参考】{end_signals}" if end_signals else ""
 
@@ -713,10 +831,11 @@ class GameEngine:
                 f"【事件】: {next_evt.name}"
                 f"\n【回合】: {turn}"
                 f"\n{pacing}"
-                f"{beat_hint}{end_hint}"
+                f"{current_goal_hint}{beat_hint}{end_hint}"
                 f"\n【玩家选择意图】: {action_text}"
             )
 
+        lore_started_at = time.perf_counter()
         try:
             relevant_docs = self.mm.vector_store.search(f"{next_evt.name} {action_text}", n_results=6)
             valid_lores = []
@@ -728,6 +847,7 @@ class GameEngine:
             lore_str = "\n".join(valid_lores[:3])
         except: 
             lore_str = ""
+        mark_timing("lore_search", lore_started_at)
 
         wechat_summary = "【近期微信动态】\n"
         has_recent_wechat = False
@@ -750,8 +870,26 @@ class GameEngine:
             "custom_prompts": custom_prompts
         }
 
+        prompt_started_at = time.perf_counter()
         sys_prm = self.pm.get_main_system_prompt(game_context)
         safe_keys = ", ".join([str(k) for k in wechat_data_dict.keys()])
+        narrative_summary = ""
+        if hasattr(self, "narrative_state_mgr"):
+            narrative_summary = self.narrative_state_mgr.build_prompt_summary(
+                player_name=player_name,
+                san=san,
+                affinity=affinity,
+                active_chars=selected_chars,
+            )
+        event_story_brief = self._build_event_story_brief(
+            next_evt,
+            player_name=player_name,
+            affinity=affinity,
+            active_chars=selected_chars,
+            turn=turn,
+            is_new_event_entry=is_new_event_entry,
+        )
+        mark_timing("prompt_build", prompt_started_at)
 
         # ========================================================
         # 多智能体剧场演出阶段
@@ -804,6 +942,7 @@ class GameEngine:
             except Exception:
                 reactions = asyncio.run(fetch_all_reactions())
             print(f"🛑 [耗时监控] NPC 并发思考耗时: {time.time() - t1:.2f} 秒")
+            timings["npc_reactions"] = round(time.time() - t1, 4)
                 
             reactions_str = "\n\n【演员就位：以下是在场室友刚才做出的独立反应】\n(⚠️系统警告：请你作为 DM，严格采纳以下室友的反应进行编排。禁止篡改她们的原意、动作和准备发送的微信内容！)\n"
             for i, char_name in enumerate(npc_chars):
@@ -827,7 +966,7 @@ class GameEngine:
 
         user_prm = (
             f"{event_context}{recent_opt_hint}\n\n【玩家角色】{player_name}\n\n【玩家意图】: {action_text}{reactions_str}\n\n"
-            f"【现有微信通讯录】: {safe_keys}\n{wechat_summary}\n[状态] SAN:{san}, 资金:{money}。\n\n"
+            f"{event_story_brief}\n\n{narrative_summary}\n\n【现有微信通讯录】: {safe_keys}\n{wechat_summary}\n[状态] SAN:{san}, 资金:{money}。\n\n"
             f"{self.pm.get_main_author_note({'player_name': player_name})}"
         )
 
@@ -880,13 +1019,18 @@ class GameEngine:
                     if self.stability_mode == "stable":
                         # 稳定模式下主动收敛采样参数，减少乱码和半截 JSON。
                         gen_tmp = max(0.3, min(gen_tmp, 0.8))
-                        gen_tokens = max(1000, min(gen_tokens, 1600))
+                        if self.latency_mode == "fast":
+                            gen_tokens = max(550, min(gen_tokens, 850))
+                        elif self.latency_mode == "story":
+                            gen_tokens = max(1000, min(gen_tokens, 1600))
+                        else:
+                            gen_tokens = max(700, min(gen_tokens, 1200))
                         gen_pres = max(-0.1, min(gen_pres, 0.4))
                         gen_freq = max(0.0, min(gen_freq, 0.4))
 
                     parsed = None
                     res_text = ""
-                    attempts = 2 if self.stability_mode == "stable" else 1
+                    attempts = 2 if (self.stability_mode == "stable" and self.latency_mode != "fast") else 1
                     last_error = None
                     json_contract = self._build_json_contract()
                     try:
@@ -928,6 +1072,7 @@ class GameEngine:
                             f"🛑 [耗时监控] DM 主大脑生成 JSON 耗时: {time.time() - t2:.2f} 秒 | "
                             f"max_tokens={gen_tokens} | stability={self.stability_mode}"
                         )
+                        timings["llm_generate"] = round(time.time() - t2, 4)
                         if parsed is None:
                             raise ValueError(last_error or "empty payload")
                         prefetcher.mark_non_fallback()
@@ -1076,8 +1221,30 @@ class GameEngine:
             if is_end and next_evt.id in self.event_repeat_state:
                 self.event_repeat_state.pop(next_evt.id, None)
 
+            narrative_update_started_at = time.perf_counter()
+            if hasattr(self, "narrative_state_mgr"):
+                self.narrative_state_mgr.update_after_turn(
+                    player_name=player_name,
+                    event_obj=next_evt,
+                    action_text=action_text,
+                    san=san,
+                    affinity=affinity,
+                    active_chars=selected_chars,
+                    effects_data=effects_data if has_effects else {
+                        "san_delta": san_delta,
+                        "money_delta": money_delta,
+                        "arg_delta": arg_delta,
+                        "affinity_changes": aff_changes if isinstance(aff_changes, dict) else {},
+                    },
+                    dialogue_sequence=seq if isinstance(seq, list) else [],
+                    is_end=is_end,
+                )
+            mark_timing("narrative_update", narrative_update_started_at)
+
+            memory_save_started_at = time.perf_counter()
             if not getattr(next_evt, 'is_cg', False) and action_text and "（时间推移..." not in action_text and not is_prefetch:
                 self.mm.save_interaction(user_input=action_text, ai_response=" ".join(dialogue_lines), user_name=player_name)
+            mark_timing("memory_save", memory_save_started_at)
 
             valid_notifs = []
             wechat_list = parsed.get("wechat_notifications", [])
@@ -1140,7 +1307,7 @@ class GameEngine:
             elif use_branch_tree and parsed.get("is_end", False):
                 next_predicted = self.director.get_next_event(
                     {"money": money, "san": san, "hygiene": hygiene, "gpa": gpa, "reputation": reputation},
-                    selected_chars, affinity
+                    selected_chars, affinity, self._get_narrative_state_snapshot()
                 )
                 if next_predicted:
                     next_profile = self._get_latency_profile(next_predicted)
@@ -1158,7 +1325,7 @@ class GameEngine:
             if script_in_cache:
                 final_script = script_in_cache
 
-            return {
+            result = {
                 "is_game_over": False, 
                 "res_text": res_text, 
                 "display_text": display_text,
@@ -1182,12 +1349,25 @@ class GameEngine:
                 "dialogue_sequence": seq if isinstance(seq, list) else [],
                 "event_script": final_script, # 关键：即使当前回合是实时生成的，也要把后台生好的剧本传回前端
                 "error": parsed.get("error", ""),
-                "sys_prompt": sys_prm,
-                "user_prompt": user_prm,
-                "memory": self.mm.get_recent_history() if hasattr(self.mm, 'get_recent_history') else "模块离线",
-                "relationships": self.pm.get_all_relationships() if hasattr(self.pm, 'get_all_relationships') else "模块离线",
-                "tools": self.tm.get_tool_logs() if hasattr(self.tm, 'get_tool_logs') else "模块离线"
+                "narrative_state": self._get_narrative_state_snapshot()
             }
+            timings["total"] = round(time.perf_counter() - turn_started_at, 4)
+            if self.profile_turns:
+                result["timings"] = timings
+                print(
+                    "[TURN PROFILE] "
+                    + " | ".join(f"{k}={v}s" for k, v in timings.items()),
+                    flush=True,
+                )
+            if self.debug_turn_payload:
+                result.update({
+                    "sys_prompt": sys_prm,
+                    "user_prompt": user_prm,
+                    "memory": self.mm.get_recent_history() if hasattr(self.mm, 'get_recent_history') else "模块离线",
+                    "relationships": self.pm.get_all_relationships() if hasattr(self.pm, 'get_all_relationships') else "模块离线",
+                    "tools": self.tm.get_tool_logs() if hasattr(self.tm, 'get_tool_logs') else "模块离线",
+                })
+            return result
         except Exception as e:
             return {
                 "error": str(e),

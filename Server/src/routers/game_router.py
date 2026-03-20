@@ -46,6 +46,7 @@ class SaveGameRequest(BaseModel):
     gpa: float
     arg_count: int
     wechat_data_list: List[Dict[str, Any]] = []
+    narrative_state: Optional[Dict[str, Any]] = None
 
 
 def build_game_router(
@@ -337,6 +338,11 @@ def build_game_router(
                 engine.mm.current_save_id = f"slot_{slot_id}"
 
             state = save_data.get("state", {})
+            if engine and hasattr(engine, "narrative_state_mgr") and isinstance(state, dict):
+                try:
+                    engine.narrative_state_mgr.load(state.get("narrative_state"))
+                except Exception:
+                    pass
             roster = get_current_roster(user_id)
             player_name = getattr(engine, "player_name", "") or "当前主角"
             for _, info in roster.items():

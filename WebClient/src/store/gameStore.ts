@@ -20,12 +20,13 @@ interface GameState {
   player_name: string;
   active_roommates: string[];
   affinity: Record<string, number>;
+  narrativeState: Record<string, any>;
   
   // 故事与交互
   displayText: string;
   nextOptions: string[];
   isEnd: boolean;
-  history: Array<{turn: number, text: string, rawJson?: string}>;
+  history: Array<{turn: number, text: string, rawJson?: string, narrativeState?: Record<string, any>}>;
   wechatNotifications: Array<{sender: string, message: string}>;
   isPhoneOpen: boolean;
   typewriterSpeed: number;
@@ -69,6 +70,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   player_name: '陆陈安然',
   active_roommates: [],
   affinity: {},
+  narrativeState: {},
   displayText: '',
   nextOptions: [],
   isEnd: false,
@@ -118,10 +120,16 @@ export const useGameStore = create<GameState>((set, get) => ({
         player_name: data.player_name || '陆陈安然',
         active_roommates: data.active_roommates || roommates,
         affinity: data.affinity,
+        narrativeState: data.narrative_state || {},
         displayText: data.display_text,
         nextOptions: data.next_options || [],
         isEnd: data.is_end || false,
-        history: [{ turn: data.turn, text: data.display_text, rawJson: data.res_text || '' }],
+        history: [{
+          turn: data.turn,
+          text: data.display_text,
+          rawJson: data.res_text || '',
+          narrativeState: data.narrative_state || {}
+        }],
         wechatNotifications: data.wechat_notifications || [],
         eventScript: data.event_script || null
       });
@@ -167,7 +175,12 @@ export const useGameStore = create<GameState>((set, get) => ({
             displayText: newDisplayText,
             nextOptions: nextTurn ? (nextTurn.player_choices || []).map((c: any) => c.text) : [],
             isEnd: nextTurn ? nextTurn.is_end : true,
-            history: [...prev.history, { turn: prev.turn, text: newDisplayText, rawJson: '' }],
+            history: [...prev.history, {
+              turn: prev.turn,
+              text: newDisplayText,
+              rawJson: '',
+              narrativeState: prev.narrativeState || {}
+            }],
             eventScript: nextTurn && nextTurn.is_end ? null : prev.eventScript
           }));
           return;
@@ -210,13 +223,15 @@ export const useGameStore = create<GameState>((set, get) => ({
         current_scene: data.current_scene || prev.current_scene || '宿舍',
         player_name: data.player_name || prev.player_name || '陆陈安然',
         affinity: data.affinity,
+        narrativeState: data.narrative_state || prev.narrativeState || {},
         displayText: data.display_text,
         nextOptions: data.next_options || [],
         isEnd: data.is_end || false,
         history: [...prev.history, {
           turn: data.turn,
           text: isTransition ? data.display_text : `【你的选择】: ${choice}\n\n${data.display_text}`,
-          rawJson: data.res_text || ''
+          rawJson: data.res_text || '',
+          narrativeState: data.narrative_state || prev.narrativeState || {}
         }],
         wechatNotifications: data.wechat_notifications || prev.wechatNotifications,
         eventScript: data.event_script || null
@@ -289,6 +304,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               current_scene: gameState.current_scene || '宿舍',
               player_name: gameState.player_name || '陆陈安然',
               active_roommates: gameState.active_roommates,
+              narrativeState: gameState.narrative_state || {},
               // affinity, hygiene, etc should ideally be in save too
               displayText: "存档已成功加载，您可以继续之前的进度。",
               nextOptions: ["继续剧情..."],
@@ -316,6 +332,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               gpa: state.gpa,
               arg_count: 0, // Should be in state
               wechat_data_list: [], // Should be in state if we want to save wechat
+              narrative_state: state.narrativeState,
               history: state.history // Custom field for loading
           });
       } catch (e) {
@@ -343,6 +360,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               current_evt_id: '',
               current_scene: '宿舍',
               player_name: '陆陈安然',
+              narrativeState: {},
               history: [],
               wechatNotifications: [],
               displayText: ''

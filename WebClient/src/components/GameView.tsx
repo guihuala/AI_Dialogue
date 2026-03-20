@@ -11,6 +11,7 @@ import { GameUIControls } from './game/GameUIControls';
 import { ActionOptions } from './game/ActionOptions';
 import { EndOverlay } from './game/EndOverlay';
 import { DialogBox } from './game/DialogBox';
+import { AnnouncementPanel } from './common/AnnouncementPanel';
 import { ConfirmDialog } from './common/ConfirmDialog';
 
 export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) => {
@@ -44,6 +45,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
     const [showHistory, setShowHistory] = useState(false);
     const [showSceneTransition, setShowSceneTransition] = useState(false);
     const [showBackConfirm, setShowBackConfirm] = useState(false);
+    const [showAnnouncement, setShowAnnouncement] = useState(false);
     const prevEventIdRef = useRef<string>('');
 
     // Notifications system
@@ -197,7 +199,18 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
     }, [isPlaying]);
 
     if (phase === 'title') {
-        return <TitleMenu onStart={() => setPhase('save_select')} onWorkshop={() => onTabChange('workshop')} onEditor={() => onTabChange('editor')} onSettings={() => onTabChange('settings')} />;
+        return (
+            <>
+                <TitleMenu
+                    onStart={() => setPhase('save_select')}
+                    onWorkshop={() => onTabChange('workshop')}
+                    onEditor={() => onTabChange('editor')}
+                    onSettings={() => onTabChange('settings')}
+                    onAnnouncement={() => setShowAnnouncement(true)}
+                />
+                <AnnouncementPanel isOpen={showAnnouncement} onClose={() => setShowAnnouncement(false)} />
+            </>
+        );
     }
 
     if (phase === 'save_select') {
@@ -209,7 +222,8 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
     }
 
     const determineCharactersInScene = () => {
-        if (!displayText) return [];
+        const selectedRoommates = Array.isArray(active_roommates) ? active_roommates : [];
+        if (selectedRoommates.length === 0) return [];
         const lines = displayText.split('\n').filter(l => l.trim().length > 0);
         const sceneContext = lines.slice(-10).join('\n');
         const recentContext = lines.slice(-3).join('\n');
@@ -220,11 +234,12 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
             { id: '林', names: ['林飒', '飒飒', '林'] },
             { id: '陈', names: ['陈雨婷', '雨婷', '陈'] },
             { id: '苏', names: ['苏浅', '浅浅', '苏'] },
-            { id: '安然', names: ['陆陈安然', '安然', '陆陈'] },
         ];
 
         let presentChars: any[] = [];
-        for (const c of portraitMapping) {
+        for (const c of portraitMapping.filter((item) =>
+            item.names.some((name) => selectedRoommates.includes(name))
+        )) {
             let isPresent = false;
             let isSpeaking = false;
             let highestMentionIdx = -1;
@@ -234,13 +249,12 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                 const sceneIdx = sceneContext.lastIndexOf(name);
                 if (sceneIdx > -1) { isPresent = true; highestMentionIdx = Math.max(highestMentionIdx, sceneIdx); }
             }
-            if (isPresent) {
-                // If this character is the current speaker, force isSpeaking to true
-                if (currentSpeaker && c.names.includes(currentSpeaker)) {
-                    isSpeaking = true;
-                }
-                presentChars.push({ id: c.id, isSpeaking, lastMentionIdx: highestMentionIdx });
+            // 已选室友默认都显示；最近文本只用于排序和高亮发言者。
+            if (currentSpeaker && c.names.includes(currentSpeaker)) {
+                isSpeaking = true;
+                highestMentionIdx = Math.max(highestMentionIdx, Number.MAX_SAFE_INTEGER);
             }
+            presentChars.push({ id: c.id, isSpeaking, lastMentionIdx: isPresent ? highestMentionIdx : -1 });
         }
 
         const actualSpeaker = [...presentChars].filter(c => c.isSpeaking).sort((a, b) => b.lastMentionIdx - a.lastMentionIdx)[0];

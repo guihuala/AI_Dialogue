@@ -147,11 +147,39 @@ class EventDirector:
             return is_general or is_persona or is_fixed
         return True
 
-    def _event_weight(self, event) -> float:
+    def _event_weight(self, event, narrative_state=None) -> float:
         try:
-            return max(0.1, float(getattr(event, "event_weight", 1.0) or 1.0))
+            base_weight = max(0.1, float(getattr(event, "event_weight", 1.0) or 1.0))
         except Exception:
-            return 1.0
+            base_weight = 1.0
+
+        if not isinstance(narrative_state, dict):
+            return base_weight
+
+        tags = [str(item).strip() for item in (getattr(event, "narrative_tags", []) or []) if str(item).strip()]
+        if not tags:
+            return base_weight
+
+        score = 1.0
+        room_tension = str(narrative_state.get("room_tension", "") or "")
+        player_arc = " ".join(str(item) for item in narrative_state.get("player_arc", []) if item)
+        active_threads = " ".join(str(item) for item in narrative_state.get("active_threads", []) if item)
+        state_blob = f"{room_tension} {player_arc} {active_threads}"
+
+        tag_rules = {
+            "争吵": ["火药", "争执", "冷战", "带刺"],
+            "尴尬": ["尴尬", "没说开", "别扭"],
+            "缓和": ["和事", "和平", "收场"],
+            "压力": ["压力", "强撑", "迟疑", "敏感"],
+            "关系": ["信任", "不耐烦", "帮腔", "面子"],
+        }
+        for tag in tags:
+            for rule_tag, keywords in tag_rules.items():
+                if rule_tag in tag and any(keyword in state_blob for keyword in keywords):
+                    score += 0.25
+                    break
+
+        return max(0.1, base_weight * score)
 
     def _in_cooldown(self, event) -> bool:
         event_id = str(getattr(event, "id", "") or "")
@@ -166,16 +194,16 @@ class EventDirector:
             return False
         return (self.pick_counter - last_picked) <= cd
 
-    def _weighted_pick(self, pool):
+    def _weighted_pick(self, pool, narrative_state=None):
         if not pool:
             return None
         try:
-            weights = [self._event_weight(e) for e in pool]
+            weights = [self._event_weight(e, narrative_state) for e in pool]
             return random.choices(pool, weights=weights, k=1)[0]
         except Exception:
             return random.choice(pool)
 
-    def get_next_event(self, player_stats, active_chars, affinity=None):
+    def get_next_event(self, player_stats, active_chars, affinity=None, narrative_state=None):
         if affinity is None: affinity = {}
         
         if str(self.current_chapter) not in self.timeline_config:
@@ -185,7 +213,7 @@ class EventDirector:
         if self.chapter_progress >= len(chapter_pools):
             self.current_chapter += 1
             self.chapter_progress = 0
-            return self.get_next_event(player_stats, active_chars, affinity)
+            return self.get_next_event(player_stats, active_chars, affinity, narrative_state)
             
         expected_type = chapter_pools[self.chapter_progress]
         self.chapter_progress += 1
@@ -204,7 +232,7 @@ class EventDirector:
             print(f"🔄 [事件调度] 第 {self.current_chapter} 章可用事件为空，推进到下一章。")
             self.current_chapter += 1
             self.chapter_progress = 0
-            return self.get_next_event(player_stats, active_chars, affinity)
+            return self.get_next_event(player_stats, active_chars, affinity, narrative_state)
 
         # 分层筛选：优先满足类型+条件+去重，其次逐步放宽，避免“定义太硬”导致卡死。
         strict_pool = [
@@ -244,7 +272,7 @@ class EventDirector:
         if valid_pool is emergency_pool:
             print(f"⚠️ [事件调度] 第 {self.current_chapter} 章条件过严，已启用无条件兜底。")
 
-        chosen = self._weighted_pick(valid_pool)
+        chosen = self._weighted_pick(valid_pool, narrative_state)
         if not chosen:
             return None
 

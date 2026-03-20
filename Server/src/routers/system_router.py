@@ -82,10 +82,8 @@ def build_system_router(
                 engine.latency_mode = mode
             if req.dialogue_mode is not None:
                 dmode = str(req.dialogue_mode).strip().lower()
-                if dmode in ["hybrid", "tree_only"]:
-                    dmode = "single_dm"
-                if dmode not in ["single_dm", "npc_dm"]:
-                    raise HTTPException(status_code=400, detail="dialogue_mode must be one of: single_dm, npc_dm")
+                if dmode not in ["single_dm", "npc_dm", "hybrid", "tree_only"]:
+                    raise HTTPException(status_code=400, detail="dialogue_mode must be one of: single_dm, npc_dm, hybrid, tree_only")
                 engine.dialogue_mode = dmode
             if req.stability_mode is not None:
                 smode = str(req.stability_mode).strip().lower()

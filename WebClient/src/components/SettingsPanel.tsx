@@ -19,8 +19,8 @@ const TOKENS_MIN = 300;
 const TOKENS_MAX = 2000;
 const STABLE_TEMP_MIN = 0.3;
 const STABLE_TEMP_MAX = 0.8;
-const STABLE_TOKENS_MIN = 1000;
-const STABLE_TOKENS_MAX = 1600;
+const STABLE_TOKENS_MIN = 700;
+const STABLE_TOKENS_MAX = 1200;
 
 export const SettingsPanel = () => {
     const [settings, setSettings] = useState<SystemSettings>({
@@ -330,7 +330,9 @@ export const SettingsPanel = () => {
                                                 className="w-full bg-white text-[var(--color-cyan-dark)] font-black p-3.5 rounded-xl border-2 border-[var(--color-cyan-main)]/10 focus:border-[var(--color-cyan-main)] outline-none transition-all appearance-none cursor-pointer"
                                             >
                                                 <option value="single_dm">单一DM统筹（推荐稳定）</option>
-                                                <option value="npc_dm">NPC-DM 多Agent（实验）</option>
+                                                <option value="hybrid">Hybrid 预生成分支（推荐提速实验）</option>
+                                                <option value="tree_only">Tree Only 分支树（极实验）</option>
+                                                <option value="npc_dm">NPC-DM 多Agent（更慢，偏实验）</option>
                                             </select>
                                         </div>
 
@@ -379,7 +381,7 @@ export const SettingsPanel = () => {
                                                 <div className="flex flex-col">
                                                     <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">单次最大Token (Limit)</span>
                                                     <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">
-                                                        {settings.stability_mode === 'stable' ? 'Stable 推荐 1000-1600（防截断且更稳）' : 'Balanced 推荐 300-2000'}
+                                                        {settings.stability_mode === 'stable' ? 'Stable 推荐 700-1200（更快且尽量稳）' : 'Balanced 推荐 300-2000'}
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center space-x-2">

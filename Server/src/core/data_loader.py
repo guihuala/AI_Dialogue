@@ -92,6 +92,14 @@ def load_all_events(events_dir: str) -> dict:
                     max_turn_raw = clean_row.get("最长回合", clean_row.get("最多回合", 10))
                     progress_beats_raw = clean_row.get("推进节点", clean_row.get("剧情推进节点", clean_row.get("阶段节点", "")))
                     end_signals_raw = clean_row.get("收束条件", clean_row.get("结束信号", ""))
+                    narrative_tags_raw = clean_row.get("叙事标签", clean_row.get("剧情标签", ""))
+                    state_hooks_raw = clean_row.get("状态钩子", clean_row.get("状态影响钩子", ""))
+                    relationship_hooks_raw = clean_row.get("关系钩子", clean_row.get("关系影响钩子", ""))
+                    opening_goal = clean_row.get("开场目标", clean_row.get("起势目标", "")).strip()
+                    pressure_goal = clean_row.get("施压目标", clean_row.get("升温目标", "")).strip()
+                    turning_goal = clean_row.get("转折目标", clean_row.get("转向目标", "")).strip()
+                    settlement_goal = clean_row.get("收束目标", clean_row.get("阶段结果目标", "")).strip()
+                    fallback_consequence = clean_row.get("兜底后果", clean_row.get("若拖延会怎样", "")).strip()
                     event_weight_raw = clean_row.get("权重", clean_row.get("事件权重", 1.0))
                     cooldown_turns_raw = clean_row.get("冷却回合", clean_row.get("事件冷却", 2))
                     allow_repeat_raw = clean_row.get("允许重复", "FALSE")
@@ -143,6 +151,9 @@ def load_all_events(events_dir: str) -> dict:
 
                     progress_beats = _split_list(progress_beats_raw)
                     end_signals = _split_list(end_signals_raw)
+                    narrative_tags = _split_list(narrative_tags_raw)
+                    state_hooks = _split_list(state_hooks_raw)
+                    relationship_hooks = _split_list(relationship_hooks_raw)
                     next_event_id = clean_row.get("下一事件ID", clean_row.get("下一事件", "")).strip() or None
                     event_weight = _to_float(event_weight_raw, 1.0)
                     cooldown_turns = _to_int(cooldown_turns_raw, 2)
@@ -166,6 +177,14 @@ def load_all_events(events_dir: str) -> dict:
                         progress_beats=progress_beats,
                         end_signals=end_signals,
                         allow_repeat=allow_repeat,
+                        narrative_tags=narrative_tags,
+                        state_hooks=state_hooks,
+                        relationship_hooks=relationship_hooks,
+                        opening_goal=opening_goal,
+                        pressure_goal=pressure_goal,
+                        turning_goal=turning_goal,
+                        settlement_goal=settlement_goal,
+                        fallback_consequence=fallback_consequence,
                         options=options_dict,
                         outcomes=outcomes_dict,
                         is_cg=is_cg,

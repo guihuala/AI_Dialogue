@@ -10,6 +10,8 @@ class PromptManager:
         self.user_id = user_id
         self.prompts_dir = get_user_prompts_dir(user_id)
         self.default_prompts_dir = DEFAULT_PROMPTS_DIR
+        self._file_cache = {}
+        self._relationship_cache = {"path": None, "mtime": None, "rows": []}
         
         self.skills_dir = os.path.join(self.prompts_dir, "skills")
         self.world_dir = os.path.join(self.prompts_dir, "world")
@@ -191,21 +193,54 @@ class PromptManager:
         return default_map
 
     def _read_md(self, relative_path: str) -> str:
-        if not relative_path: return ""
-        
+        if not relative_path:
+            return ""
+
+        def _read_with_cache(abs_path: str) -> str:
+            try:
+                mtime = os.path.getmtime(abs_path)
+                cached = self._file_cache.get(abs_path)
+                if cached and cached.get("mtime") == mtime:
+                    return cached.get("content", "")
+                with open(abs_path, 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+                self._file_cache[abs_path] = {"mtime": mtime, "content": content}
+                return content
+            except Exception:
+                return ""
+
         # 1. 优先尝试用户专属路径
         user_path = os.path.join(self.prompts_dir, relative_path)
         if os.path.exists(user_path) and not os.path.isdir(user_path):
-            with open(user_path, 'r', encoding='utf-8') as f:
-                return f.read().strip()
-                
+            return _read_with_cache(user_path)
+
         # 2. 回退到默认公共路径
         default_path = os.path.join(self.default_prompts_dir, relative_path)
         if os.path.exists(default_path) and not os.path.isdir(default_path):
-            with open(default_path, 'r', encoding='utf-8') as f:
-                return f.read().strip()
-                
+            return _read_with_cache(default_path)
+
         return ""
+
+    def _get_relationship_rows(self) -> list:
+        rel_csv_path = os.path.join(self.chars_dir, "relationship.csv")
+        if not os.path.exists(rel_csv_path):
+            return []
+
+        try:
+            mtime = os.path.getmtime(rel_csv_path)
+            cached = self._relationship_cache
+            if cached.get("path") == rel_csv_path and cached.get("mtime") == mtime:
+                return cached.get("rows", [])
+
+            rows = []
+            with open(rel_csv_path, 'r', encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    rows.append(row)
+            self._relationship_cache = {"path": rel_csv_path, "mtime": mtime, "rows": rows}
+            return rows
+        except Exception:
+            return []
 
     def _skill_slang_dict(self, context: dict) -> str:
         chapter = context.get("chapter", 1)
@@ -217,7 +252,7 @@ class PromptManager:
         event_name = context.get("event_name", "")
         if any(keyword in event_desc + event_name for keyword in ["课", "教室", "期末", "老师", "班长", "作业", "发表", "图书馆"]):
             world_text += "\n" + self._read_md("world/academic_npcs.md")
-            world_text += "\n⚠️【指令】：当前处于教学区，请在对话中自然引入上述老师或同学的互动，维持他们的性格设定！\n"
+            world_text += "\n⚠️【指令】：当前处于教学区，请在对话中自然引入上述老师或同学的互动，维持他们的性格设定；如果配角是第一次在本事件出场，务必顺手交代她/他是谁。\n"
         return world_text
 
     def _skill_character_roster(self, context: dict) -> str:
@@ -236,24 +271,19 @@ class PromptManager:
         active_chars = self._get_active_chars(context)
         player_name = context.get("player_name", self.get_player_name())
         if player_name not in active_chars: active_chars.append(player_name)
-        
-        rel_csv_path = os.path.join(self.chars_dir, "relationship.csv")
-        if not os.path.exists(rel_csv_path): return ""
-        
+
         relations = []
         try:
-            with open(rel_csv_path, 'r', encoding='utf-8-sig') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    source = row.get("评价者", "").strip()
-                    target = row.get("被评价者", "").strip()
-                    
-                    # 必须“评价者”和“被评价者”同时在场，才触发关系
-                    # 否则会引发不在场角色的名字污染大模型，导致幽灵室友出现
-                    if source in active_chars and target in active_chars:
-                        surface = row.get("表面态度", "").strip()
-                        inner = row.get("内心真实评价", "").strip()
-                        relations.append(f"- 【{source}】对待【{target}】：表面上展现出[{surface}]，内心实际上觉得[{inner}]。")
+            for row in self._get_relationship_rows():
+                source = row.get("评价者", "").strip()
+                target = row.get("被评价者", "").strip()
+
+                # 必须“评价者”和“被评价者”同时在场，才触发关系
+                # 否则会引发不在场角色的名字污染大模型，导致幽灵室友出现
+                if source in active_chars and target in active_chars:
+                    surface = row.get("表面态度", "").strip()
+                    inner = row.get("内心真实评价", "").strip()
+                    relations.append(f"- 【{source}】对待【{target}】：表面上展现出[{surface}]，内心实际上觉得[{inner}]。")
         except Exception as e:
             print(f"关系矩阵读取失败: {e}")
         
@@ -295,21 +325,17 @@ class PromptManager:
 
     def get_all_relationships(self) -> str:
         """提取全局角色认知网络与底层偏见"""
-        rel_csv_path = os.path.join(self.chars_dir, "relationship.csv")
-        if not os.path.exists(rel_csv_path): 
+        if not os.path.exists(os.path.join(self.chars_dir, "relationship.csv")):
             return "认知拓扑文件(relationship.csv)缺失"
         
         lines = []
         try:
-            import csv
-            with open(rel_csv_path, 'r', encoding='utf-8-sig') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    source = row.get("评价者", "").strip()
-                    target = row.get("被评价者", "").strip()
-                    surface = row.get("表面态度", "").strip()
-                    inner = row.get("内心真实评价", "").strip()
-                    lines.append(f"[{source} ➡️  {target}] 表面: {surface} | 内心: {inner}")
+            for row in self._get_relationship_rows():
+                source = row.get("评价者", "").strip()
+                target = row.get("被评价者", "").strip()
+                surface = row.get("表面态度", "").strip()
+                inner = row.get("内心真实评价", "").strip()
+                lines.append(f"[{source} ➡️  {target}] 表面: {surface} | 内心: {inner}")
         except Exception as e:
             return f"认知拓扑解码失败: {e}"
             

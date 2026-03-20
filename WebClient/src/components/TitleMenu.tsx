@@ -40,16 +40,9 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
             </div>
 
             {/* 2. Top Info Bar (Lifestyle focus - Cyan Palette) */}
-            <div className="absolute top-10 left-10 right-10 z-20 flex justify-between items-start pointer-events-none">
+            <div className="absolute top-10 left-10 right-10 z-20 flex justify-end items-start pointer-events-none">
                 {/* Right: Date & Clock */}
                 <div className="flex flex-col items-end gap-3 pointer-events-auto">
-                    <button
-                        onClick={onAnnouncement}
-                        className="flex items-center gap-2 px-4 py-2.5 glass-panel rounded-2xl border-white/60 shadow-sm text-[var(--color-cyan-dark)] hover:bg-white transition-all hover:-translate-y-0.5"
-                    >
-                        <Bell size={16} className="text-[var(--color-yellow-main)]" />
-                        <span className="text-[10px] font-black tracking-[0.25em] uppercase">公告</span>
-                    </button>
                     <div className="flex flex-col items-end px-5 py-3 glass-panel rounded-2xl border-white/60 shadow-sm">
                         <div className="flex items-baseline gap-2">
                             <span className="text-2xl font-black text-[var(--color-cyan-dark)] font-mono tracking-tighter">
@@ -108,13 +101,23 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
                         </button>
                     </div>
 
-                    <button
-                        onClick={onSettings}
-                        className="self-center px-8 py-2.5 glass-panel text-[var(--color-cyan-main)]/60 hover:text-[var(--color-cyan-dark)] font-black text-[10px] tracking-[0.5em] uppercase transition-all flex items-center rounded-full hover:bg-white border-white/40 shadow-sm"
-                    >
-                        <Settings size={14} className="mr-3 group-hover:rotate-45 transition-transform" />
-                        设置中心
-                    </button>
+                    <div className="self-center flex items-center gap-3">
+                        <button
+                            onClick={onAnnouncement}
+                            className="px-6 py-2.5 glass-panel text-[var(--color-yellow-main)]/90 hover:text-[var(--color-cyan-dark)] font-black text-[10px] tracking-[0.35em] uppercase transition-all flex items-center rounded-full hover:bg-white border-white/40 shadow-sm"
+                        >
+                            <Bell size={14} className="mr-3" />
+                            查看公告
+                        </button>
+
+                        <button
+                            onClick={onSettings}
+                            className="px-8 py-2.5 glass-panel text-[var(--color-cyan-main)]/60 hover:text-[var(--color-cyan-dark)] font-black text-[10px] tracking-[0.5em] uppercase transition-all flex items-center rounded-full hover:bg-white border-white/40 shadow-sm"
+                        >
+                            <Settings size={14} className="mr-3 group-hover:rotate-45 transition-transform" />
+                            设置中心
+                        </button>
+                    </div>
                 </div>
             </div>
 

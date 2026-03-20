@@ -123,6 +123,14 @@ class ScriptedEvent(BaseModel):
     progress_beats: List[str] = []
     end_signals: List[str] = []
     allow_repeat: bool = False
+    narrative_tags: List[str] = []
+    state_hooks: List[str] = []
+    relationship_hooks: List[str] = []
+    opening_goal: str = ""
+    pressure_goal: str = ""
+    turning_goal: str = ""
+    settlement_goal: str = ""
+    fallback_consequence: str = ""
     
     options: Dict[str, str] = {}  # 例如 {"A": "少数服从多数", "B": "独裁"}
     outcomes: Dict[str, str] = {} # 例如 {"A": "输的一方叹气掉SAN", "B": "得罪一半人"}
