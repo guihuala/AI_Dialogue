@@ -1,10 +1,11 @@
-export type TabId = 'game' | 'workshop' | 'mods' | 'settings' | 'editor' | 'admin';
+export type TabId = 'game' | 'workshop' | 'mods' | 'settings' | 'account' | 'editor' | 'admin';
 
 const TAB_TO_PATH: Record<TabId, string> = {
   game: '/game',
   workshop: '/workshop',
   mods: '/mods',
   settings: '/settings',
+  account: '/account',
   editor: '/editor',
   admin: '/admin',
 };
@@ -15,6 +16,7 @@ const PATH_TO_TAB: Record<string, TabId> = {
   '/workshop': 'workshop',
   '/mods': 'mods',
   '/settings': 'settings',
+  '/account': 'account',
   '/editor': 'editor',
   '/admin': 'admin',
 };
@@ -41,4 +43,3 @@ export function locationToTab(loc: Location): TabId {
   const path = normalizePath(loc.pathname);
   return PATH_TO_TAB[path] || 'game';
 }
-

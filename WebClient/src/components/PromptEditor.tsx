@@ -29,6 +29,7 @@ export const PromptEditor = () => {
     const [userState, setUserState] = useState<any>(null);
     const [libraryMods, setLibraryMods] = useState<any[]>([]);
     const [workshopMods, setWorkshopMods] = useState<any[]>([]);
+    const [accountInfo, setAccountInfo] = useState<any>(null);
 
     const [message, setMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -63,17 +64,19 @@ export const PromptEditor = () => {
 
     const fetchFiles = async () => {
         try {
-            const [filesRes, stateRes, libraryRes, workshopRes] = await Promise.all([
+            const [filesRes, stateRes, libraryRes, workshopRes, accountRes] = await Promise.all([
                 gameApi.getAdminFiles(),
                 gameApi.getUserState(),
                 gameApi.getLibraryList(),
-                gameApi.getWorkshopList()
+                gameApi.getWorkshopList(),
+                gameApi.getAccountMe()
             ]);
             if (filesRes.status === 'success') {
                 setFiles({ md: filesRes.md || [], csv: filesRes.csv || [] });
                 setUserState(stateRes?.data || null);
                 setLibraryMods(libraryRes?.data || []);
                 setWorkshopMods(workshopRes?.data || []);
+                setAccountInfo(accountRes?.data || null);
                 if (activeCategory === 'char' && !selectedFile) {
                     const roster = filesRes.md.find((f: string) => f.endsWith('roster.json'));
                     if (roster) {
@@ -552,11 +555,15 @@ ${data.content}`;
             return '当前正在查看默认模组。默认模组为只读，若想微调，请先在模组中心另存为本地模组后再进入编辑。';
         }
         return '当前正在编辑本地模组。公开后的模组仍保留在你的本地库中，再次发布会同步更新工坊版本。';
-    }, []);
+    }, [userState]);
 
     const canEditCurrentMod = useMemo(() => {
         return String(userState?.editor_source || 'default') === 'library';
     }, [userState]);
+
+    const isLoggedInAccount = useMemo(() => {
+        return String(accountInfo?.auth_mode || 'visitor') === 'account';
+    }, [accountInfo]);
 
     const currentEditingMod = useMemo(() => {
         const modId = String(userState?.editor_mod_id || 'default');
@@ -575,6 +582,22 @@ ${data.content}`;
         return 'create';
     }, [currentEditingMod]);
 
+    const editorStatusNotice = useMemo(() => {
+        if (!currentEditingMod) return null;
+        if (currentEditingMod.has_update) {
+            return `原作已经更新到 v${currentEditingMod.upstream_version || currentEditingMod.version || 1}。你当前编辑的是本地副本 v${currentEditingMod.version || 1}；若想跟进原作者内容，请先回到模组中心同步后再继续改动。`;
+        }
+        if (publishIntent === 'update') {
+            return `这份模组已经公开。你当前正在编辑它的本地源模组；下次发布会把工坊版本更新到 v${Number(currentEditingMod.version || 1) + 1}。`;
+        }
+        if (publishIntent === 'fork') {
+            return `这是一份从工坊下载来的私有副本。你可以继续本地编辑；如果之后公开，会作为新的派生作品发布，不会覆盖原作者模组。`;
+        }
+        return null;
+    }, [currentEditingMod, publishIntent]);
+
+    const editorStatusTone = currentEditingMod?.has_update ? 'warning' : 'info';
+
     const openPublishModal = () => {
         if (!canEditCurrentMod) return;
         setPublishMetadata({
@@ -583,6 +606,14 @@ ${data.content}`;
             description: currentEditingMod?.description || '包含了我修改过的世界观和角色设定。'
         });
         setShowPublishModal(true);
+    };
+
+    const jumpToModLibrary = () => {
+        window.dispatchEvent(new CustomEvent('changeTab', { detail: 'mods' }));
+    };
+
+    const jumpToAccountCenter = () => {
+        window.dispatchEvent(new CustomEvent('changeTab', { detail: 'account' }));
     };
 
     return (
@@ -597,12 +628,15 @@ ${data.content}`;
                 activeSourceLabel={activeSourceLabel}
                 activeModLabel={activeModLabel}
                 contextHint={contextHint}
+                statusNotice={editorStatusNotice || undefined}
+                statusNoticeTone={editorStatusTone}
                 editMode={editMode}
                 setEditMode={setEditMode}
                 isSaving={isSaving}
                 canEdit={canEditCurrentMod}
                 canPublish={canEditCurrentMod}
-                onSave={() => handleSave()}
+                saveLabel={canEditCurrentMod ? '提交修改' : '前往模组库另存为'}
+                onSave={() => (canEditCurrentMod ? handleSave() : jumpToModLibrary())}
                 onPublish={openPublishModal}
                 onShowGuide={() => setShowGuide(true)}
             />
@@ -642,6 +676,7 @@ ${data.content}`;
                                     category={activeCategory as any}
                                     files={activeCategory === 'world' ? files.md : [...files.md, 'main_system.md']}
                                     onSelectTopic={handleSelectTopic}
+                                    canEdit={canEditCurrentMod}
                                     onAddNew={activeCategory === 'skills' ? () => setNewItemModal({ type: 'skill', name: '', description: '' }) : undefined}
                                 />
                             ) : activeCategory === 'char' && selectedFile?.name.endsWith('roster.json') && editMode === 'visual' ? (
@@ -652,12 +687,14 @@ ${data.content}`;
                                     onEditSettings={editCharacterSettings}
                                     onAddNew={() => setNewItemModal({ type: 'char', name: '', archetype: '', description: '' })}
                                     onDelete={(id, name) => setDeleteConfirm({ type: 'char', id, name })}
+                                    canEdit={canEditCurrentMod}
                                 />
                             ) : activeCategory === 'event' && selectedFile?.name?.includes('timeline.json') && editMode === 'visual' ? (
                                 <TimelineView
                                     content={fileContent}
                                     onSave={(c) => handleSave(c)}
                                     onSelectPool={handleSelectPool}
+                                    canEdit={canEditCurrentMod}
                                 />
                             ) : activeCategory === 'event' && selectedFile?.type === 'csv' && editMode === 'visual' ? (
                                 <EventEditor
@@ -668,6 +705,7 @@ ${data.content}`;
                                     onBack={backToTimeline}
                                     filter={eventFilter}
                                     focusMode={selectedFile?.name?.includes('00_开局剧情.csv') ? 'opening' : 'default'}
+                                    canEdit={canEditCurrentMod}
                                 />
                             ) : activeCategory === 'relation' && selectedFile?.name?.includes('relationship.csv') && editMode === 'visual' ? (
                                 <RelationshipMatrix
@@ -691,6 +729,7 @@ ${data.content}`;
                                             handleSave();
                                         }
                                     }}
+                                    canEdit={canEditCurrentMod}
                                 />
                             ) : (
                                 <CodeWorkspace
@@ -698,6 +737,7 @@ ${data.content}`;
                                     fileContent={fileContent}
                                     setFileContent={setFileContent}
                                     isLoading={isLoading}
+                                    readOnly={!canEditCurrentMod}
                                     onBack={(activeCategory === 'world' || activeCategory === 'skills') ? backToExplorer : activeCategory === 'char' ? backToRoster : undefined}
                                 />
                             )}
@@ -725,6 +765,8 @@ ${data.content}`;
                 parsedCsvHeaders={parsedCsv?.headers || []}
                 publishIntent={publishIntent}
                 currentEditingMod={currentEditingMod}
+                isLoggedInAccount={isLoggedInAccount}
+                onNavigateAccount={jumpToAccountCenter}
             />
 
             <EditorGuide

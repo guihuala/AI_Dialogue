@@ -6,6 +6,7 @@ import shutil
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
+from src.core.config import DATA_ROOT
 
 
 class AdminFileSaveReq(BaseModel):
@@ -42,6 +43,8 @@ def build_admin_router(
     require_admin,
 ):
     router = APIRouter()
+    accounts_by_id_dir = os.path.join(DATA_ROOT, "accounts", "by_id")
+    accounts_sessions_dir = os.path.join(DATA_ROOT, "accounts", "sessions")
 
     def _library_file_path(user_id: str, item_id: str) -> str:
         return os.path.join(get_user_library_dir(user_id), f"{item_id}.json")
@@ -118,6 +121,139 @@ def build_admin_router(
         token = str(admin_session.get("token", "")).strip()
         admin_auth.revoke(token)
         return {"status": "success"}
+
+    @router.get("/api/admin/users")
+    def list_admin_users(
+        q: str = "",
+        sort_by: str = "updated_at",
+        sort_order: str = "desc",
+        page: int = 1,
+        page_size: int = 50,
+        admin_session: Dict[str, Any] = require_admin,
+    ):
+        _ = admin_session
+        rows = []
+        if os.path.exists(accounts_by_id_dir):
+            for file_name in os.listdir(accounts_by_id_dir):
+                if not file_name.endswith(".json"):
+                    continue
+                file_path = os.path.join(accounts_by_id_dir, file_name)
+                try:
+                    account = _read_json(file_path)
+                except Exception:
+                    continue
+                account_id = str(account.get("account_id", "") or "")
+                username = str(account.get("username", "") or "")
+                created_at = str(account.get("created_at", "") or "")
+                updated_at = str(account.get("updated_at", "") or "")
+                linked_visitor_ids = list(account.get("linked_visitor_ids", []) or [])
+                rows.append(
+                    {
+                        "account_id": account_id,
+                        "username": username,
+                        "created_at": created_at,
+                        "updated_at": updated_at,
+                        "linked_visitor_count": len(linked_visitor_ids),
+                    }
+                )
+
+        query = str(q or "").strip().lower()
+        if query:
+            rows = [
+                row
+                for row in rows
+                if query in str(row.get("username", "")).lower()
+                or query in str(row.get("account_id", "")).lower()
+            ]
+
+        if sort_by not in {"updated_at", "created_at", "username"}:
+            sort_by = "updated_at"
+        reverse = str(sort_order or "desc").lower() != "asc"
+        rows.sort(key=lambda row: str(row.get(sort_by, "")), reverse=reverse)
+
+        safe_page_size = max(1, min(int(page_size or 50), 200))
+        safe_page = max(1, int(page or 1))
+        total = len(rows)
+        total_pages = max(1, (total + safe_page_size - 1) // safe_page_size)
+        if safe_page > total_pages:
+            safe_page = total_pages
+        start = (safe_page - 1) * safe_page_size
+        end = start + safe_page_size
+        page_rows = rows[start:end]
+        return {
+            "status": "success",
+            "data": page_rows,
+            "pagination": {
+                "page": safe_page,
+                "page_size": safe_page_size,
+                "total": total,
+                "total_pages": total_pages,
+                "has_next": safe_page < total_pages,
+                "has_prev": safe_page > 1,
+            },
+        }
+
+    @router.get("/api/admin/users/stats")
+    def admin_user_stats(admin_session: Dict[str, Any] = require_admin):
+        _ = admin_session
+        total_accounts = 0
+        total_linked_visitors = 0
+        if os.path.exists(accounts_by_id_dir):
+            for file_name in os.listdir(accounts_by_id_dir):
+                if not file_name.endswith(".json"):
+                    continue
+                file_path = os.path.join(accounts_by_id_dir, file_name)
+                try:
+                    account = _read_json(file_path)
+                except Exception:
+                    continue
+                if account.get("account_id"):
+                    total_accounts += 1
+                    total_linked_visitors += len(list(account.get("linked_visitor_ids", []) or []))
+
+        active_sessions = 0
+        now = datetime.now()
+        if os.path.exists(accounts_sessions_dir):
+            for file_name in os.listdir(accounts_sessions_dir):
+                if not file_name.endswith(".json"):
+                    continue
+                file_path = os.path.join(accounts_sessions_dir, file_name)
+                try:
+                    session = _read_json(file_path)
+                    expires_at = datetime.fromisoformat(str(session.get("expires_at", "") or ""))
+                except Exception:
+                    continue
+                if expires_at > now:
+                    active_sessions += 1
+
+        public_mods = 0
+        unique_owners = set()
+        if os.path.exists(workshop_dir):
+            for file_name in os.listdir(workshop_dir):
+                if not file_name.endswith(".json"):
+                    continue
+                file_path = os.path.join(workshop_dir, file_name)
+                try:
+                    data = _read_json(file_path)
+                except Exception:
+                    continue
+                owner_user_id = str(data.get("owner_user_id", "") or "")
+                visibility = str(data.get("visibility", "public") or "public")
+                if visibility == "public":
+                    public_mods += 1
+                if owner_user_id:
+                    unique_owners.add(owner_user_id)
+
+        return {
+            "status": "success",
+            "data": {
+                "total_accounts": total_accounts,
+                "active_sessions": active_sessions,
+                "total_linked_visitors": total_linked_visitors,
+                "public_mods": public_mods,
+                "workshop_owner_accounts": len(unique_owners),
+            },
+        }
 
     @router.get("/api/admin/files")
     def get_admin_files(user_id: str = get_user_id):

@@ -11,6 +11,10 @@ apiClient.interceptors.request.use((config) => {
   if (visitorId) {
     config.headers['X-Visitor-Id'] = visitorId;
   }
+  const accountToken = localStorage.getItem('account_token');
+  if (accountToken) {
+    config.headers['X-Account-Token'] = accountToken;
+  }
   const adminToken = localStorage.getItem('admin_token');
   if (adminToken) {
     config.headers['X-Admin-Token'] = adminToken;
@@ -19,6 +23,56 @@ apiClient.interceptors.request.use((config) => {
 });
 
 export const gameApi = {
+  registerAccount: async (payload: { username: string; password: string; bind_current_visitor?: boolean }) => {
+    const res = await apiClient.post(`/account/register`, payload);
+    return res.data;
+  },
+
+  loginAccount: async (payload: { username: string; password: string }) => {
+    const res = await apiClient.post(`/account/login`, payload);
+    return res.data;
+  },
+
+  getAccountMe: async () => {
+    const res = await apiClient.get(`/account/me`);
+    return res.data;
+  },
+
+  logoutAccount: async () => {
+    const res = await apiClient.post(`/account/logout`);
+    return res.data;
+  },
+
+  changeAccountPassword: async (payload: { current_password: string; new_password: string }) => {
+    const res = await apiClient.post(`/account/change_password`, payload);
+    return res.data;
+  },
+
+  bindCurrentVisitorToAccount: async (payload?: { conflict_strategy?: 'keep_account' | 'overwrite_with_visitor' }) => {
+    const res = await apiClient.post(`/account/bind_current_visitor`, payload || {});
+    return res.data;
+  },
+
+  getVisitorBindingPreview: async () => {
+    const res = await apiClient.get(`/account/visitor_binding_preview`);
+    return res.data;
+  },
+
+  getAccountSessions: async () => {
+    const res = await apiClient.get(`/account/sessions`);
+    return res.data;
+  },
+
+  logoutOtherAccountSessions: async () => {
+    const res = await apiClient.post(`/account/logout_others`);
+    return res.data;
+  },
+
+  revokeAccountSession: async (sessionId: string) => {
+    const res = await apiClient.post(`/account/revoke_session/${sessionId}`);
+    return res.data;
+  },
+
   startGame: async (roommates: string[] = [], modId: string = "default", customPrompts?: Record<string, string>, saveId: string = "slot_0") => {
     const res = await apiClient.post(`/game/start`, { 
         roommates,
@@ -84,14 +138,38 @@ export const gameApi = {
     return res.data;
   },
 
+  getAdminUsers: async (params?: {
+    q?: string;
+    sort_by?: 'updated_at' | 'created_at' | 'username';
+    sort_order?: 'asc' | 'desc';
+    page?: number;
+    page_size?: number;
+  }) => {
+    const res = await apiClient.get(`/admin/users`, { params });
+    return res.data;
+  },
+
+  getAdminUserStats: async () => {
+    const res = await apiClient.get(`/admin/users/stats`);
+    return res.data;
+  },
+
   saveAdminFile: async (type: string, name: string, content: string) => {
     const res = await apiClient.post(`/admin/file`, { type, name, content });
     return res.data;
   },
 
   // Library Management
-  getLibraryList: async () => {
-    const res = await apiClient.get(`/library/list`);
+  getLibraryList: async (params?: {
+    q?: string;
+    sort_by?: string;
+    sort_order?: 'asc' | 'desc';
+    source_type?: string;
+    visibility?: string;
+    page?: number;
+    page_size?: number;
+  }) => {
+    const res = await apiClient.get(`/library/list`, { params });
     return res.data;
   },
 
@@ -122,6 +200,11 @@ export const gameApi = {
 
   deleteFromLibrary: async (itemId: string) => {
     const res = await apiClient.delete(`/library/${itemId}`);
+    return res.data;
+  },
+
+  syncLibraryItem: async (itemId: string) => {
+    const res = await apiClient.post(`/library/sync/${itemId}`);
     return res.data;
   },
 
@@ -156,8 +239,30 @@ export const gameApi = {
   },
 
   // Workshop Management
-  getWorkshopList: async () => {
-    const res = await apiClient.get(`/workshop/list`);
+  getWorkshopList: async (params?: {
+    q?: string;
+    sort_by?: string;
+    sort_order?: 'asc' | 'desc';
+    source_type?: string;
+    focus_tag?: string;
+    owned_only?: boolean;
+    page?: number;
+    page_size?: number;
+  }) => {
+    const res = await apiClient.get(`/workshop/list`, { params });
+    return res.data;
+  },
+
+  getMyWorkshopList: async (params?: {
+    q?: string;
+    sort_by?: string;
+    sort_order?: 'asc' | 'desc';
+    source_type?: string;
+    focus_tag?: string;
+    page?: number;
+    page_size?: number;
+  }) => {
+    const res = await apiClient.get(`/workshop/mine`, { params });
     return res.data;
   },
 

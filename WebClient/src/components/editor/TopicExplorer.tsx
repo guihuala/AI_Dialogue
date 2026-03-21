@@ -26,9 +26,10 @@ interface TopicExplorerProps {
     files: string[];
     onSelectTopic: (fileName: string) => void;
     onAddNew?: () => void;
+    canEdit?: boolean;
 }
 
-export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew }: TopicExplorerProps) => {
+export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew, canEdit = true }: TopicExplorerProps) => {
     const [searchTerm, setSearchTerm] = useState('');
 
     const worldTopics: Topic[] = [
@@ -208,13 +209,14 @@ export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew }: Topi
                     {category === 'skills' && !searchTerm && onAddNew && (
                         <button
                             onClick={onAddNew}
+                            disabled={!canEdit}
                             className="bg-white/40 rounded-[2.5rem] p-8 border-4 border-dashed border-[var(--color-soft-border)] hover:border-[var(--color-cyan-main)]/30 hover:bg-white transition-all group text-left flex flex-col items-center justify-center text-[var(--color-cyan-main)]/30 hover:text-[var(--color-cyan-main)] min-h-[280px]"
                         >
                             <div className="w-16 h-16 rounded-full bg-[var(--color-cyan-light)] group-hover:bg-[var(--color-cyan-main)] group-hover:text-white flex items-center justify-center mb-4 transition-colors">
                                 <Plus size={32} />
                             </div>
-                            <span className="text-sm font-black uppercase tracking-[0.2em]">编写自定义 SKILL</span>
-                            <span className="text-[10px] font-bold text-[var(--color-life-text)]/40 mt-2 uppercase">动态装载 AI 插件</span>
+                            <span className="text-sm font-black uppercase tracking-[0.2em]">{canEdit ? '编写自定义 SKILL' : '默认模板只读'}</span>
+                            <span className="text-[10px] font-bold text-[var(--color-life-text)]/40 mt-2 uppercase">{canEdit ? '动态装载 AI 插件' : '请先另存为你的模组'}</span>
                         </button>
                     )}
                     

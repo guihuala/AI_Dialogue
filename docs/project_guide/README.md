@@ -96,3 +96,5 @@ AI_Dialogue/
 
 - [前端说明](./frontend.md)
 - [后端说明](./backend.md)
+- [模组系统说明](./mod_system.md)
+- [账户系统设计](./account_system.md)

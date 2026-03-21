@@ -10,6 +10,7 @@ interface RelationshipMatrixProps {
     onUpdateRow: (rowIndex: number, field: string, value: string) => void;
     onAddRow: (data: Record<string, string>) => void;
     onSaveAll?: () => void;
+    canEdit?: boolean;
 }
 
 export const RelationshipMatrix = ({
@@ -17,7 +18,8 @@ export const RelationshipMatrix = ({
     parsedCsv,
     onUpdateRow,
     onAddRow,
-    onSaveAll
+    onSaveAll,
+    canEdit = true
 }: RelationshipMatrixProps) => {
     const [selectedCell, setSelectedCell] = useState<{
         evaluator: string,
@@ -50,6 +52,7 @@ export const RelationshipMatrix = ({
     }, [parsedCsv]);
 
     const handleCellClick = (evaluator: string, evaluatee: string) => {
+        if (!canEdit) return;
         if (evaluator === evaluatee) return;
         
         const existing = relationshipMap[evaluator]?.[evaluatee];
@@ -81,9 +84,10 @@ export const RelationshipMatrix = ({
                 {onSaveAll && (
                     <button
                         onClick={onSaveAll}
+                        disabled={!canEdit}
                         className="px-6 py-3 bg-[var(--color-cyan-dark)] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center hover:bg-[var(--color-cyan-main)] transition-all shadow-xl shadow-cyan-900/20"
                     >
-                        <Save size={16} className="mr-2" /> 保存矩阵修改
+                        <Save size={16} className="mr-2" /> {canEdit ? '保存矩阵修改' : '模板关系只读'}
                     </button>
                 )}
             </div>
@@ -137,6 +141,7 @@ export const RelationshipMatrix = ({
                                             <td key={evaluatee} className="p-2">
                                                 <button
                                                     onClick={() => handleCellClick(evaluator, evaluatee)}
+                                                    disabled={!canEdit}
                                                     className={`w-full h-24 rounded-[1.5rem] p-4 flex flex-col items-start justify-between text-left transition-all group relative overflow-hidden ${
                                                         rel 
                                                         ? 'bg-white border-2 border-[var(--color-cyan-main)]/10 hover:border-[var(--color-cyan-main)]/40 hover:shadow-lg hover:-translate-y-1' 

@@ -5,6 +5,7 @@ interface CodeWorkspaceProps {
     fileContent: string;
     setFileContent: (content: string) => void;
     isLoading: boolean;
+    readOnly?: boolean;
     onBack?: () => void;
 }
 
@@ -13,6 +14,7 @@ export const CodeWorkspace = ({
     fileContent,
     setFileContent,
     isLoading,
+    readOnly = false,
     onBack
 }: CodeWorkspaceProps) => {
     return (
@@ -47,14 +49,14 @@ export const CodeWorkspace = ({
             <textarea
                 value={fileContent}
                 onChange={(e) => setFileContent(e.target.value)}
-                disabled={isLoading}
+                disabled={isLoading || readOnly}
                 spellCheck={false}
                 className="flex-1 w-full p-10 font-mono text-sm leading-8 text-[var(--color-cyan-dark)] outline-none resize-none bg-transparent custom-scrollbar transition-opacity duration-300"
                 style={{
                     whiteSpace: selectedFile?.type === 'csv' || selectedFile?.name.endsWith('.json') ? 'pre' : 'pre-wrap',
                     opacity: isLoading ? 0.3 : 1
                 }}
-                placeholder="输入源代码或文本指令..."
+                placeholder={readOnly ? '默认模板为只读，请先另存为你的模组后再编辑。' : '输入源代码或文本指令...'}
             />
 
             <div className="px-8 py-4 border-t border-[var(--color-soft-border)] text-[10px] font-black text-[var(--color-life-text)]/30 uppercase tracking-widest items-center justify-between flex bg-white/50">

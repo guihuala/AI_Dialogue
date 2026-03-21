@@ -16,9 +16,10 @@ interface TimelineViewProps {
     content: string;
     onSave: (content: string) => void;
     onSelectPool: (chapter: string, poolType: string) => void;
+    canEdit?: boolean;
 }
 
-export const TimelineView = ({ content, onSave, onSelectPool }: TimelineViewProps) => {
+export const TimelineView = ({ content, onSave, onSelectPool, canEdit = true }: TimelineViewProps) => {
     let timeline: Record<string, string[]> = {};
     try {
         timeline = JSON.parse(content);
@@ -107,12 +108,15 @@ export const TimelineView = ({ content, onSave, onSelectPool }: TimelineViewProp
                 </div>
                 <button
                     onClick={() => {
-                         setEditContent(content);
-                         setIsEditing(true);
+                         if (canEdit) {
+                            setEditContent(content);
+                            setIsEditing(true);
+                         }
                     }}
+                    disabled={!canEdit}
                     className="px-6 py-3 bg-white border-2 border-[var(--color-cyan-main)]/10 text-[var(--color-cyan-dark)] rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center hover:bg-[var(--color-cyan-light)] transition-all group"
                 >
-                    <Settings2 size={16} className="mr-2 text-[var(--color-cyan-main)] group-hover:rotate-90 transition-transform" /> 原始 JSON 编辑
+                    <Settings2 size={16} className="mr-2 text-[var(--color-cyan-main)] group-hover:rotate-90 transition-transform" /> {canEdit ? '原始 JSON 编辑' : '时间轴模板只读'}
                 </button>
             </div>
 

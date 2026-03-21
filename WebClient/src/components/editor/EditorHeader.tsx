@@ -7,11 +7,14 @@ interface EditorHeaderProps {
     activeSourceLabel?: string;
     activeModLabel?: string;
     contextHint?: string;
+    statusNotice?: string;
+    statusNoticeTone?: 'info' | 'warning';
     editMode: 'visual' | 'code';
     setEditMode: (v: 'visual' | 'code') => void;
     isSaving: boolean;
     canEdit?: boolean;
     canPublish?: boolean;
+    saveLabel?: string;
     onSave: () => void;
     onPublish: () => void;
     onShowGuide: () => void;
@@ -24,11 +27,14 @@ export const EditorHeader = ({
     activeSourceLabel,
     activeModLabel,
     contextHint,
+    statusNotice,
+    statusNoticeTone = 'info',
     editMode,
     setEditMode,
     isSaving,
     canEdit = true,
     canPublish = true,
+    saveLabel,
     onSave,
     onPublish,
     onShowGuide
@@ -70,6 +76,17 @@ export const EditorHeader = ({
                             )}
                         </div>
                     )}
+                    {statusNotice && (
+                        <div
+                            className={`mt-3 inline-flex max-w-2xl items-center rounded-2xl border px-3 py-2 text-[10px] font-black leading-5 ${
+                                statusNoticeTone === 'warning'
+                                    ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                    : 'border-[var(--color-cyan-main)]/15 bg-white/85 text-[var(--color-cyan-dark)]'
+                            }`}
+                        >
+                            {statusNotice}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -107,11 +124,11 @@ export const EditorHeader = ({
                 </button>
                 <button
                     onClick={onSave}
-                    disabled={isSaving || !selectedFile || !canEdit}
+                    disabled={isSaving || (!selectedFile && canEdit)}
                     className="flex items-center px-10 py-4 bg-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-main)] text-white rounded-3xl font-black transition-all shadow-2xl shadow-cyan-900/20 text-xs active:scale-95 disabled:opacity-20 flex-shrink-0"
                 >
                     <Save size={20} className="mr-3 text-[var(--color-cyan-main)]" />
-                    {isSaving ? '同步中...' : '提交修改'}
+                    {isSaving ? '同步中...' : (saveLabel || '提交修改')}
                 </button>
             </div>
         </div>

@@ -19,7 +19,6 @@ export const Sidebar = ({
   const tabs = [
     { id: 'game', label: '游玩' },
     { id: 'mods', label: '模组' },
-    { id: 'editor', label: '编辑器' },
     { id: 'settings', label: '设置' },
   ];
 

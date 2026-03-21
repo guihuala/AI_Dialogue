@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { GameView } from './components/GameView';
 import { ModManager } from './components/ModManager';
 import { SettingsPanel } from './components/SettingsPanel';
+import { AccountPanel } from './components/AccountPanel';
 import { PromptEditor } from './components/PromptEditor';
 import { PhoneOverlay } from './components/PhoneOverlay';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -120,6 +121,7 @@ function App() {
         {showUI && (
           <Header
             onMenuClick={() => setIsSidebarOpen(true)}
+            onAccountClick={() => setActiveTabWithRoute('account')}
             activeTab={activeTab}
             isSidebarOpen={isSidebarOpen}
           />
@@ -131,6 +133,7 @@ function App() {
           {activeTab === 'workshop' && <ModManager onTabChange={setActiveTabWithRoute} />}
           {activeTab === 'editor' && <PromptEditor />}
           {activeTab === 'settings' && <SettingsPanel />}
+          {activeTab === 'account' && <AccountPanel />}
           {activeTab === 'admin' && <AdminDashboard />}
         </div>
       </main>

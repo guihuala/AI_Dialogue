@@ -1,7 +1,7 @@
-from fastapi import FastAPI, Header, Depends
+from fastapi import FastAPI, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import os
 import sys
 import concurrent.futures
@@ -23,6 +23,7 @@ from src.core.config import (
 from src.core.mod_manifest import build_manifest, validate_manifest
 from src.core.snapshot_manager import create_snapshot, list_snapshots, load_snapshot, trim_snapshots
 from src.routers.admin_router import build_admin_router
+from src.routers.account_router import build_account_router
 from src.routers.system_router import build_system_router
 from src.routers.debug_router import build_debug_router
 from src.routers.content_router import build_content_router
@@ -30,6 +31,7 @@ from src.routers.intervention_router import build_intervention_router
 from src.routers.game_router import build_game_router
 from src.services.roster_service import get_current_roster, normalize_roster_single_player
 from src.services.admin_auth_service import AdminAuthManager
+from src.services.account_auth_service import AccountAuthManager
 from src.services.state_service import (
     MAX_LIBRARY_ITEMS,
     MAX_LIBRARY_TOTAL_BYTES,
@@ -73,6 +75,7 @@ PREFETCH_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=10)
 
 app = FastAPI(title="Roommate Survival Game API")
 admin_auth = AdminAuthManager()
+account_auth = AccountAuthManager()
 
 @app.on_event("shutdown")
 def _shutdown_background_pool():
@@ -84,9 +87,9 @@ def _shutdown_background_pool():
 # --- Multi-user Engine Manager ---
 engines: Dict[str, GameEngine] = {}
 
-def get_user_id(x_visitor_id: Optional[str] = Header(None)):
-    """Extract visitor ID from header, fallback to 'default'"""
-    return x_visitor_id or "default"
+def get_user_id(identity: Dict[str, Any] = Depends(account_auth.get_identity)):
+    """Resolve current user id, preferring account token over visitor id."""
+    return str(identity.get("user_id", "") or "default")
 
 def get_engine(user_id: str) -> GameEngine:
     """Get or create a GameEngine for a specific user"""
@@ -118,6 +121,15 @@ if not os.path.exists(WORKSHOP_DIR):
 # ==========================================
 # 模块化路由注册
 # ==========================================
+app.include_router(
+    build_account_router(
+        account_auth=account_auth,
+        get_identity=Depends(account_auth.get_identity),
+        require_account=Depends(account_auth.require_account),
+        append_audit_log=append_audit_log,
+    )
+)
+
 app.include_router(
     build_system_router(
         get_user_id=Depends(get_user_id),
@@ -218,6 +230,7 @@ app.include_router(
         max_snapshots_keep=MAX_SNAPSHOTS_KEEP,
         workshop_dir=WORKSHOP_DIR,
         require_admin=Depends(admin_auth.require_admin),
+        require_account=Depends(account_auth.require_account),
     )
 )
 

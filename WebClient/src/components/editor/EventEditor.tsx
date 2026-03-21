@@ -9,6 +9,7 @@ interface EventEditorProps {
     onBack?: () => void;
     filter?: { chapter?: string, type?: string };
     focusMode?: 'default' | 'opening';
+    canEdit?: boolean;
 }
 
 export const EventEditor = ({
@@ -18,7 +19,8 @@ export const EventEditor = ({
     onDeleteRow,
     onBack,
     filter,
-    focusMode = 'default'
+    focusMode = 'default',
+    canEdit = true
 }: EventEditorProps) => {
     const [searchTerm, setSearchTerm] = useState('');
     const isOpeningFocus = focusMode === 'opening';
@@ -98,9 +100,10 @@ export const EventEditor = ({
                     </div>
                     <button
                         onClick={onAddNew}
+                        disabled={!canEdit}
                         className="px-6 py-2.5 bg-[var(--color-cyan-dark)] text-white rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center hover:bg-[var(--color-cyan-main)] transition-all shadow-xl shadow-cyan-900/20"
                     >
-                        <Plus size={14} className="mr-2" /> 新增项
+                        <Plus size={14} className="mr-2" /> {canEdit ? '新增项' : '模板只读'}
                     </button>
                 </div>
             </div>
@@ -112,6 +115,7 @@ export const EventEditor = ({
                             <div key={row.originalIndex} className="bg-white rounded-2xl p-6 border border-[var(--color-soft-border)] hover:border-[var(--color-cyan-main)]/30 transition-all group/card relative shadow-sm hover:shadow-md">
                                 <button
                                     onClick={() => onDeleteRow(row.originalIndex, (parsedCsv?.headers && row[parsedCsv.headers[0]]) || `行 ${row.originalIndex + 1}`)}
+                                    disabled={!canEdit}
                                     className="absolute top-4 right-4 p-2 text-[var(--color-yellow-main)] hover:bg-[var(--color-yellow-light)] rounded-xl opacity-0 group-hover/card:opacity-100 transition-all"
                                 >
                                     <Trash2 size={14} />
@@ -133,6 +137,7 @@ export const EventEditor = ({
                                             <textarea
                                                 value={row[h]}
                                                 onChange={(e) => onUpdateRow(row.originalIndex, h, e.target.value)}
+                                                disabled={!canEdit}
                                                 className={`w-full px-4 py-3 rounded-xl border border-transparent text-sm font-bold text-[var(--color-cyan-dark)] focus:bg-white focus:border-[var(--color-cyan-main)] outline-none transition-all resize-none overflow-hidden ${
                                                     isDialogueField
                                                         ? 'bg-[var(--color-yellow-light)]/40 border-[var(--color-yellow-main)]/30'

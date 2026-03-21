@@ -20,6 +20,8 @@ interface EditorModalsProps {
     parsedCsvHeaders: string[];
     publishIntent?: 'create' | 'update' | 'fork';
     currentEditingMod?: any;
+    isLoggedInAccount?: boolean;
+    onNavigateAccount?: () => void;
 }
 
 export const EditorModals = ({
@@ -39,11 +41,14 @@ export const EditorModals = ({
     onGenerateSkillPrompt,
     parsedCsvHeaders,
     publishIntent = 'create',
-    currentEditingMod
+    currentEditingMod,
+    isLoggedInAccount = false,
+    onNavigateAccount
 }: EditorModalsProps) => {
     const [isGenerating, setIsGenerating] = useState(false);
     const [isPublishing, setIsPublishing] = useState(false);
     const [publishReport, setPublishReport] = useState<any | null>(null);
+    const [publishError, setPublishError] = useState('');
 
     const handleAIGenerate = async () => {
         if (!newItemModal?.archetype || isGenerating || !onGenerateSkillPrompt) return;
@@ -100,6 +105,9 @@ export const EditorModals = ({
                                         <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-white border border-[var(--color-cyan-main)]/15 text-[var(--color-cyan-main)]">
                                             {publishIntent === 'update' ? `当前版本 v${currentEditingMod?.version || 1}` : publishIntent === 'fork' ? '将创建新作品' : '首次公开'}
                                         </span>
+                                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${isLoggedInAccount ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-amber-50 border border-amber-200 text-amber-700'}`}>
+                                            {isLoggedInAccount ? '已登录，可公开发布' : '需登录账户后才能发布'}
+                                        </span>
                                         {publishIntent === 'fork' && currentEditingMod?.source_mod_id && (
                                             <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-50 border border-amber-200 text-amber-700">
                                                 来源作品：{currentEditingMod.source_mod_id}
@@ -146,6 +154,26 @@ export const EditorModals = ({
                                         </div>
                                     ) : (
                                         <div className="mt-2 text-[10px] text-slate-400 font-bold">建议先执行一次校验再发布</div>
+                                    )}
+                                    {!isLoggedInAccount && (
+                                        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3">
+                                            <div className="text-[11px] font-black text-amber-700">
+                                                公开模组会绑定到正式账户名下。请先登录或注册，再回来执行发布。
+                                            </div>
+                                            {onNavigateAccount && (
+                                                <button
+                                                    onClick={onNavigateAccount}
+                                                    className="mt-3 inline-flex items-center rounded-full border border-amber-300 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-amber-700 transition-all hover:bg-amber-100"
+                                                >
+                                                    前往账户中心
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                    {publishError && (
+                                        <div className="mt-3 rounded-2xl border border-red-200 bg-red-50/70 px-4 py-3 text-[11px] font-black text-red-600">
+                                            {publishError}
+                                        </div>
                                     )}
                                 </div>
 
@@ -194,6 +222,11 @@ export const EditorModals = ({
                                 </button>
                                 <button
                                     onClick={async () => {
+                                        setPublishError('');
+                                        if (!isLoggedInAccount) {
+                                            setPublishError('当前为访客模式，公开发布需要先登录正式账户。');
+                                            return;
+                                        }
                                         setIsPublishing(true);
                                         try {
                                             const validateRes = await gameApi.validateCurrentForPublish();
@@ -210,15 +243,22 @@ export const EditorModals = ({
                                                 setShowPublishModal(false);
                                                 setPublishMetadata({ name: '', author: '', description: '' });
                                                 setPublishReport(null);
+                                                setPublishError('');
                                                 console.log('Mod published successfully:', res.id);
                                             }
-                                        } catch (e) {
+                                        } catch (e: any) {
+                                            const detail = e?.response?.data?.detail || '';
+                                            if (e?.response?.status === 401) {
+                                                setPublishError('公开发布需要登录正式账户。请先前往账户中心登录后再试。');
+                                            } else {
+                                                setPublishError(detail || '发布失败，请稍后重试。');
+                                            }
                                             console.error('Failed to publish mod:', e);
                                         } finally {
                                             setIsPublishing(false);
                                         }
                                     }}
-                                    disabled={isPublishing}
+                                    disabled={isPublishing || !isLoggedInAccount}
                                     className="flex-[1.5] py-6 bg-[var(--color-cyan-dark)] disabled:opacity-50 text-white rounded-[2.5rem] font-black hover:bg-[var(--color-cyan-main)] transition-all shadow-2xl shadow-cyan-900/40 uppercase tracking-widest text-xs flex items-center justify-center gap-2"
                                 >
                                     {isPublishing ? <Loader2 size={16} className="animate-spin" /> : null}

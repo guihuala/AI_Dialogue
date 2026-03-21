@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Layers, Cloud, BookOpen, Trash2, Download, Plus, RefreshCw, X, Check, Lock, Search, Edit3, RotateCcw, ShieldCheck } from 'lucide-react';
+import { Layers, Cloud, BookOpen, Trash2, Download, Plus, RefreshCw, X, Check, Lock, Search, Edit3, ShieldCheck } from 'lucide-react';
 import { gameApi } from '../api/gameApi';
 import { ConfirmDialog } from './common/ConfirmDialog';
 
@@ -9,16 +9,42 @@ interface ModManagerProps {
     onTabChange: (tab: any) => void;
 }
 
+interface ListPagination {
+    page: number;
+    page_size: number;
+    total: number;
+    total_pages: number;
+    has_next: boolean;
+    has_prev: boolean;
+}
+
+const EMPTY_PAGINATION: ListPagination = {
+    page: 1,
+    page_size: 12,
+    total: 0,
+    total_pages: 1,
+    has_next: false,
+    has_prev: false
+};
+
 export const ModManager = ({ onTabChange }: ModManagerProps) => {
+    const workshopFocusOptions = ['全部', '偏角色向', '偏剧情向', '偏系统向'] as const;
     const [libraryFilter, setLibraryFilter] = useState<'all' | 'original' | 'downloaded' | 'public'>('all');
     const [librarySort, setLibrarySort] = useState<'updated' | 'name'>('updated');
     const [workshopFilter, setWorkshopFilter] = useState<'all' | 'original' | 'forked' | 'mine'>('all');
     const [workshopSort, setWorkshopSort] = useState<'updated' | 'downloads' | 'name'>('updated');
+    const [workshopFocusTag, setWorkshopFocusTag] = useState<(typeof workshopFocusOptions)[number]>('全部');
     const [activeTab, setActiveTab] = useState<TabType>('library');
     const [libraryMods, setLibraryMods] = useState<any[]>([]);
+    const [libraryCatalogMods, setLibraryCatalogMods] = useState<any[]>([]);
     const [workshopMods, setWorkshopMods] = useState<any[]>([]);
+    const [libraryPagination, setLibraryPagination] = useState<ListPagination>(EMPTY_PAGINATION);
+    const [workshopPagination, setWorkshopPagination] = useState<ListPagination>(EMPTY_PAGINATION);
+    const [libraryPage, setLibraryPage] = useState(1);
+    const [workshopPage, setWorkshopPage] = useState(1);
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
     const [toast, setToast] = useState('');
     
     // Save dialog state
@@ -40,53 +66,124 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
     const [userState, setUserState] = useState<any>(null);
     const [snapshots, setSnapshots] = useState<any[]>([]);
     const [selectedWorkshopMod, setSelectedWorkshopMod] = useState<any | null>(null);
+    const [accountInfo, setAccountInfo] = useState<any>(null);
+
+    const defaultTemplateMod = useMemo(() => ({
+        id: 'default',
+        name: '默认模组',
+        description: '官方默认内容模板，只可查看，不能直接覆盖。若要微调，请先另存为你的本地模组。',
+        timestamp: '系统内置',
+        visibility: 'readonly',
+        isDefault: true,
+        source_type: 'system',
+        version: 1
+    }), []);
+
+    const canPublishWorkshopMods = !!accountInfo?.capabilities?.can_publish_workshop_mods;
 
     const showToast = (msg: string) => {
         setToast(msg);
         setTimeout(() => setToast(''), 3000);
     };
 
-    const loadLibrary = useCallback(async () => {
+    useEffect(() => {
+        const timer = window.setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery.trim());
+        }, 250);
+        return () => window.clearTimeout(timer);
+    }, [searchQuery]);
+
+    const loadLibrary = useCallback(async (targetPage?: number) => {
         setLoading(true);
         try {
-            const res = await gameApi.getLibraryList();
+            const page = targetPage ?? libraryPage;
+            const sourceType = libraryFilter === 'downloaded' ? 'downloaded' : libraryFilter === 'original' ? 'original' : '';
+            const visibility = libraryFilter === 'public' ? 'public' : '';
+            const sortBy = librarySort === 'name' ? 'name' : 'updated_at';
+            const res = await gameApi.getLibraryList({
+                q: debouncedSearchQuery,
+                sort_by: sortBy,
+                sort_order: 'desc',
+                source_type: sourceType,
+                visibility,
+                page,
+                page_size: 12
+            });
             setLibraryMods(res.data || []);
+            setLibraryPagination(res.pagination || EMPTY_PAGINATION);
         } catch (e) {
             console.error(e);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [debouncedSearchQuery, libraryFilter, libraryPage, librarySort]);
 
     const loadSafetyData = useCallback(async () => {
         try {
-            const [stateRes, snapsRes] = await Promise.all([
+            const [stateRes, snapsRes, libraryRes, accountRes] = await Promise.all([
                 gameApi.getUserState(),
-                gameApi.getSnapshots()
+                gameApi.getSnapshots(),
+                gameApi.getLibraryList({ page: 1, page_size: 200, sort_by: 'updated_at', sort_order: 'desc' }),
+                gameApi.getAccountMe()
             ]);
             setUserState(stateRes?.data || null);
             setSnapshots(snapsRes?.data || []);
+            setLibraryCatalogMods(libraryRes?.data || []);
+            setAccountInfo(accountRes?.data || null);
         } catch (e) {
             console.warn('Failed to load safety data', e);
         }
     }, []);
 
-    const loadWorkshop = useCallback(async () => {
+    const loadWorkshop = useCallback(async (targetPage?: number) => {
         setLoading(true);
         try {
-            const res = await gameApi.getWorkshopList();
+            const page = targetPage ?? workshopPage;
+            const sourceType = workshopFilter === 'forked' ? 'forked' : workshopFilter === 'original' ? 'original' : '';
+            const ownedOnly = workshopFilter === 'mine';
+            const sortBy = workshopSort === 'name' ? 'name' : workshopSort === 'downloads' ? 'downloads' : 'updated_at';
+            const baseParams = {
+                q: debouncedSearchQuery,
+                sort_by: sortBy,
+                sort_order: 'desc' as const,
+                source_type: sourceType,
+                focus_tag: workshopFocusTag === '全部' ? '' : workshopFocusTag,
+                page,
+                page_size: 12
+            };
+            const res = ownedOnly
+                ? await gameApi.getMyWorkshopList(baseParams)
+                : await gameApi.getWorkshopList({ ...baseParams, owned_only: ownedOnly });
             setWorkshopMods(res.data || []);
+            setWorkshopPagination(res.pagination || EMPTY_PAGINATION);
         } catch (e) {
-            console.error(e);
+            const status = (e as any)?.response?.status;
+            if (status === 401 && workshopFilter === 'mine') {
+                showToast('请先登录正式账户后再查看“我的作品”。');
+                setWorkshopFilter('all');
+            } else {
+                console.error(e);
+            }
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [debouncedSearchQuery, workshopFilter, workshopFocusTag, workshopPage, workshopSort]);
+
+    useEffect(() => {
+        setLibraryPage(1);
+    }, [debouncedSearchQuery, libraryFilter, librarySort]);
+
+    useEffect(() => {
+        setWorkshopPage(1);
+    }, [debouncedSearchQuery, workshopFilter, workshopFocusTag, workshopSort]);
 
     useEffect(() => {
         if (activeTab === 'library') loadLibrary();
-        else loadWorkshop();
-    }, [activeTab, loadLibrary, loadWorkshop]);
+    }, [activeTab, loadLibrary, libraryPage]);
+
+    useEffect(() => {
+        if (activeTab === 'workshop') loadWorkshop();
+    }, [activeTab, loadWorkshop, workshopPage]);
 
     useEffect(() => {
         loadSafetyData();
@@ -125,6 +222,29 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                     loadSafetyData();
                 } catch (e) {
                     showToast('❌ 删除失败');
+                } finally {
+                    setActionTarget(null);
+                }
+            }
+        });
+    };
+
+    const handleSync = async (id: string, name: string) => {
+        setConfirmDialog({
+            open: true,
+            title: '同步模组更新',
+            message: `将用原作者的最新公共版本覆盖你当前的下载副本 [${name}]。确认继续？`,
+            confirmText: '确认同步',
+            onConfirm: async () => {
+                setActionTarget(`sync-${id}`);
+                try {
+                    const res = await gameApi.syncLibraryItem(id);
+                    showToast(`✅ ${res?.message || '同步成功'}`);
+                    loadLibrary();
+                    loadSafetyData();
+                } catch (e) {
+                    const detail = (e as any)?.response?.data?.detail || '同步失败';
+                    showToast(`❌ ${detail}`);
                 } finally {
                     setActionTarget(null);
                 }
@@ -198,53 +318,25 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
         });
     };
 
-    const filteredLibrary = useMemo(() => {
-        const q = searchQuery.toLowerCase();
-        const defaultMod = {
-            id: 'default',
-            name: '默认模组',
-            description: '官方默认内容，只可查看，不能直接覆盖。若要微调，请另存为新的本地模组。',
-            timestamp: '系统内置',
-            visibility: 'readonly',
-            isDefault: true,
-            source_type: 'system',
-            version: 1
-        };
-        const merged = [defaultMod, ...libraryMods];
-        const filtered = merged.filter((m) => {
-            const matchesSearch = m.name?.toLowerCase().includes(q) || m.description?.toLowerCase().includes(q);
-            if (!matchesSearch) return false;
-            if (libraryFilter === 'original') return !!m.isDefault || (m.source_type !== 'downloaded' && m.source_type !== 'forked');
-            if (libraryFilter === 'downloaded') return m.source_type === 'downloaded';
-            if (libraryFilter === 'public') return m.visibility === 'public';
-            return true;
-        });
-        return filtered.sort((a, b) => {
-            if (a.isDefault) return -1;
-            if (b.isDefault) return 1;
-            if (librarySort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
-            return String(b.updated_at || b.timestamp || '').localeCompare(String(a.updated_at || a.timestamp || ''));
-        });
-    }, [libraryMods, searchQuery, libraryFilter, librarySort]);
+    const defaultVisibleInLibrary = useMemo(() => {
+        const matchesSearch =
+            !debouncedSearchQuery ||
+            defaultTemplateMod.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+            defaultTemplateMod.description.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+        const matchesFilter = libraryFilter === 'all' || libraryFilter === 'original';
+        return matchesSearch && matchesFilter && libraryPage === 1;
+    }, [debouncedSearchQuery, defaultTemplateMod.description, defaultTemplateMod.name, libraryFilter, libraryPage]);
 
-    const filteredWorkshop = useMemo(() => {
-        const q = searchQuery.toLowerCase();
-        const filtered = workshopMods.filter((m) => {
-            const matchesSearch = m.name?.toLowerCase().includes(q) || m.description?.toLowerCase().includes(q) || m.author?.toLowerCase().includes(q);
-            if (!matchesSearch) return false;
-            if (workshopFilter === 'original') return m.source_type !== 'forked';
-            if (workshopFilter === 'forked') return m.source_type === 'forked';
-            if (workshopFilter === 'mine') return !!m.is_owned_by_current_user;
-            return true;
-        });
-        return filtered.sort((a, b) => {
-            if (workshopSort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
-            if (workshopSort === 'downloads') return Number(b.downloads || 0) - Number(a.downloads || 0);
-            return String(b.updated_at || b.timestamp || '').localeCompare(String(a.updated_at || a.timestamp || ''));
-        });
-    }, [workshopMods, searchQuery, workshopFilter, workshopSort]);
+    const totalLibraryCount = libraryPagination.total + (defaultVisibleInLibrary ? 1 : 0);
+    const displayedLibraryMods = useMemo(
+        () => (defaultVisibleInLibrary ? [defaultTemplateMod, ...libraryMods] : libraryMods),
+        [defaultTemplateMod, defaultVisibleInLibrary, libraryMods]
+    );
 
     const getWorkshopFocusTags = (mod: any) => {
+        if (Array.isArray(mod?.focus_tags) && mod.focus_tags.length > 0) {
+            return mod.focus_tags.slice(0, 3);
+        }
         const summary = mod?.summary || {};
         const tags: string[] = [];
         const characterCount = Number(summary.character_count || 0);
@@ -269,8 +361,89 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
         return '原创';
     };
 
+    const selectedWorkshopLibraryState = useMemo(() => {
+        if (!selectedWorkshopMod) return null;
+
+        const workshopId = String(selectedWorkshopMod.id);
+        const linkedEditableMod = libraryCatalogMods.find(
+            (item) => String(item.linked_workshop_id || '') === workshopId
+        );
+        if (linkedEditableMod) {
+            return {
+                tone: 'info' as const,
+                title: '你的本地源模组',
+                body: `你的库中已有可编辑源模组「${linkedEditableMod.name}」（v${linkedEditableMod.version || 1}）。继续编辑并重新发布后，会更新这个公开版本。`
+            };
+        }
+
+        const downloadedCopies = libraryCatalogMods.filter(
+            (item) =>
+                String(item.source_mod_id || '') === workshopId ||
+                String(item.parent_workshop_id || '') === workshopId
+        );
+
+        if (downloadedCopies.length === 0) {
+            return {
+                tone: 'info' as const,
+                title: '尚未加入你的库',
+                body: '你的库中还没有这个模组副本。下载后它会作为私有副本保存，你可以在本地编辑，并在开局时单独选择使用。'
+            };
+        }
+
+        const outdatedCopies = downloadedCopies.filter((item) => !!item.has_update);
+        if (outdatedCopies.length > 0) {
+            const highestUpstreamVersion = Math.max(
+                ...outdatedCopies.map((item) => Number(item.upstream_version || item.version || 1))
+            );
+            return {
+                tone: 'warning' as const,
+                title: '你的库中有旧副本',
+                body: `你的库中有 ${outdatedCopies.length} 个下载副本落后于当前公开版本；它们最高可以同步到 v${highestUpstreamVersion}。如果你准备基于最新版继续修改，建议先回到“我的库”完成同步。`
+            };
+        }
+
+        const latestCopy = downloadedCopies
+            .slice()
+            .sort((a, b) => String(b.updated_at || b.timestamp || '').localeCompare(String(a.updated_at || a.timestamp || '')))[0];
+        return {
+            tone: 'info' as const,
+            title: '你的库中已有最新副本',
+            body: `你的库中已经有这个模组的最新下载副本「${latestCopy?.name || selectedWorkshopMod.name}」（v${latestCopy?.version || selectedWorkshopMod.version || 1}），可以直接在本地继续编辑或开局使用。`
+        };
+    }, [selectedWorkshopMod, libraryCatalogMods]);
+
+    const renderPaginationControls = (
+        pagination: ListPagination,
+        onPageChange: (page: number) => void
+    ) => {
+        if ((pagination?.total_pages || 1) <= 1) return null;
+        return (
+            <div className="mt-4 flex items-center justify-between gap-3 border-t border-[var(--color-cyan-main)]/10 pt-4">
+                <div className="text-[11px] font-bold text-slate-400">
+                    第 {pagination.page} / {pagination.total_pages} 页，共 {pagination.total} 条
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => onPageChange(Math.max(1, pagination.page - 1))}
+                        disabled={!pagination.has_prev}
+                        className="rounded-xl border-2 border-[var(--color-cyan-main)]/10 bg-white px-3 py-2 text-[11px] font-black text-[var(--color-cyan-main)] transition-all disabled:opacity-40"
+                    >
+                        上一页
+                    </button>
+                    <button
+                        onClick={() => onPageChange(pagination.page + 1)}
+                        disabled={!pagination.has_next}
+                        className="rounded-xl border-2 border-[var(--color-cyan-main)]/10 bg-white px-3 py-2 text-[11px] font-black text-[var(--color-cyan-main)] transition-all disabled:opacity-40"
+                    >
+                        下一页
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
     return (
-        <div className="flex-1 flex flex-col h-full bg-white/80 backdrop-blur-md rounded-2xl border-2 border-[var(--color-cyan-main)]/20 shadow-xl overflow-hidden p-8 relative animate-fade-in-up">
+        <div className="flex-1 flex flex-col h-full bg-white/80 backdrop-blur-md rounded-2xl border-2 border-[var(--color-cyan-main)]/20 shadow-xl overflow-hidden p-6 relative animate-fade-in-up">
             {/* Toast Notification */}
             {toast && (
                 <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 bg-white border-2 border-[var(--color-cyan-main)]/20 rounded-full shadow-xl text-sm font-black text-[var(--color-cyan-dark)] animate-fade-in-up">
@@ -279,7 +452,7 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
             )}
 
             {/* Header Area */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
                 <div>
                     <h2 className="text-3xl font-black text-[var(--color-cyan-dark)] flex items-center tracking-tight">
                         <Layers className="mr-3 text-[var(--color-cyan-main)]" size={32} />
@@ -329,25 +502,15 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                 </div>
             </div>
 
-            {/* Action Bar */}
-            {activeTab === 'library' && (
-                <div className="mb-6 flex gap-4">
-                    <button
-                        onClick={() => setShowSaveDialog(true)}
-                        className="flex items-center gap-2 px-6 py-3 bg-[var(--color-cyan-dark)] text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 shadow-lg"
-                    >
-                        <Plus size={16} /> 另存当前配置为新模组
-                    </button>
-                    <button
-                        onClick={() => onTabChange('editor')}
-                        className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-[var(--color-cyan-main)]/20 text-[var(--color-cyan-main)] rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-[var(--color-cyan-main)]/10 transition-all active:scale-95 shadow-sm"
-                    >
-                        <Edit3 size={16} /> 前往编辑器进行创作
-                    </button>
+            {activeTab === 'workshop' && (
+                <div className={`mb-4 rounded-2xl border px-4 py-3 text-sm font-bold ${accountInfo?.capabilities?.can_publish_workshop_mods ? 'border-emerald-200 bg-emerald-50/60 text-emerald-700' : 'border-amber-200 bg-amber-50/70 text-[var(--color-cyan-dark)]/75'}`}>
+                    {accountInfo?.capabilities?.can_publish_workshop_mods
+                        ? '当前已登录正式账户：你可以浏览、下载公共模组，也可以在编辑器里把自己的模组公开到工坊。'
+                        : '当前是访客模式：你仍然可以浏览和下载工坊模组，但如果要公开发布自己的模组，需要先登录正式账户。'}
                 </div>
             )}
 
-            <div className="mb-6 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+            <div className="mb-4 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
                 <div className="flex flex-wrap gap-2">
                     {activeTab === 'library' ? (
                         <>
@@ -361,7 +524,19 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                             <button onClick={() => setWorkshopFilter('all')} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border ${workshopFilter === 'all' ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]' : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'}`}>全部</button>
                             <button onClick={() => setWorkshopFilter('original')} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border ${workshopFilter === 'original' ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]' : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'}`}>原创</button>
                             <button onClick={() => setWorkshopFilter('forked')} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border ${workshopFilter === 'forked' ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]' : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'}`}>派生</button>
-                            <button onClick={() => setWorkshopFilter('mine')} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border ${workshopFilter === 'mine' ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]' : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'}`}>我的作品</button>
+                            <button
+                                onClick={() => {
+                                    if (!canPublishWorkshopMods) {
+                                        showToast('访客模式下不能查看“我的作品”，请先登录正式账户。');
+                                        return;
+                                    }
+                                    setWorkshopFilter('mine');
+                                }}
+                                className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border ${workshopFilter === 'mine' ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]' : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'} ${!canPublishWorkshopMods ? 'opacity-50' : ''}`}
+                                title={canPublishWorkshopMods ? '查看我公开的作品' : '请先登录正式账户'}
+                            >
+                                我的作品
+                            </button>
                         </>
                     )}
                 </div>
@@ -382,43 +557,53 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                 </div>
             </div>
 
+            {activeTab === 'workshop' && (
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">题材标签</span>
+                    {workshopFocusOptions.map((tag) => (
+                        <button
+                            key={tag}
+                            onClick={() => setWorkshopFocusTag(tag)}
+                            className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${
+                                workshopFocusTag === tag
+                                    ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]'
+                                    : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'
+                            }`}
+                        >
+                            {tag}
+                        </button>
+                    ))}
+                </div>
+            )}
+
             {activeTab === 'library' && (
-                <div className="mb-6 grid grid-cols-1 xl:grid-cols-2 gap-4">
-                    <div className="bg-white border-2 border-[var(--color-cyan-main)]/10 rounded-2xl p-4">
-                        <div className="text-[11px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] flex items-center gap-2">
-                            <ShieldCheck size={14} />
-                            当前编辑目标
+                <div className="mb-3 flex items-center justify-between gap-4">
+                    <div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">
+                            我的可编辑模组
                         </div>
-                        <div className="mt-3 text-sm font-bold text-[var(--color-cyan-dark)]">
-                            来源：{userState?.editor_source || 'default'} · 模组：{userState?.editor_mod_id || 'default'}
-                        </div>
-                        <div className="text-[11px] mt-1 text-gray-400 font-black">
-                            这里只表示编辑器当前正在改哪份内容；真正用于游戏的模组会在新游戏开始时读取
-                        </div>
-                        <div className="text-[11px] mt-1 text-gray-400 font-black">
-                            最近更新时间：{userState?.updated_at || '-'} · 最近安全快照：{userState?.last_good_snapshot_id || '-'}
-                        </div>
-                    </div>
-                    <div className="bg-white border-2 border-[var(--color-cyan-main)]/10 rounded-2xl p-4">
-                        <div className="text-[11px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] flex items-center gap-2">
-                            <RotateCcw size={14} />
-                            快照回滚
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                            {snapshots.slice(0, 4).map((s: any) => (
+                        <h3 className="mt-1 text-xl font-black text-[var(--color-cyan-dark)]">
+                            本地模组库
+                        </h3>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold text-slate-400">
+                            <span className="inline-flex items-center gap-1">
+                                <ShieldCheck size={12} className="text-[var(--color-cyan-main)]" />
+                                当前编辑：{userState?.editor_source || 'default'} / {userState?.editor_mod_id || 'default'}
+                            </span>
+                            <span>快照：{userState?.last_good_snapshot_id || '-'}</span>
+                            {snapshots.length > 0 && (
                                 <button
-                                    key={s.id}
-                                    onClick={() => handleRollback(s.id)}
-                                    disabled={actionTarget === `rb-${s.id}`}
-                                    className="px-3 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] border border-[var(--color-cyan-main)]/20 hover:bg-white transition-all disabled:opacity-50"
+                                    onClick={() => handleRollback(snapshots[0].id)}
+                                    disabled={actionTarget === `rb-${snapshots[0].id}`}
+                                    className="text-[var(--color-cyan-main)] hover:text-[var(--color-cyan-dark)] transition-colors"
                                 >
-                                    {actionTarget === `rb-${s.id}` ? '回滚中...' : `回滚 ${s.id}`}
+                                    {actionTarget === `rb-${snapshots[0].id}` ? '回滚中...' : `回滚到 ${snapshots[0].id}`}
                                 </button>
-                            ))}
-                            {snapshots.length === 0 && (
-                                <span className="text-xs text-gray-400 font-bold">暂无快照</span>
                             )}
                         </div>
+                    </div>
+                    <div className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                        共 {totalLibraryCount} 个
                     </div>
                 </div>
             )}
@@ -431,72 +616,108 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                         <span className="font-black uppercase tracking-widest text-xs">正在连接终端...</span>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-8">
+                    <>
                         {activeTab === 'library' ? (
-                            filteredLibrary.length === 0 ? (
-                                <div className="col-span-full py-20 text-center text-gray-400 font-bold uppercase tracking-widest text-sm">
-                                    暂无本地模组。你可以从工坊下载或手动保存。
-                                </div>
-                            ) : (
-                                filteredLibrary.map(mod => (
-                                    <div key={mod.id} className="group bg-white border-2 border-[var(--color-cyan-main)]/10 p-6 rounded-3xl shadow-sm hover:shadow-xl hover:border-[var(--color-cyan-main)]/30 transition-all flex flex-col relative overflow-hidden">
-                                        <div className="flex justify-between items-start mb-3">
-                                            <h3 className="font-black text-xl text-[var(--color-cyan-dark)] truncate">{mod.name}</h3>
-                                            <span className="text-[10px] bg-gray-100 text-gray-400 px-2 py-1 rounded-lg font-black tracking-widest">{mod.timestamp?.split(' ')[0]}</span>
-                                        </div>
-                                        <p className="text-sm text-gray-500 font-semibold mb-6 line-clamp-2 min-h-[2.5rem] flex-1">
-                                            {mod.description || '无描述'}
-                                        </p>
-                                        <div className="mb-4 flex flex-wrap gap-2">
-                                            <span className="px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] border border-[var(--color-cyan-main)]/20">
-                                                {mod.isDefault ? '只读模板' : '开局可选'}
-                                            </span>
-                                            {mod.isDefault && (
-                                                <span className="px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase bg-amber-50 text-amber-600 border border-amber-200">
-                                                    修改请另存为
-                                                </span>
-                                            )}
-                                            {mod.visibility === 'public' && !mod.isDefault && (
-                                                <span className="px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase bg-emerald-50 text-emerald-600 border border-emerald-200">
-                                                    已公开同步
-                                                </span>
-                                            )}
-                                            {!mod.isDefault && (
-                                                <span className="px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase bg-white border border-[var(--color-cyan-main)]/15 text-[var(--color-cyan-main)]">
-                                                    {getSourceLabel(mod.source_type)} · v{mod.version || 1}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="flex gap-3">
-                                            <button
-                                                onClick={() => mod.isDefault ? handleViewDefault() : handleEdit(mod.id, mod.name)}
-                                                disabled={actionTarget === `edit-${mod.id}`}
-                                                className="flex-1 py-3 bg-white border-2 border-[var(--color-cyan-main)]/20 text-[var(--color-cyan-main)] rounded-2xl flex items-center justify-center gap-2 font-black hover:bg-[var(--color-cyan-main)]/10 transition shadow-sm uppercase tracking-widest text-xs disabled:opacity-50"
-                                            >
-                                                {actionTarget === `edit-${mod.id}` ? <RefreshCw size={14} className="animate-spin" /> : <Edit3 size={14} />}
-                                                {mod.isDefault ? '查看默认内容' : '编辑这个模组'}
-                                            </button>
-                                            {!mod.isDefault && (
-                                                <button
-                                                    onClick={() => handleDelete(mod.id, mod.name)}
-                                                    disabled={actionTarget === `del-${mod.id}`}
-                                                    className="p-3 bg-red-50 text-red-400 rounded-2xl hover:bg-red-500 hover:text-white transition shadow-sm disabled:opacity-50"
-                                                >
-                                                    {actionTarget === `del-${mod.id}` ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={16} />}
-                                                </button>
-                                            )}
-                                        </div>
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 pb-8">
+                                {displayedLibraryMods.length === 0 ? (
+                                    <div className="col-span-full py-20 text-center text-gray-400 font-bold uppercase tracking-widest text-sm">
+                                        暂无可编辑模组。你可以从上方模板另存，或从工坊下载到我的库。
                                     </div>
-                                ))
-                            )
+                                ) : (
+                                    displayedLibraryMods.map(mod => (
+                                        <div key={mod.id} className={`group bg-white border-2 p-6 rounded-3xl shadow-sm hover:shadow-xl transition-all flex flex-col ${mod.isDefault ? 'border-amber-200 bg-amber-50/20' : 'border-[var(--color-cyan-main)]/10 hover:border-[var(--color-cyan-main)]/30'}`}>
+                                            <div className="flex justify-between items-start mb-2 pr-2">
+                                                <h3 className="font-black text-xl text-[var(--color-cyan-dark)] truncate">{mod.name}</h3>
+                                            </div>
+                                            <div className="mb-4 flex flex-wrap gap-2">
+                                                {mod.isDefault ? (
+                                                    <span className="text-[10px] bg-amber-50 text-amber-700 px-3 py-1 rounded-full font-black tracking-widest uppercase border border-amber-200">
+                                                        只读模板
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] px-3 py-1 rounded-full font-black tracking-widest uppercase border border-[var(--color-cyan-main)]/20">
+                                                        {getSourceLabel(mod.source_type)} · v{mod.version || 1}
+                                                    </span>
+                                                )}
+                                                {mod.visibility === 'public' && !mod.isDefault && (
+                                                    <span className="text-[10px] bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full font-black tracking-widest uppercase border border-emerald-200">
+                                                        已公开
+                                                    </span>
+                                                )}
+                                                {!!mod.has_update && (
+                                                    <span className="text-[10px] bg-amber-50 text-amber-700 px-3 py-1 rounded-full font-black tracking-widest uppercase border border-amber-200">
+                                                        可同步 v{mod.upstream_version || mod.version}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-sm text-gray-500 font-semibold mb-5 line-clamp-2 min-h-[2.5rem] flex-1">
+                                                {mod.description || '无描述'}
+                                            </p>
+                                            <div className="flex justify-between items-center text-[10px] text-gray-400 font-black mb-4 uppercase tracking-widest">
+                                                <span>{mod.isDefault ? '官方模板' : '本地模组'}</span>
+                                                <span>{mod.timestamp?.split(' ')[0] || '最近更新'}</span>
+                                            </div>
+                                            {mod.isDefault ? (
+                                                <div className="flex gap-3">
+                                                    <button
+                                                        onClick={handleViewDefault}
+                                                        disabled={actionTarget === 'edit-default'}
+                                                        className="flex-1 py-3 bg-white border-2 border-[var(--color-cyan-main)]/10 text-[var(--color-cyan-main)] rounded-2xl font-black hover:bg-[var(--color-cyan-main)]/10 transition shadow-sm uppercase tracking-widest text-xs disabled:opacity-50"
+                                                    >
+                                                        {actionTarget === 'edit-default' ? '载入中...' : '查看模板'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setShowSaveDialog(true)}
+                                                        className="flex-1 py-3 bg-[var(--color-cyan-main)] text-white rounded-2xl flex items-center justify-center gap-2 font-black hover:bg-[var(--color-cyan-dark)] transition shadow-md uppercase tracking-widest text-xs"
+                                                    >
+                                                        <Plus size={16} />
+                                                        另存为
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="flex gap-3">
+                                                    <button
+                                                        onClick={() => handleEdit(mod.id, mod.name)}
+                                                        disabled={actionTarget === `edit-${mod.id}`}
+                                                        className="flex-1 py-3 bg-white border-2 border-[var(--color-cyan-main)]/10 text-[var(--color-cyan-main)] rounded-2xl flex items-center justify-center gap-2 font-black hover:bg-[var(--color-cyan-main)]/10 transition shadow-sm uppercase tracking-widest text-xs disabled:opacity-50"
+                                                    >
+                                                        {actionTarget === `edit-${mod.id}` ? <RefreshCw size={14} className="animate-spin" /> : <Edit3 size={14} />}
+                                                        编辑
+                                                    </button>
+                                                    {mod.has_update ? (
+                                                        <button
+                                                            onClick={() => handleSync(mod.id, mod.name)}
+                                                            disabled={actionTarget === `sync-${mod.id}`}
+                                                            className="flex-1 py-3 bg-amber-50 text-amber-700 rounded-2xl flex items-center justify-center gap-2 font-black hover:bg-amber-100 transition shadow-sm uppercase tracking-widest text-xs disabled:opacity-50"
+                                                        >
+                                                            {actionTarget === `sync-${mod.id}` ? <RefreshCw size={14} className="animate-spin" /> : '同步'}
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleDelete(mod.id, mod.name)}
+                                                            disabled={actionTarget === `del-${mod.id}`}
+                                                            className="flex-1 py-3 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center gap-2 font-black hover:bg-red-500 hover:text-white transition shadow-sm uppercase tracking-widest text-xs disabled:opacity-50"
+                                                        >
+                                                            {actionTarget === `del-${mod.id}` ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                                            删除
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                            
                         ) : (
-                            filteredWorkshop.length === 0 ? (
-                                <div className="col-span-full py-20 text-center text-gray-400 font-bold uppercase tracking-widest text-sm">
-                                    工坊空空如也，快去发布第一个模组吧！
-                                </div>
-                            ) : (
-                                filteredWorkshop.map(mod => (
-                                    <div key={mod.id} className="group bg-white border-2 border-[var(--color-cyan-main)]/10 p-6 rounded-3xl shadow-sm hover:shadow-xl hover:border-[var(--color-cyan-main)]/30 transition-all flex flex-col">
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-8">
+                                {workshopMods.length === 0 ? (
+                                    <div className="col-span-full py-20 text-center text-gray-400 font-bold uppercase tracking-widest text-sm">
+                                        工坊空空如也，快去发布第一个模组吧！
+                                    </div>
+                                ) : (
+                                    workshopMods.map(mod => (
+                                        <div key={mod.id} className="group bg-white border-2 border-[var(--color-cyan-main)]/10 p-6 rounded-3xl shadow-sm hover:shadow-xl hover:border-[var(--color-cyan-main)]/30 transition-all flex flex-col">
                                         <div className="flex justify-between items-start mb-2 pr-6">
                                             <h3 className="font-black text-xl text-[var(--color-cyan-dark)] truncate">{mod.name}</h3>
                                         </div>
@@ -538,11 +759,15 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                                             {actionTarget === `dl-${mod.id}` ? <RefreshCw size={14} className="animate-spin" /> : <Download size={16} />}
                                             {mod.is_owned_by_current_user ? '查看我的库副本' : '下载到我的库'}
                                         </button>
-                                    </div>
-                                ))
-                            )
+                                        </div>
+                                    ))
+                                )}
+                            </div>
                         )}
-                    </div>
+                        {activeTab === 'library'
+                            ? renderPaginationControls(libraryPagination, setLibraryPage)
+                            : renderPaginationControls(workshopPagination, setWorkshopPage)}
+                    </>
                 )}
             </div>
 
@@ -605,7 +830,7 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                                     <span className="text-[10px] bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] px-3 py-1 rounded-full font-black tracking-widest uppercase">
                                         {selectedWorkshopMod.type === 'prompt_pack' ? '剧情包' : '独立角色'}
                                     </span>
-                                    {getWorkshopFocusTags(selectedWorkshopMod).map((tag) => (
+                                    {getWorkshopFocusTags(selectedWorkshopMod).map((tag: string) => (
                                         <span key={tag} className="text-[10px] bg-amber-50 text-amber-700 px-3 py-1 rounded-full font-black tracking-widest uppercase border border-amber-200">
                                             {tag}
                                         </span>
@@ -668,6 +893,46 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                             <div className="mt-3 text-[10px] text-gray-400 font-black">
                                 共包含 {(selectedWorkshopMod.summary?.md_files ?? 0) + (selectedWorkshopMod.summary?.csv_files ?? 0)} 个内容文件
                             </div>
+                        </div>
+
+                        {selectedWorkshopLibraryState && (
+                            <div
+                                className={`mb-8 rounded-2xl border p-5 ${
+                                    selectedWorkshopLibraryState.tone === 'warning'
+                                        ? 'border-amber-200 bg-amber-50/90'
+                                        : 'border-[var(--color-cyan-main)]/10 bg-white'
+                                }`}
+                            >
+                                <div
+                                    className={`text-[10px] font-black uppercase tracking-widest mb-3 ${
+                                        selectedWorkshopLibraryState.tone === 'warning'
+                                            ? 'text-amber-700'
+                                            : 'text-[var(--color-cyan-main)]'
+                                    }`}
+                                >
+                                    {selectedWorkshopLibraryState.title}
+                                </div>
+                                <p
+                                    className={`text-sm font-semibold leading-7 ${
+                                        selectedWorkshopLibraryState.tone === 'warning'
+                                            ? 'text-amber-800'
+                                            : 'text-gray-600'
+                                    }`}
+                                >
+                                    {selectedWorkshopLibraryState.body}
+                                </p>
+                            </div>
+                        )}
+
+                        <div className={`mb-8 rounded-2xl border p-5 ${canPublishWorkshopMods ? 'border-emerald-200 bg-emerald-50/70' : 'border-amber-200 bg-amber-50/80'}`}>
+                            <div className={`text-[10px] font-black uppercase tracking-widest mb-3 ${canPublishWorkshopMods ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                身份说明
+                            </div>
+                            <p className={`text-sm font-semibold leading-7 ${canPublishWorkshopMods ? 'text-emerald-800' : 'text-[var(--color-cyan-dark)]/70'}`}>
+                                {canPublishWorkshopMods
+                                    ? '你当前已登录正式账户。可以下载这个模组到本地库，也可以在编辑器里继续维护并公开自己的作品。'
+                                    : '你当前是访客模式。可以下载这个模组到本地库并继续游玩，但如果想把自己的模组公开到工坊，需要先登录正式账户。'}
+                            </p>
                         </div>
 
                         <div className="flex gap-4">

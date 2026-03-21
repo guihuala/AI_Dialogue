@@ -12,6 +12,10 @@ apiClient.interceptors.request.use((config) => {
     if (visitorId) {
         config.headers['X-Visitor-Id'] = visitorId;
     }
+    const accountToken = localStorage.getItem('account_token');
+    if (accountToken) {
+        config.headers['X-Account-Token'] = accountToken;
+    }
     return config;
 });
 
