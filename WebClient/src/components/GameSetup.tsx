@@ -21,19 +21,27 @@ export const GameSetup = ({ onBack, onStartGame, onTabChange }: GameSetupProps) 
     const isGameLoading = useGameStore(state => state.isLoading);
 
     useEffect(() => {
+        let alive = true;
         const loadSetupData = async () => {
+            setIsLoading(true);
             try {
-                const candRes = await gameApi.getCandidates();
+                const candRes = await gameApi.getCandidates(selectedMod || 'default');
                 const safeCandidates = (candRes.data || []).filter((c: any) => !c?.is_player);
+                if (!alive) return;
                 setCandidates(safeCandidates);
+                const validIds = new Set(safeCandidates.map((c: any) => c.id));
+                setSelectedRoommates((prev) => prev.filter((id) => validIds.has(id)).slice(0, 3));
             } catch (e) {
                 console.error(e);
             } finally {
-                setIsLoading(false);
+                if (alive) setIsLoading(false);
             }
         };
         loadSetupData();
-    }, []);
+        return () => {
+            alive = false;
+        };
+    }, [selectedMod]);
 
     const toggleRoommate = (id: string) => {
         setSelectedRoommates(prev => {

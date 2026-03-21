@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
 import { gameApi } from '../api/gameApi';
-import { Shield, Trash2, Edit2, Check, X, RefreshCw, LogOut, Package, Database, History, FileClock } from 'lucide-react';
+import { Shield, RefreshCw, LogOut, Database, History, FileClock } from 'lucide-react';
 import { ConfirmDialog } from './common/ConfirmDialog';
+import { AdminLoginPanel } from './admin/AdminLoginPanel';
+import { AdminWorkshopTab } from './admin/AdminWorkshopTab';
+import { AdminStorageTab } from './admin/AdminStorageTab';
+import { AdminUsersTab } from './admin/AdminUsersTab';
+import { AdminAuditTab } from './admin/AdminAuditTab';
 
 export const AdminDashboard = () => {
     const [activeTab, setActiveTab] = useState<'workshop' | 'storage' | 'users' | 'audit'>('workshop');
@@ -200,45 +205,12 @@ export const AdminDashboard = () => {
 
     if (!isAuthenticated) {
         return (
-            <div className="flex-1 flex items-center justify-center p-8">
-                <div className="w-full max-w-md bg-white/90 backdrop-blur-xl p-8 rounded-[2.5rem] border-2 border-[var(--color-cyan-main)]/20 shadow-2xl animate-fade-in">
-                    <div className="flex flex-col items-center mb-8">
-                        <div className="w-16 h-16 bg-[var(--color-cyan-main)]/10 rounded-2xl flex items-center justify-center mb-4">
-                            <Shield size={32} className="text-[var(--color-cyan-main)]" />
-                        </div>
-                        <h2 className="text-2xl font-black text-[var(--color-cyan-dark)] uppercase tracking-widest">管理员验证</h2>
-                        <p className="text-[10px] font-black text-[var(--color-cyan-main)]/60 mt-2 uppercase tracking-[0.3em]">Access Restricted</p>
-                    </div>
-
-                    <form onSubmit={handleLogin} className="space-y-6">
-                        <div className="relative">
-                            <input
-                                type="password"
-                                placeholder="输入管理口令..."
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full px-6 py-4 bg-[var(--color-cyan-light)]/30 border-2 border-[var(--color-cyan-main)]/10 rounded-2xl focus:border-[var(--color-cyan-main)] focus:outline-none font-bold text-center transition-all"
-                                autoFocus
-                            />
-                        </div>
-                        <button
-                            type="submit"
-                            className="w-full py-4 bg-[var(--color-cyan-dark)] text-white rounded-2xl font-black uppercase tracking-[0.2em] hover:bg-[var(--color-cyan-main)] transition-all shadow-lg active:scale-[0.98]"
-                        >
-                            执行身份注入
-                        </button>
-                        {authError && (
-                            <div className="text-center text-sm font-bold text-rose-500">
-                                {authError}
-                            </div>
-                        )}
-                    </form>
-
-                    <p className="mt-8 text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                        Unauthorized access is monitored.
-                    </p>
-                </div>
-            </div>
+            <AdminLoginPanel
+                password={password}
+                authError={authError}
+                onChangePassword={setPassword}
+                onSubmit={handleLogin}
+            />
         );
     }
 
@@ -369,306 +341,42 @@ export const AdminDashboard = () => {
 
                 <div className="flex-1 overflow-auto custom-scrollbar bg-white/50">
                     {activeTab === 'workshop' && (
-                        <div className="p-6 overflow-hidden">
-                            <div className="flex items-center justify-between mb-4">
-                                <div>
-                                    <h3 className="text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.2em] flex items-center">
-                                        <Package size={14} className="mr-2" /> 创意工坊已发布项目 ({items.length})
-                                    </h3>
-                                    <p className="mt-2 text-xs font-bold text-slate-400">
-                                        这里集中处理工坊公开条目的名称、作者、简介和下架操作。
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="overflow-x-auto custom-scrollbar">
-                                <table className="w-full text-left border-collapse">
-                                    <thead>
-                                        <tr className="text-[10px] font-black text-[var(--color-cyan-main)]/50 uppercase tracking-widest border-b border-[var(--color-cyan-main)]/5">
-                                            <th className="px-4 py-3 pb-4">ID / 类型</th>
-                                            <th className="px-4 py-3 pb-4">模组名称</th>
-                                            <th className="px-4 py-3 pb-4">作者</th>
-                                            <th className="px-4 py-3 pb-4 w-1/3">描述</th>
-                                            <th className="px-4 py-3 pb-4 text-right">管理操作</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-[var(--color-cyan-main)]/5">
-                                        {items.length === 0 && !loading && (
-                                            <tr>
-                                                <td colSpan={5} className="py-20 text-center text-slate-400 font-bold">暂无已发布的模组数据</td>
-                                            </tr>
-                                        )}
-                                        {items.map(item => (
-                                            <tr key={item.id} className="group hover:bg-[var(--color-cyan-main)]/5 transition-colors">
-                                                <td className="px-4 py-4">
-                                                    <div className="font-mono text-[10px] text-slate-400">#{item.id}</div>
-                                                    <div className="text-[8px] bg-[var(--color-cyan-light)] text-[var(--color-cyan-main)] px-2 py-0.5 rounded-full inline-block mt-1 font-black uppercase">{item.type}</div>
-                                                </td>
-                                                <td className="px-4 py-4 font-black text-[var(--color-cyan-dark)]">
-                                                    {editingId === item.id ? (
-                                                        <input
-                                                            className="w-full bg-white border border-[var(--color-cyan-main)]/30 rounded px-2 py-1 text-sm outline-none focus:border-[var(--color-cyan-main)]"
-                                                            value={editForm.name}
-                                                            onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                                                        />
-                                                    ) : item.name}
-                                                </td>
-                                                <td className="px-4 py-4 font-bold text-slate-600">
-                                                    {editingId === item.id ? (
-                                                        <input
-                                                            className="w-full bg-white border border-[var(--color-cyan-main)]/30 rounded px-2 py-1 text-sm outline-none focus:border-[var(--color-cyan-main)]"
-                                                            value={editForm.author}
-                                                            onChange={e => setEditForm({ ...editForm, author: e.target.value })}
-                                                        />
-                                                    ) : item.author}
-                                                </td>
-                                                <td className="px-4 py-4">
-                                                    {editingId === item.id ? (
-                                                        <textarea
-                                                            className="w-full bg-white border border-[var(--color-cyan-main)]/30 rounded px-2 py-1 text-xs outline-none focus:border-[var(--color-cyan-main)] resize-none"
-                                                            rows={2}
-                                                            value={editForm.description}
-                                                            onChange={e => setEditForm({ ...editForm, description: e.target.value })}
-                                                        />
-                                                    ) : (
-                                                        <p className="text-xs text-slate-500 font-medium line-clamp-2 leading-relaxed">{item.description}</p>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-4 text-right">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        {editingId === item.id ? (
-                                                            <>
-                                                                <button
-                                                                    onClick={handleUpdate}
-                                                                    className="p-2 text-green-500 hover:bg-green-50 rounded-lg transition"
-                                                                    title="确认保存"
-                                                                >
-                                                                    <Check size={18} />
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => setEditingId(null)}
-                                                                    className="p-2 text-slate-400 hover:bg-slate-50 rounded-lg transition"
-                                                                    title="取消"
-                                                                >
-                                                                    <X size={18} />
-                                                                </button>
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <button
-                                                                    onClick={() => startEdit(item)}
-                                                                    className="p-2 text-[var(--color-cyan-main)] hover:bg-[var(--color-cyan-light)] rounded-lg transition"
-                                                                    title="编辑基本信息"
-                                                                >
-                                                                    <Edit2 size={18} />
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleDelete(item.id, item.name)}
-                                                                    className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition"
-                                                                    title="彻底下架模组"
-                                                                >
-                                                                    <Trash2 size={18} />
-                                                                </button>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
+                        <AdminWorkshopTab
+                            items={items}
+                            loading={loading}
+                            editingId={editingId}
+                            editForm={editForm}
+                            setEditForm={setEditForm}
+                            onStartEdit={startEdit}
+                            onUpdate={handleUpdate}
+                            onCancelEdit={() => setEditingId(null)}
+                            onDelete={handleDelete}
+                        />
                     )}
 
                     {activeTab === 'storage' && (
-                        <div className="p-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
-                            <div className="rounded-3xl border border-[var(--color-cyan-main)]/10 bg-white p-6">
-                                <h3 className="text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.2em] mb-4">
-                                    当前用户状态
-                                </h3>
-                                <div className="space-y-4 text-sm font-bold text-[var(--color-cyan-dark)]">
-                                    <div className="rounded-2xl bg-[var(--color-cyan-light)]/20 px-4 py-4">
-                                        当前激活模组：{userState?.active_source || 'default'} / {userState?.active_mod_id || 'default'}
-                                    </div>
-                                    <div className="rounded-2xl bg-[var(--color-cyan-light)]/20 px-4 py-4">
-                                        最近安全快照：{userState?.last_good_snapshot_id || '-'}
-                                    </div>
-                                    <div className="rounded-2xl bg-[var(--color-cyan-light)]/20 px-4 py-4">
-                                        最近状态更新时间：{userState?.updated_at || '-'}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="rounded-3xl border border-[var(--color-cyan-main)]/10 bg-white p-6">
-                                <h3 className="text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.2em] mb-4">
-                                    存储配额与清理
-                                </h3>
-                                <div className="space-y-4">
-                                    <div className="rounded-2xl bg-[var(--color-cyan-light)]/20 px-4 py-4 text-sm font-bold text-[var(--color-cyan-dark)]">
-                                        本地模组：{quota?.usage?.library_items || 0} / {quota?.limits?.library_items || 0}
-                                    </div>
-                                    <div className="rounded-2xl bg-[var(--color-cyan-light)]/20 px-4 py-4 text-sm font-bold text-[var(--color-cyan-dark)]">
-                                        占用空间：{(quota?.usage?.library_bytes || 0) / (1024 * 1024) > 0 ? `${((quota?.usage?.library_bytes || 0) / (1024 * 1024)).toFixed(1)} MB` : '0 MB'}
-                                    </div>
-                                    {Array.isArray(quota?.warnings) && quota.warnings.length > 0 && (
-                                        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-xs font-black text-amber-700">
-                                            {quota.warnings.join('；')}
-                                        </div>
-                                    )}
-                                    <div className="flex gap-3 pt-2">
-                                        <button
-                                            onClick={() => handleCleanup(true)}
-                                            disabled={cleaning}
-                                            className="px-4 py-3 bg-white border border-[var(--color-cyan-main)]/20 text-[var(--color-cyan-main)] rounded-2xl hover:bg-[var(--color-cyan-light)] transition-all disabled:opacity-50 text-xs font-black"
-                                        >
-                                            预览清理
-                                        </button>
-                                        <button
-                                            onClick={() => handleCleanup(false)}
-                                            disabled={cleaning}
-                                            className="px-4 py-3 bg-amber-50 border border-amber-200 text-amber-700 rounded-2xl hover:bg-amber-100 transition-all disabled:opacity-50 text-xs font-black"
-                                        >
-                                            执行清理
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <AdminStorageTab
+                            userState={userState}
+                            quota={quota}
+                            cleaning={cleaning}
+                            onCleanup={handleCleanup}
+                        />
                     )}
 
                     {activeTab === 'users' && (
-                        <div className="p-6">
-                            <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                                <div>
-                                    <h3 className="text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.2em]">
-                                        账户用户检索
-                                    </h3>
-                                    <p className="mt-2 text-xs font-bold text-slate-400">
-                                        支持按用户名/账户 ID 搜索，查看账户规模和活跃会话统计。
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="text"
-                                        value={adminUserQuery}
-                                        onChange={(e) => setAdminUserQuery(e.target.value)}
-                                        placeholder="搜索用户名或账户 ID"
-                                        className="px-4 py-2 rounded-xl border border-[var(--color-cyan-main)]/20 bg-white text-sm font-bold text-[var(--color-cyan-dark)] outline-none focus:border-[var(--color-cyan-main)]"
-                                    />
-                                    <button
-                                        onClick={() => loadAdminUsers()}
-                                        className="px-3 py-2 rounded-xl border border-[var(--color-cyan-main)]/20 bg-white text-[var(--color-cyan-main)] text-xs font-black hover:bg-[var(--color-cyan-light)]"
-                                    >
-                                        刷新
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
-                                <div className="rounded-2xl border border-[var(--color-cyan-main)]/10 bg-white p-3">
-                                    <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">账户总数</div>
-                                    <div className="mt-1 text-lg font-black text-[var(--color-cyan-dark)]">{adminUserStats?.total_accounts ?? 0}</div>
-                                </div>
-                                <div className="rounded-2xl border border-[var(--color-cyan-main)]/10 bg-white p-3">
-                                    <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">活跃会话</div>
-                                    <div className="mt-1 text-lg font-black text-[var(--color-cyan-dark)]">{adminUserStats?.active_sessions ?? 0}</div>
-                                </div>
-                                <div className="rounded-2xl border border-[var(--color-cyan-main)]/10 bg-white p-3">
-                                    <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">绑定访客数</div>
-                                    <div className="mt-1 text-lg font-black text-[var(--color-cyan-dark)]">{adminUserStats?.total_linked_visitors ?? 0}</div>
-                                </div>
-                                <div className="rounded-2xl border border-[var(--color-cyan-main)]/10 bg-white p-3">
-                                    <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">公开模组</div>
-                                    <div className="mt-1 text-lg font-black text-[var(--color-cyan-dark)]">{adminUserStats?.public_mods ?? 0}</div>
-                                </div>
-                                <div className="rounded-2xl border border-[var(--color-cyan-main)]/10 bg-white p-3">
-                                    <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">工坊作者数</div>
-                                    <div className="mt-1 text-lg font-black text-[var(--color-cyan-dark)]">{adminUserStats?.workshop_owner_accounts ?? 0}</div>
-                                </div>
-                            </div>
-
-                            <div className="overflow-hidden rounded-2xl border border-[var(--color-cyan-main)]/10 bg-white">
-                                <table className="w-full text-left border-collapse">
-                                    <thead>
-                                        <tr className="text-[10px] font-black text-[var(--color-cyan-main)]/50 uppercase tracking-widest border-b border-[var(--color-cyan-main)]/5">
-                                            <th className="px-4 py-3">账户 ID</th>
-                                            <th className="px-4 py-3">用户名</th>
-                                            <th className="px-4 py-3">绑定访客</th>
-                                            <th className="px-4 py-3">创建时间</th>
-                                            <th className="px-4 py-3">最近更新</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-[var(--color-cyan-main)]/5">
-                                        {adminUsers.length === 0 ? (
-                                            <tr>
-                                                <td colSpan={5} className="py-12 text-center text-slate-400 font-bold">暂无用户数据</td>
-                                            </tr>
-                                        ) : adminUsers.map((u) => (
-                                            <tr key={u.account_id} className="hover:bg-[var(--color-cyan-main)]/5 transition-colors">
-                                                <td className="px-4 py-3 font-mono text-xs text-slate-500">{u.account_id}</td>
-                                                <td className="px-4 py-3 text-sm font-black text-[var(--color-cyan-dark)]">{u.username}</td>
-                                                <td className="px-4 py-3 text-sm font-bold text-slate-600">{u.linked_visitor_count}</td>
-                                                <td className="px-4 py-3 text-xs font-bold text-slate-500">{u.created_at || '-'}</td>
-                                                <td className="px-4 py-3 text-xs font-bold text-slate-500">{u.updated_at || '-'}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {adminUserPagination && (
-                                <div className="mt-4 flex items-center justify-between text-xs font-bold text-slate-500">
-                                    <div>
-                                        第 {adminUserPagination.page} / {adminUserPagination.total_pages} 页，共 {adminUserPagination.total} 条
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button
-                                            disabled={!adminUserPagination.has_prev}
-                                            onClick={() => setAdminUserPage((p) => Math.max(1, p - 1))}
-                                            className="px-3 py-2 rounded-lg border border-[var(--color-cyan-main)]/20 disabled:opacity-40"
-                                        >
-                                            上一页
-                                        </button>
-                                        <button
-                                            disabled={!adminUserPagination.has_next}
-                                            onClick={() => setAdminUserPage((p) => p + 1)}
-                                            className="px-3 py-2 rounded-lg border border-[var(--color-cyan-main)]/20 disabled:opacity-40"
-                                        >
-                                            下一页
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                        <AdminUsersTab
+                            adminUserQuery={adminUserQuery}
+                            setAdminUserQuery={setAdminUserQuery}
+                            adminUsers={adminUsers}
+                            adminUserStats={adminUserStats}
+                            adminUserPagination={adminUserPagination}
+                            setAdminUserPage={setAdminUserPage}
+                            onRefresh={() => loadAdminUsers()}
+                        />
                     )}
 
                     {activeTab === 'audit' && (
-                        <div className="p-6">
-                            <div className="mb-4">
-                                <h3 className="text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.2em]">
-                                    最近审计日志
-                                </h3>
-                                <p className="mt-2 text-xs font-bold text-slate-400">
-                                    这里集中查看近期后台动作、状态结果和时间戳，方便快速排查问题。
-                                </p>
-                            </div>
-                            <div className="overflow-hidden rounded-2xl border border-[var(--color-cyan-main)]/10 bg-white">
-                                {auditRows.length === 0 ? (
-                                    <div className="px-4 py-8 text-sm text-slate-400 font-bold">暂无日志</div>
-                                ) : (
-                                    auditRows.map((r, idx) => (
-                                        <div key={idx} className="px-4 py-3 text-sm font-bold text-slate-600 border-b last:border-b-0 border-[var(--color-cyan-main)]/5 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                                            <div>
-                                                <span className={`mr-2 ${r.status === 'ok' ? 'text-emerald-600' : 'text-red-500'}`}>[{r.status}]</span>
-                                                <span>{r.action}</span>
-                                            </div>
-                                            <span className="text-xs text-slate-400">{r.ts}</span>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </div>
+                        <AdminAuditTab auditRows={auditRows} />
                     )}
                 </div>
 

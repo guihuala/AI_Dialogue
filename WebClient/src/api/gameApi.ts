@@ -83,8 +83,8 @@ export const gameApi = {
     return res.data;
   },
 
-  getCandidates: async () => {
-    const res = await apiClient.get(`/game/candidates`);
+  getCandidates: async (modId: string = "default") => {
+    const res = await apiClient.get(`/game/candidates`, { params: { mod_id: modId } });
     return res.data;
   },
 

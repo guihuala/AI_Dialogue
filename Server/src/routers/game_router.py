@@ -4,7 +4,7 @@ import json
 import os
 import random
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 
@@ -113,6 +113,34 @@ def build_game_router(
             if hasattr(engine, "tm") and hasattr(engine.tm, "set_player_name") and hasattr(engine, "player_name"):
                 engine.tm.set_player_name(engine.player_name)
 
+    def _load_roster_for_mod(user_id: str, mod_id: Optional[str]) -> Dict[str, Any]:
+        selected_mod_id = str(mod_id or "default").strip() or "default"
+        if selected_mod_id == "default":
+            return get_current_roster(user_id)
+
+        file_path = os.path.join(get_user_library_dir(user_id), f"{selected_mod_id}.json")
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="选择的模组不存在于本地库中")
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        content = data.get("content", {})
+        manifest = data.get("manifest", {})
+        validate_mod_content(content, manifest if isinstance(manifest, dict) else None)
+
+        md_files = content.get("md", {}) if isinstance(content, dict) else {}
+        roster_text = md_files.get("characters/roster.json") or md_files.get("roster.json")
+        if not roster_text:
+            return get_current_roster(user_id)
+
+        try:
+            roster = json.loads(roster_text)
+            if isinstance(roster, dict):
+                return roster
+        except Exception:
+            pass
+        return get_current_roster(user_id)
+
     def _activate_mod_for_new_game(user_id: str, mod_id: Optional[str]) -> None:
         selected_mod_id = str(mod_id or "default").strip() or "default"
         with with_user_write_lock(user_id):
@@ -149,9 +177,12 @@ def build_game_router(
         append_audit_log(user_id, "activate_mod_for_new_game", "ok", selected_mod_id, {"source": active_source})
 
     @router.get("/api/game/candidates")
-    def get_candidates(user_id: str = get_user_id):
+    def get_candidates(
+        mod_id: Optional[str] = Query(default="default"),
+        user_id: str = get_user_id
+    ):
         """获取所有可用角色（室友候选人）"""
-        roster = get_current_roster(user_id)
+        roster = _load_roster_for_mod(user_id, mod_id)
         candidates = []
         for cid, info in roster.items():
             if info.get("is_player"):
@@ -180,11 +211,18 @@ def build_game_router(
             engine = get_engine(user_id)
             engine.reset()
 
-            selected_ids = req.roommates
+            selected_ids = list(req.roommates or [])
             roster = get_current_roster(user_id)
+            all_ids = [cid for cid, info in roster.items() if not bool((info or {}).get("is_player", False))]
+
+            # 过滤掉不属于当前模组 roster 的旧选择，并补齐到最多 3 人
+            selected_ids = [sid for sid in selected_ids if sid in all_ids]
+            if len(selected_ids) < min(3, len(all_ids)):
+                remaining = [cid for cid in all_ids if cid not in selected_ids]
+                random.shuffle(remaining)
+                selected_ids.extend(remaining[: max(0, min(3, len(all_ids)) - len(selected_ids))])
 
             if not selected_ids:
-                all_ids = [cid for cid, info in roster.items() if not bool((info or {}).get("is_player", False))]
                 selected_ids = random.sample(all_ids, min(3, len(all_ids)))
 
             if engine and hasattr(engine, "mm"):
