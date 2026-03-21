@@ -41,7 +41,10 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         resetGame,
         active_roommates,
         narrativeState,
-        turnDebug
+        turnDebug,
+        systemState,
+        systemDailyPlan,
+        systemKeyResolution
     } = useGameStore();
 
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -491,6 +494,28 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                                             <span className="font-bold text-slate-500">user chars</span>
                                             <span className="font-black tabular-nums">{turnDebug.prompt_diagnostics?.user?.total_chars || 0}</span>
                                         </div>
+                                    </div>
+                                )}
+                                {(systemState?.time || systemDailyPlan || systemKeyResolution) && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2 space-y-1.5">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">System Loop</div>
+                                        {systemState?.time && (
+                                            <div className="text-[10px] text-slate-600">
+                                                day {systemState.time?.day || 1} / week {systemState.time?.week || 1} / chapter {systemState.time?.chapter || 1}
+                                            </div>
+                                        )}
+                                        {systemDailyPlan && (
+                                            <div className="text-[10px] text-slate-600">
+                                                daily {Array.isArray(systemDailyPlan?.daily_events) ? systemDailyPlan.daily_events.length : 0}
+                                                {" / "}
+                                                key {systemDailyPlan?.key_event ? 'pending' : (systemDailyPlan?.key_event_resolved ? 'resolved' : 'none')}
+                                            </div>
+                                        )}
+                                        {systemKeyResolution?.ok && (
+                                            <div className="text-[10px] text-emerald-700">
+                                                key settled: {systemKeyResolution?.event_id} / {systemKeyResolution?.choice_id}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>

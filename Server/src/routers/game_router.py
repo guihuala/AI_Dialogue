@@ -48,6 +48,7 @@ class SaveGameRequest(BaseModel):
     arg_count: int
     wechat_data_list: List[Dict[str, Any]] = []
     narrative_state: Optional[Dict[str, Any]] = None
+    system_state: Optional[Dict[str, Any]] = None
 
 
 def build_game_router(
@@ -106,6 +107,8 @@ def build_game_router(
             return
         if hasattr(engine, "director"):
             engine.director.reload_timeline()
+        if hasattr(engine, "skeleton_engine"):
+            engine.skeleton_engine.reload()
         if hasattr(engine, "pm"):
             engine.pm = type(engine.pm)(user_id)
             if hasattr(engine, "player_name") and hasattr(engine.pm, "get_player_name"):
@@ -464,6 +467,11 @@ def build_game_router(
             if engine and hasattr(engine, "narrative_state_mgr") and isinstance(state, dict):
                 try:
                     engine.narrative_state_mgr.load(state.get("narrative_state"))
+                except Exception:
+                    pass
+            if engine and hasattr(engine, "system_state_mgr") and isinstance(state, dict):
+                try:
+                    engine.system_state_mgr.load(state.get("system_state"))
                 except Exception:
                     pass
             roster = get_current_roster(user_id)
