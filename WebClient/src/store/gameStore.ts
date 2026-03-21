@@ -21,9 +21,6 @@ interface GameState {
   active_roommates: string[];
   affinity: Record<string, number>;
   narrativeState: Record<string, any>;
-  systemState: Record<string, any>;
-  systemDailyPlan: Record<string, any> | null;
-  systemKeyResolution: Record<string, any> | null;
   
   // 故事与交互
   displayText: string;
@@ -83,9 +80,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   active_roommates: [],
   affinity: {},
   narrativeState: {},
-  systemState: {},
-  systemDailyPlan: null,
-  systemKeyResolution: null,
   displayText: '',
   nextOptions: [],
   isEnd: false,
@@ -134,9 +128,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         active_roommates: data.active_roommates || roommates,
         affinity: data.affinity,
         narrativeState: data.narrative_state || {},
-        systemState: data.system_state || {},
-        systemDailyPlan: data.system_daily_plan || null,
-        systemKeyResolution: data.system_key_resolution || null,
         displayText: data.display_text,
         nextOptions: data.next_options || [],
         isEnd: data.is_end || false,
@@ -247,9 +238,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         player_name: data.player_name || prev.player_name || '陆陈安然',
         affinity: data.affinity,
         narrativeState: data.narrative_state || prev.narrativeState || {},
-        systemState: data.system_state || prev.systemState || {},
-        systemDailyPlan: data.system_daily_plan || prev.systemDailyPlan || null,
-        systemKeyResolution: data.system_key_resolution || null,
         displayText: data.display_text,
         nextOptions: data.next_options || [],
         isEnd: data.is_end || false,
@@ -338,9 +326,6 @@ export const useGameStore = create<GameState>((set, get) => ({
               player_name: gameState.player_name || '陆陈安然',
               active_roommates: gameState.active_roommates,
               narrativeState: gameState.narrative_state || {},
-              systemState: gameState.system_state || {},
-              systemDailyPlan: gameState.system_daily_plan || null,
-              systemKeyResolution: gameState.system_key_resolution || null,
               // affinity, hygiene, etc should ideally be in save too
               displayText: "存档已成功加载，您可以继续之前的进度。",
               nextOptions: ["【进入下一幕】继续当前存档"],
@@ -371,7 +356,6 @@ export const useGameStore = create<GameState>((set, get) => ({
               arg_count: 0, // Should be in state
               wechat_data_list: [], // Should be in state if we want to save wechat
               narrative_state: state.narrativeState,
-              system_state: state.systemState,
               history: state.history // Custom field for loading
           });
       } catch (e) {
@@ -400,9 +384,6 @@ export const useGameStore = create<GameState>((set, get) => ({
               current_scene: '宿舍',
               player_name: '陆陈安然',
               narrativeState: {},
-              systemState: {},
-              systemDailyPlan: null,
-              systemKeyResolution: null,
               history: [],
               wechatNotifications: [],
               displayText: '',
