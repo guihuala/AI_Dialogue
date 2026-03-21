@@ -99,3 +99,4 @@ AI_Dialogue/
 - [模组系统说明](./mod_system.md)
 - [账户系统设计](./account_system.md)
 - [叙事记忆系统设计（v1）](./narrative_memory_system.md)
+- [系统驱动重构计划（优先级版）](./system_driven_refactor_plan.md)
