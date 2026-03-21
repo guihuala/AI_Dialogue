@@ -133,6 +133,39 @@ export const HistoryPanel = ({
                       </div>
                     </div>
                   )}
+                  {h.narrativeState.relationship_state && Object.keys(h.narrativeState.relationship_state).length > 0 && (
+                    <div>
+                      <div className="text-[10px] font-black tracking-widest uppercase text-emerald-300/80 mb-1">关系状态</div>
+                      <div className="space-y-2">
+                        {Object.entries(h.narrativeState.relationship_state).slice(0, 6).map(([name, rel]: any) => (
+                          <div key={name} className="rounded-lg bg-white/5 border border-white/10 px-2.5 py-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] text-emerald-200 font-black">{name}</span>
+                              <span className="text-[10px] text-white/85 font-black">{rel?.relationship_stage || '熟悉'}</span>
+                            </div>
+                            <div className="mt-1 text-[10px] text-white/75">
+                              信任 {Math.round(Number(rel?.trust || 0))} / 紧张 {Math.round(Number(rel?.tension || 0))} / 亲密 {Math.round(Number(rel?.intimacy || 0))}
+                            </div>
+                            {Array.isArray(rel?.recent_flags) && rel.recent_flags.length > 0 && (
+                              <div className="mt-1 text-[10px] text-white/65">
+                                最近：{String(rel.recent_flags[0])}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {Array.isArray(h.narrativeState.long_term_milestones) && h.narrativeState.long_term_milestones.length > 0 && (
+                    <div>
+                      <div className="text-[10px] font-black tracking-widest uppercase text-emerald-300/80 mb-1">长期里程碑</div>
+                      <div className="space-y-1">
+                        {h.narrativeState.long_term_milestones.slice(0, 5).map((item: string, idx: number) => (
+                          <div key={idx} className="text-[11px] text-white/90 leading-relaxed">- {item}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <details className="pt-1">
                     <summary className="cursor-pointer text-[10px] tracking-widest uppercase font-black text-white/45">
                       查看完整状态 JSON

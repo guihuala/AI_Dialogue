@@ -98,3 +98,4 @@ AI_Dialogue/
 - [后端说明](./backend.md)
 - [模组系统说明](./mod_system.md)
 - [账户系统设计](./account_system.md)
+- [叙事记忆系统设计（v1）](./narrative_memory_system.md)

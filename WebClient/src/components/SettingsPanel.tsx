@@ -32,7 +32,8 @@ export const SettingsPanel = () => {
         typewriter_speed: 30,
         latency_mode: 'balanced',
         dialogue_mode: 'single_dm',
-        stability_mode: 'stable'
+        stability_mode: 'stable',
+        turn_debug: false
     });
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -66,7 +67,8 @@ export const SettingsPanel = () => {
                 if (data) {
                     setSettings({
                         ...data,
-                        stability_mode: data.stability_mode || 'stable'
+                        stability_mode: data.stability_mode || 'stable',
+                        turn_debug: !!data.turn_debug
                     });
                 }
             } catch (err) {
@@ -315,6 +317,30 @@ export const SettingsPanel = () => {
                                                 <option value="fast">极速模式（优先速度）</option>
                                                 <option value="story">剧情优先（优先质量）</option>
                                             </select>
+                                        </div>
+
+                                        <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white px-4 py-3">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">回合调试面板</span>
+                                                    <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">
+                                                        开启后返回每回合 timings 与 prompt 规模，用于定位卡顿来源
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSettings({ ...settings, turn_debug: !settings.turn_debug })}
+                                                    className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors ${
+                                                        settings.turn_debug ? 'bg-[var(--color-cyan-main)]' : 'bg-slate-300'
+                                                    }`}
+                                                >
+                                                    <span
+                                                        className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                                                            settings.turn_debug ? 'translate-x-8' : 'translate-x-1'
+                                                        }`}
+                                                    />
+                                                </button>
+                                            </div>
                                         </div>
 
                                         <div>

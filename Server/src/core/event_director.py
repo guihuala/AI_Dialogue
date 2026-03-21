@@ -2,6 +2,7 @@ import random
 import json
 import os
 import re
+import copy
 from collections import deque
 from src.core.event_script import load_user_events
 from src.core.config import get_user_events_dir
@@ -23,6 +24,15 @@ class EventDirector:
         self.chapter_progress = 0
         self.event_database = load_user_events(user_id)
         self.timeline_config = self._load_timeline()
+        self.relationship_feedback_window = 0
+        self.relationship_feedback_tags = []
+        self._seen_relation_shift_markers = set()
+        self.affinity_feedback_window = 0
+        self.affinity_feedback_tags = []
+        self.affinity_feedback_target = None
+        self.last_affinity_snapshot = {}
+        self.affinity_shock_threshold = 8.0
+        self.affinity_feedback_trigger_prob = 0.68
         
     def reset(self):
         self.used_events = []
@@ -31,6 +41,13 @@ class EventDirector:
         self.pick_counter = 0
         self.current_chapter = 1
         self.chapter_progress = 0
+        self.relationship_feedback_window = 0
+        self.relationship_feedback_tags = []
+        self._seen_relation_shift_markers = set()
+        self.affinity_feedback_window = 0
+        self.affinity_feedback_tags = []
+        self.affinity_feedback_target = None
+        self.last_affinity_snapshot = {}
         
     def reload_timeline(self):
         """支持热更新读取"""
@@ -179,7 +196,305 @@ class EventDirector:
                     score += 0.25
                     break
 
+        score *= self._relationship_weight_from_state(tags, narrative_state)
+
         return max(0.1, base_weight * score)
+
+    def _relationship_feedback_tags_for_stage(self, stage: str):
+        st = str(stage or "").strip()
+        if st in {"敌对", "紧张"}:
+            return ["关系-恶化", "公开冲突", "冷战", "争吵"]
+        if st in {"恋爱倾向", "暧昧"}:
+            return ["暧昧推进", "约会", "关系-升温", "关系-和解"]
+        if st in {"朋友"}:
+            return ["关系-升温", "关系-和解"]
+        return ["关系"]
+
+    def _extract_latest_relation_shift(self, narrative_state):
+        if not isinstance(narrative_state, dict):
+            return None
+        milestones = [str(item).strip() for item in narrative_state.get("long_term_milestones", []) if str(item).strip()]
+        for text in milestones[:3]:
+            if "关系阶段变化" not in text or "->" not in text:
+                continue
+            # 形如：xxx：紧张 -> 朋友（evt_x）
+            try:
+                right = text.split("->", 1)[1]
+                stage = right.split("（", 1)[0].strip()
+                marker = text
+                return {"stage": stage, "marker": marker}
+            except Exception:
+                continue
+        return None
+
+    def _update_relationship_feedback_window(self, narrative_state):
+        shift = self._extract_latest_relation_shift(narrative_state)
+        if not shift:
+            return
+        marker = str(shift.get("marker", "") or "").strip()
+        if not marker or marker in self._seen_relation_shift_markers:
+            return
+        self._seen_relation_shift_markers.add(marker)
+        stage = str(shift.get("stage", "") or "").strip()
+        self.relationship_feedback_window = 3
+        self.relationship_feedback_tags = self._relationship_feedback_tags_for_stage(stage)
+
+    def _event_matches_relation_feedback(self, event, target_tags):
+        if not target_tags:
+            return False
+        evt_tags = [str(item).strip() for item in (getattr(event, "narrative_tags", []) or []) if str(item).strip()]
+        if not evt_tags:
+            return False
+        for evt_tag in evt_tags:
+            for target in target_tags:
+                if target and target in evt_tag:
+                    return True
+        return False
+
+    def _update_affinity_feedback_window(self, active_chars, affinity):
+        names = [str(n).strip() for n in (active_chars or []) if str(n).strip()]
+        if not names or not isinstance(affinity, dict):
+            return
+
+        current = {}
+        deltas = []
+        for name in names:
+            try:
+                val = float(affinity.get(name, 50))
+            except Exception:
+                val = 50.0
+            current[name] = val
+            if name in self.last_affinity_snapshot:
+                deltas.append((name, val - float(self.last_affinity_snapshot.get(name, 50.0))))
+
+        # 初始化快照，不触发反馈
+        if not self.last_affinity_snapshot:
+            self.last_affinity_snapshot = current
+            return
+
+        if deltas:
+            target_name, target_delta = max(deltas, key=lambda x: abs(x[1]))
+            if abs(target_delta) >= float(self.affinity_shock_threshold):
+                if target_delta > 0:
+                    tags = ["约会", "暧昧推进", "关系-升温", "关系-和解"]
+                else:
+                    tags = ["关系-恶化", "公开冲突", "冷战", "争吵"]
+                self.affinity_feedback_window = 2
+                self.affinity_feedback_tags = tags
+                self.affinity_feedback_target = str(target_name)
+                print(
+                    "🎯 [事件调度] 检测到好感波动触发窗口："
+                    f"{target_name} Δ{target_delta:+.1f}，窗口={self.affinity_feedback_window}"
+                )
+
+        self.last_affinity_snapshot.update(current)
+
+    def _event_matches_target_char(self, event, target_name):
+        if not target_name:
+            return True
+        target = str(target_name).strip()
+        if not target:
+            return True
+        exclusive = str(getattr(event, "exclusive_char", "") or "")
+        if exclusive:
+            req_chars = [c.strip() for c in exclusive.replace('，', ',').split(',') if c.strip()]
+            if req_chars and target not in req_chars:
+                return False
+        return True
+
+    def _is_template_event(self, event) -> bool:
+        if not event:
+            return False
+        placeholder_patterns = [
+            r"\[\[?\s*TARGET\s*\]?\]",
+            r"\{\{\s*TARGET\s*\}\}",
+            r"【\s*TARGET\s*】",
+            r"<\s*TARGET\s*>",
+        ]
+        def _contains_token(obj) -> bool:
+            if isinstance(obj, str):
+                return any(re.search(pat, obj, flags=re.IGNORECASE) for pat in placeholder_patterns)
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    if _contains_token(str(k)) or _contains_token(v):
+                        return True
+                return False
+            if isinstance(obj, list):
+                return any(_contains_token(item) for item in obj)
+            return False
+
+        candidates = [
+            getattr(event, "name", ""),
+            getattr(event, "description", ""),
+            getattr(event, "opening_goal", ""),
+            getattr(event, "pressure_goal", ""),
+            getattr(event, "turning_goal", ""),
+            getattr(event, "settlement_goal", ""),
+            getattr(event, "fallback_consequence", ""),
+            getattr(event, "options", {}),
+            getattr(event, "outcomes", {}),
+            getattr(event, "potential_conflicts", []),
+            getattr(event, "progress_beats", []),
+            getattr(event, "end_signals", []),
+            getattr(event, "fixed_dialogue", []),
+        ]
+        return any(_contains_token(obj) for obj in candidates)
+
+    def _pick_relation_target(self, active_chars, affinity, narrative_state):
+        chars = [str(c).strip() for c in (active_chars or []) if str(c).strip()]
+        if not chars:
+            return None
+        rel_map = {}
+        if isinstance(narrative_state, dict):
+            rel_map = narrative_state.get("relationship_state", {}) or {}
+        if isinstance(rel_map, dict):
+            ranked = []
+            for name in chars:
+                rel = rel_map.get(name)
+                if not isinstance(rel, dict):
+                    continue
+                try:
+                    tension = float(rel.get("tension", 50) or 50)
+                except Exception:
+                    tension = 50.0
+                try:
+                    trust = float(rel.get("trust", 50) or 50)
+                except Exception:
+                    trust = 50.0
+                try:
+                    intimacy = float(rel.get("intimacy", 30) or 30)
+                except Exception:
+                    intimacy = 30.0
+                score = tension - trust * 0.6 - intimacy * 0.2
+                ranked.append((score, name))
+            if ranked:
+                ranked.sort(reverse=True)
+                return ranked[0][1]
+
+        # 回退：按 affinity 最低者
+        def _aff(n):
+            try:
+                return float((affinity or {}).get(n, 50))
+            except Exception:
+                return 50.0
+        chars_sorted = sorted(chars, key=_aff)
+        return chars_sorted[0] if chars_sorted else None
+
+    def _replace_target_tokens(self, text, target_name):
+        raw = str(text or "")
+        if not raw:
+            return raw
+        patterns = [
+            r"\[\[?\s*TARGET\s*\]?\]",
+            r"\{\{\s*TARGET\s*\}\}",
+            r"【\s*TARGET\s*】",
+            r"<\s*TARGET\s*>",
+        ]
+        for pat in patterns:
+            raw = re.sub(pat, str(target_name), raw, flags=re.IGNORECASE)
+        return raw
+
+    def _replace_target_in_obj(self, obj, target_name):
+        if isinstance(obj, str):
+            return self._replace_target_tokens(obj, target_name)
+        if isinstance(obj, dict):
+            replaced = {}
+            for k, v in obj.items():
+                new_k = self._replace_target_tokens(k, target_name)
+                replaced[new_k] = self._replace_target_in_obj(v, target_name)
+            return replaced
+        if isinstance(obj, list):
+            return [self._replace_target_in_obj(item, target_name) for item in obj]
+        return obj
+
+    def _materialize_template_event(self, event, *, active_chars, affinity, narrative_state):
+        if not self._is_template_event(event):
+            return event
+        target = self._pick_relation_target(active_chars, affinity, narrative_state)
+        if not target:
+            return event
+
+        materialized = copy.deepcopy(event)
+        base_id = str(getattr(event, "id", "") or "")
+        safe_target = re.sub(r"[^0-9a-zA-Z_\u4e00-\u9fff]+", "_", str(target))
+        materialized.id = f"{base_id}__tgt_{safe_target}"
+        materialized.source_template_id = base_id
+        materialized.name = self._replace_target_tokens(getattr(event, "name", ""), target)
+        materialized.description = self._replace_target_tokens(getattr(event, "description", ""), target)
+        materialized.opening_goal = self._replace_target_tokens(getattr(event, "opening_goal", ""), target)
+        materialized.pressure_goal = self._replace_target_tokens(getattr(event, "pressure_goal", ""), target)
+        materialized.turning_goal = self._replace_target_tokens(getattr(event, "turning_goal", ""), target)
+        materialized.settlement_goal = self._replace_target_tokens(getattr(event, "settlement_goal", ""), target)
+        materialized.fallback_consequence = self._replace_target_tokens(getattr(event, "fallback_consequence", ""), target)
+        materialized.exclusive_char = str(target)
+        if isinstance(getattr(event, "potential_conflicts", None), list):
+            materialized.potential_conflicts = [self._replace_target_tokens(x, target) for x in event.potential_conflicts]
+        if isinstance(getattr(event, "progress_beats", None), list):
+            materialized.progress_beats = [self._replace_target_tokens(x, target) for x in event.progress_beats]
+        if isinstance(getattr(event, "end_signals", None), list):
+            materialized.end_signals = [self._replace_target_tokens(x, target) for x in event.end_signals]
+        if isinstance(getattr(event, "options", None), dict):
+            materialized.options = {k: self._replace_target_tokens(v, target) for k, v in event.options.items()}
+        if isinstance(getattr(event, "outcomes", None), dict):
+            materialized.outcomes = {k: self._replace_target_tokens(v, target) for k, v in event.outcomes.items()}
+        if isinstance(getattr(event, "fixed_dialogue", None), list):
+            materialized.fixed_dialogue = self._replace_target_in_obj(event.fixed_dialogue, target)
+        return materialized
+
+    def _relationship_weight_from_state(self, tags, narrative_state) -> float:
+        if not isinstance(narrative_state, dict):
+            return 1.0
+        rel_map = narrative_state.get("relationship_state", {})
+        if not isinstance(rel_map, dict) or not rel_map:
+            return 1.0
+
+        def _num(v, default):
+            try:
+                return float(v)
+            except Exception:
+                return default
+
+        max_tension = 0.0
+        min_trust = 100.0
+        max_trust = 0.0
+        max_intimacy = 0.0
+        stage_hits = set()
+        for _, rel in rel_map.items():
+            if not isinstance(rel, dict):
+                continue
+            trust = _num(rel.get("trust", 50), 50.0)
+            tension = _num(rel.get("tension", 50), 50.0)
+            intimacy = _num(rel.get("intimacy", 30), 30.0)
+            stage = str(rel.get("relationship_stage", "") or "").strip()
+
+            max_tension = max(max_tension, tension)
+            min_trust = min(min_trust, trust)
+            max_trust = max(max_trust, trust)
+            max_intimacy = max(max_intimacy, intimacy)
+            if stage:
+                stage_hits.add(stage)
+
+        milestones = [str(item).strip() for item in narrative_state.get("long_term_milestones", []) if str(item).strip()]
+        has_recent_stage_shift = any("关系阶段变化" in item for item in milestones[:3])
+
+        score = 1.0
+        for tag in tags:
+            t = str(tag or "").strip()
+            if not t:
+                continue
+            if any(key in t for key in ["关系-恶化", "公开冲突", "冷战", "争吵"]):
+                if max_tension >= 70 or min_trust <= 35 or ("敌对" in stage_hits or "紧张" in stage_hits):
+                    score += 0.35
+            if any(key in t for key in ["关系-升温", "和解"]):
+                if max_trust >= 65 and max_tension <= 55:
+                    score += 0.28
+            if any(key in t for key in ["暧昧推进", "约会", "亲密"]):
+                if max_intimacy >= 60 and max_trust >= 65 and max_tension <= 50:
+                    score += 0.35
+            if has_recent_stage_shift and any(key in t for key in ["关系", "暧昧", "和解", "冲突"]):
+                score += 0.18
+
+        return max(0.7, min(score, 2.2))
 
     def _in_cooldown(self, event) -> bool:
         event_id = str(getattr(event, "id", "") or "")
@@ -205,6 +520,8 @@ class EventDirector:
 
     def get_next_event(self, player_stats, active_chars, affinity=None, narrative_state=None):
         if affinity is None: affinity = {}
+        self._update_relationship_feedback_window(narrative_state)
+        self._update_affinity_feedback_window(active_chars, affinity)
         
         if str(self.current_chapter) not in self.timeline_config:
             return None
@@ -271,13 +588,72 @@ class EventDirector:
 
         if valid_pool is emergency_pool:
             print(f"⚠️ [事件调度] 第 {self.current_chapter} 章条件过严，已启用无条件兜底。")
+        chosen = None
+        if self.relationship_feedback_window > 0 and self.relationship_feedback_tags:
+            relation_pool = [e for e in valid_pool if self._event_matches_relation_feedback(e, self.relationship_feedback_tags)]
+            if relation_pool:
+                chosen = self._weighted_pick(relation_pool, narrative_state)
+                self.relationship_feedback_window = 0
+                self.relationship_feedback_tags = []
+                print("🎯 [事件调度] 命中关系反馈窗口，优先发放关系联动事件。")
+            else:
+                self.relationship_feedback_window = max(0, int(self.relationship_feedback_window) - 1)
+                if self.relationship_feedback_window == 0:
+                    self.relationship_feedback_tags = []
 
-        chosen = self._weighted_pick(valid_pool, narrative_state)
+        if not chosen:
+            if self.affinity_feedback_window > 0 and self.affinity_feedback_tags:
+                trigger = random.random() <= float(self.affinity_feedback_trigger_prob)
+                if trigger:
+                    target = str(self.affinity_feedback_target or "").strip()
+                    affinity_pool = [
+                        e for e in valid_pool
+                        if self._event_matches_relation_feedback(e, self.affinity_feedback_tags)
+                        and self._event_matches_target_char(e, target)
+                    ]
+                    # 允许在目标角色专属事件不足时，退化为关系标签池，避免过窄导致无事发生。
+                    if not affinity_pool:
+                        affinity_pool = [
+                            e for e in valid_pool
+                            if self._event_matches_relation_feedback(e, self.affinity_feedback_tags)
+                        ]
+                    if affinity_pool:
+                        chosen = self._weighted_pick(affinity_pool, narrative_state)
+                        self.affinity_feedback_window = 0
+                        self.affinity_feedback_tags = []
+                        self.affinity_feedback_target = None
+                        print("🎯 [事件调度] 命中好感波动窗口，发放关系特化事件。")
+                    else:
+                        self.affinity_feedback_window = max(0, int(self.affinity_feedback_window) - 1)
+                        if self.affinity_feedback_window == 0:
+                            self.affinity_feedback_tags = []
+                            self.affinity_feedback_target = None
+                else:
+                    self.affinity_feedback_window = max(0, int(self.affinity_feedback_window) - 1)
+                    if self.affinity_feedback_window == 0:
+                        self.affinity_feedback_tags = []
+                        self.affinity_feedback_target = None
+        if not chosen:
+            chosen = self._weighted_pick(valid_pool, narrative_state)
         if not chosen:
             return None
 
+        chosen = self._materialize_template_event(
+            chosen,
+            active_chars=active_chars,
+            affinity=affinity,
+            narrative_state=narrative_state,
+        )
+        chosen_id = str(getattr(chosen, "id", "") or "")
+        if chosen_id and chosen_id not in self.event_database:
+            # 模板实例化后的事件需要可被下一回合按 ID 继续读取。
+            self.event_database[chosen_id] = chosen
+
         if not getattr(chosen, "allow_repeat", False):
             self.used_events.append(chosen.id)
+            template_base_id = str(getattr(chosen, "source_template_id", "") or "")
+            if template_base_id:
+                self.used_events.append(template_base_id)
         self.recent_events.append(chosen.id)
         self.event_last_picked[chosen.id] = self.pick_counter
         self.pick_counter += 1

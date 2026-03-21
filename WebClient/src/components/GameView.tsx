@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { TitleMenu } from './TitleMenu';
 import { GameSetup } from './GameSetup';
@@ -13,6 +13,11 @@ import { EndOverlay } from './game/EndOverlay';
 import { DialogBox } from './game/DialogBox';
 import { AnnouncementPanel } from './common/AnnouncementPanel';
 import { ConfirmDialog } from './common/ConfirmDialog';
+
+const isTransitionChoice = (choice?: string): boolean => {
+    const text = String(choice || '');
+    return /继续剧情|进入下一幕|下一幕|转场|进入下一事件|继续前进/.test(text);
+};
 
 export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) => {
     const {
@@ -34,11 +39,16 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         current_evt_id,
         current_scene,
         resetGame,
-        active_roommates
+        active_roommates,
+        narrativeState,
+        turnDebug
     } = useGameStore();
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const historyScrollRef = useRef<HTMLDivElement>(null);
+    const gameRootRef = useRef<HTMLDivElement>(null);
+    const debugPanelRef = useRef<HTMLDivElement>(null);
+    const relationPanelRef = useRef<HTMLDivElement>(null);
 
     const [typedText, setTypedText] = useState('');
     const [isTyping, setIsTyping] = useState(false);
@@ -46,6 +56,15 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
     const [showSceneTransition, setShowSceneTransition] = useState(false);
     const [showBackConfirm, setShowBackConfirm] = useState(false);
     const [showAnnouncement, setShowAnnouncement] = useState(false);
+    const [showDebugPanel, setShowDebugPanel] = useState(true);
+    const [showRelationPanel, setShowRelationPanel] = useState(true);
+    const [panelPosReady, setPanelPosReady] = useState(false);
+    const [panelPos, setPanelPos] = useState({
+        debug: { x: 0, y: 20 },
+        relation: { x: 0, y: 220 },
+    });
+    const [draggingPanel, setDraggingPanel] = useState<'debug' | 'relation' | null>(null);
+    const dragMetaRef = useRef<{ panel: 'debug' | 'relation'; dx: number; dy: number } | null>(null);
     const prevEventIdRef = useRef<string>('');
 
     // Notifications system
@@ -71,7 +90,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
     }, [showHistory, history]);
 
     useEffect(() => {
-        if (isLoading && (pendingChoice === "继续剧情..." || isEnd)) {
+        if (isLoading && (isTransitionChoice(pendingChoice || '') || isEnd)) {
             setShowSceneTransition(true);
         }
     }, [isLoading, pendingChoice, isEnd]);
@@ -198,6 +217,106 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         if (isPlaying) setPhase('playing');
     }, [isPlaying]);
 
+    const PANEL_SAFE_TOP = 96;
+
+    const clampPanelPosition = (panel: 'debug' | 'relation', x: number, y: number) => {
+        const root = gameRootRef.current;
+        const panelEl = panel === 'debug' ? debugPanelRef.current : relationPanelRef.current;
+        if (!root) return { x, y };
+
+        const rootRect = root.getBoundingClientRect();
+        const panelWidth = panelEl?.offsetWidth || 340;
+        const panelHeight = panelEl?.offsetHeight || 220;
+        const min = 8;
+        const minY = PANEL_SAFE_TOP;
+        const maxX = Math.max(min, rootRect.width - panelWidth - 8);
+        const maxY = Math.max(minY, rootRect.height - panelHeight - 8);
+        return {
+            x: Math.max(min, Math.min(maxX, x)),
+            y: Math.max(minY, Math.min(maxY, y)),
+        };
+    };
+
+    useEffect(() => {
+        const root = gameRootRef.current;
+        if (!root || panelPosReady) return;
+
+        const rootWidth = root.clientWidth || 1200;
+        const savedRaw = localStorage.getItem('game_overlay_panel_pos_v1');
+        if (savedRaw) {
+            try {
+                const saved = JSON.parse(savedRaw);
+                const debug = clampPanelPosition('debug', Number(saved?.debug?.x || 0), Number(saved?.debug?.y || 20));
+                const relation = clampPanelPosition('relation', Number(saved?.relation?.x || 0), Number(saved?.relation?.y || 220));
+                setPanelPos({ debug, relation });
+                setPanelPosReady(true);
+                return;
+            } catch {
+                // ignore broken localStorage
+            }
+        }
+
+        const debugDefault = clampPanelPosition('debug', rootWidth - 360, 20);
+        const relationDefault = clampPanelPosition('relation', rootWidth - 360, 220);
+        setPanelPos({ debug: debugDefault, relation: relationDefault });
+        setPanelPosReady(true);
+    }, [panelPosReady]);
+
+    useEffect(() => {
+        if (!panelPosReady) return;
+        localStorage.setItem('game_overlay_panel_pos_v1', JSON.stringify(panelPos));
+    }, [panelPos, panelPosReady]);
+
+    useEffect(() => {
+        const onResize = () => {
+            setPanelPos((prev) => ({
+                debug: clampPanelPosition('debug', prev.debug.x, prev.debug.y),
+                relation: clampPanelPosition('relation', prev.relation.x, prev.relation.y),
+            }));
+        };
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
+
+    useEffect(() => {
+        if (!draggingPanel) return;
+        const onPointerMove = (ev: PointerEvent) => {
+            const root = gameRootRef.current;
+            const meta = dragMetaRef.current;
+            if (!root || !meta) return;
+            const rootRect = root.getBoundingClientRect();
+            const nextX = ev.clientX - rootRect.left - meta.dx;
+            const nextY = ev.clientY - rootRect.top - meta.dy;
+            const clamped = clampPanelPosition(meta.panel, nextX, nextY);
+            setPanelPos((prev) => ({ ...prev, [meta.panel]: clamped }));
+        };
+        const onPointerUp = () => {
+            dragMetaRef.current = null;
+            setDraggingPanel(null);
+        };
+
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+        return () => {
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+        };
+    }, [draggingPanel]);
+
+    const handlePanelDragStart = (panel: 'debug' | 'relation', ev: ReactPointerEvent<HTMLButtonElement>) => {
+        const root = gameRootRef.current;
+        if (!root) return;
+        const rootRect = root.getBoundingClientRect();
+        const pos = panelPos[panel];
+        dragMetaRef.current = {
+            panel,
+            dx: ev.clientX - rootRect.left - pos.x,
+            dy: ev.clientY - rootRect.top - pos.y,
+        };
+        setDraggingPanel(panel);
+        ev.preventDefault();
+    };
+
     if (phase === 'title') {
         return (
             <>
@@ -279,8 +398,15 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         return '/assets/backgrounds/宿舍.jpg';
     };
 
+    const relationItems = Object.entries((narrativeState as any)?.relationship_state || {})
+        .filter(([name]) => (active_roommates || []).includes(name))
+        .slice(0, 4);
+    const longTermMilestones: string[] = Array.isArray((narrativeState as any)?.long_term_milestones)
+        ? (narrativeState as any).long_term_milestones.slice(0, 3)
+        : [];
+
     return (
-        <div className="flex-1 flex flex-col h-full rounded-2xl border-2 border-[var(--color-cyan-main)]/20 shadow-xl overflow-hidden relative bg-black">
+        <div ref={gameRootRef} className="flex-1 flex flex-col h-full rounded-2xl border-2 border-[var(--color-cyan-main)]/20 shadow-xl overflow-hidden relative bg-black">
             <div className="absolute inset-0 bg-cover bg-center opacity-70" style={{ backgroundImage: `url('${getSceneBackground(current_scene)}')` }} />
             <div
                 className={`absolute inset-0 z-40 pointer-events-none transition-opacity duration-500 ${
@@ -309,6 +435,135 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                     </div>
                 </div>
             </div>
+
+            {!!turnDebug && (
+                <div
+                    ref={debugPanelRef}
+                    className="absolute z-30 w-[340px] max-w-[calc(100%-16px)]"
+                    style={{
+                        left: panelPos.debug.x,
+                        top: panelPos.debug.y,
+                        visibility: panelPosReady ? 'visible' : 'hidden',
+                    }}
+                >
+                    <div className="rounded-2xl border border-[var(--color-cyan-main)]/20 bg-white/90 backdrop-blur-md shadow-lg overflow-hidden">
+                        <div className="flex items-center bg-[var(--color-cyan-light)]/40 hover:bg-[var(--color-cyan-light)]/60 transition">
+                            <button
+                                type="button"
+                                onClick={() => setShowDebugPanel((v) => !v)}
+                                className="flex-1 px-3 py-2 text-left text-[10px] font-black tracking-widest uppercase text-[var(--color-cyan-main)]"
+                            >
+                                Turn Debug {showDebugPanel ? '▲' : '▼'}
+                            </button>
+                            <button
+                                type="button"
+                                onPointerDown={(ev) => handlePanelDragStart('debug', ev)}
+                                className={`px-2.5 py-2 text-[11px] font-black text-[var(--color-cyan-main)]/80 hover:text-[var(--color-cyan-main)] ${draggingPanel === 'debug' ? 'cursor-grabbing' : 'cursor-grab'}`}
+                                title="拖拽面板"
+                                aria-label="拖拽 Turn Debug 面板"
+                            >
+                                ⠿
+                            </button>
+                        </div>
+                        {showDebugPanel && (
+                            <div className="p-3 space-y-2 text-[11px] text-[var(--color-cyan-dark)]">
+                                {turnDebug.timings && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">Timings (s)</div>
+                                        <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                                            {Object.entries(turnDebug.timings).map(([k, v]) => (
+                                                <div key={k} className="flex items-center justify-between gap-2">
+                                                    <span className="font-bold text-slate-500">{k}</span>
+                                                    <span className="font-black tabular-nums">{Number(v).toFixed(3)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {turnDebug.prompt_diagnostics && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">Prompt Size</div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="font-bold text-slate-500">system chars</span>
+                                            <span className="font-black tabular-nums">{turnDebug.prompt_diagnostics?.system?.total_chars || 0}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between mt-1">
+                                            <span className="font-bold text-slate-500">user chars</span>
+                                            <span className="font-black tabular-nums">{turnDebug.prompt_diagnostics?.user?.total_chars || 0}</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+            {!!narrativeState && (relationItems.length > 0 || longTermMilestones.length > 0) && (
+                <div
+                    ref={relationPanelRef}
+                    className="absolute z-30 w-[340px] max-w-[calc(100%-16px)]"
+                    style={{
+                        left: panelPos.relation.x,
+                        top: panelPos.relation.y,
+                        visibility: panelPosReady ? 'visible' : 'hidden',
+                    }}
+                >
+                    <div className="rounded-2xl border border-[var(--color-cyan-main)]/20 bg-white/90 backdrop-blur-md shadow-lg overflow-hidden">
+                        <div className="flex items-center bg-[var(--color-cyan-light)]/40 hover:bg-[var(--color-cyan-light)]/60 transition">
+                            <button
+                                type="button"
+                                onClick={() => setShowRelationPanel((v) => !v)}
+                                className="flex-1 px-3 py-2 text-left text-[10px] font-black tracking-widest uppercase text-[var(--color-cyan-main)]"
+                            >
+                                关系追踪 {showRelationPanel ? '▲' : '▼'}
+                            </button>
+                            <button
+                                type="button"
+                                onPointerDown={(ev) => handlePanelDragStart('relation', ev)}
+                                className={`px-2.5 py-2 text-[11px] font-black text-[var(--color-cyan-main)]/80 hover:text-[var(--color-cyan-main)] ${draggingPanel === 'relation' ? 'cursor-grabbing' : 'cursor-grab'}`}
+                                title="拖拽面板"
+                                aria-label="拖拽关系追踪面板"
+                            >
+                                ⠿
+                            </button>
+                        </div>
+                        {showRelationPanel && (
+                            <div className="p-3 space-y-2 text-[11px] text-[var(--color-cyan-dark)]">
+                                {relationItems.length > 0 && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">Roommates</div>
+                                        <div className="space-y-1.5">
+                                            {relationItems.map(([name, rel]: any) => (
+                                                <div key={name} className="text-[11px]">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-black text-slate-700">{name}</span>
+                                                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-cyan-light)] text-[var(--color-cyan-main)] font-black">
+                                                            {rel?.relationship_stage || '熟悉'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-500">
+                                                        信任 {Math.round(Number(rel?.trust || 0))} / 紧张 {Math.round(Number(rel?.tension || 0))} / 亲密 {Math.round(Number(rel?.intimacy || 0))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {longTermMilestones.length > 0 && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">Milestones</div>
+                                        <div className="space-y-1">
+                                            {longTermMilestones.map((item, idx) => (
+                                                <div key={idx} className="text-[10px] text-slate-600 leading-relaxed">- {item}</div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
             
             <ScenePortraits charactersInScene={determineCharactersInScene()} />
 
@@ -337,7 +592,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
             />
 
             <div className="absolute inset-0 pointer-events-none flex flex-col justify-end z-20">
-                {!isTyping && !isLoading && isDialogFinished && (!isEnd || nextOptions.includes("继续剧情...")) && (
+                {!isTyping && !isLoading && isDialogFinished && (!isEnd || nextOptions.some((opt) => isTransitionChoice(opt))) && (
                     <ActionOptions 
                         options={nextOptions} 
                         onSelect={performTurn} 
@@ -346,7 +601,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                     />
                 )}
 
-                {isEnd && !nextOptions.includes("继续剧情...") && <EndOverlay isLoading={isLoading} onRestart={() => startGame()} />}
+                {isEnd && !nextOptions.some((opt) => isTransitionChoice(opt)) && <EndOverlay isLoading={isLoading} onRestart={() => startGame()} />}
 
                 <DialogBox 
                     typedText={typedText}

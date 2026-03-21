@@ -38,6 +38,10 @@ interface GameState {
   pendingChoice: string | null;
 
   eventScript: any | null;
+  turnDebug: {
+    timings?: Record<string, number>;
+    prompt_diagnostics?: any;
+  } | null;
 
   // actions
   startGame: (roommates?: string[], modId?: string) => Promise<void>;
@@ -54,6 +58,11 @@ interface GameState {
   togglePhone: (open?: boolean) => void;
   setEventScript: (script: any) => void;
 }
+
+const isTransitionChoice = (choice: string): boolean => {
+  const text = String(choice || '');
+  return /继续剧情|进入下一幕|下一幕|转场|进入下一事件|继续前进/.test(text);
+};
 
 export const useGameStore = create<GameState>((set, get) => ({
   isPlaying: false,
@@ -93,6 +102,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     return generatedId;
   })(),
   pendingChoice: null,
+  turnDebug: null,
 
   setEventScript: (script: any) => set({ eventScript: script }),
 
@@ -129,6 +139,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         }],
         wechatNotifications: data.wechat_notifications || [],
         eventScript: data.event_script || null
+        ,
+        turnDebug: (data.timings || data.prompt_diagnostics)
+          ? {
+              timings: data.timings || undefined,
+              prompt_diagnostics: data.prompt_diagnostics || undefined,
+            }
+          : null
       });
     } catch (e) {
       console.error(e);
@@ -141,7 +158,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (state.isLoading) return;
 
     // --- [LOCAL SCRIPT RESOLUTION] ---
-    if (state.eventScript && !state.isEnd && choice !== "继续剧情...") {
+    if (state.eventScript && !state.isEnd && !isTransitionChoice(choice)) {
       const script = state.eventScript;
       const turnData = (script.turns || []).find((t: any) => t.turn_num === state.turn);
       
@@ -188,7 +205,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     // --- [BACKEND FALLBACK / TRANSITION] ---
     set({ isLoading: true, pendingChoice: choice });
     try {
-      const isTransition = choice === "继续剧情..." || state.isEnd;
+      const isTransition = isTransitionChoice(choice) || state.isEnd;
       const turnReq = {
         choice,
         active_roommates: state.active_roommates,
@@ -232,6 +249,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         }],
         wechatNotifications: data.wechat_notifications || prev.wechatNotifications,
         eventScript: data.event_script || null
+        ,
+        turnDebug: (data.timings || data.prompt_diagnostics)
+          ? {
+              timings: data.timings || undefined,
+              prompt_diagnostics: data.prompt_diagnostics || undefined,
+            }
+          : null
       }));
 
       // 性能优化：如果在 transition 之后拿到了新剧本，则无需预取
@@ -304,10 +328,12 @@ export const useGameStore = create<GameState>((set, get) => ({
               narrativeState: gameState.narrative_state || {},
               // affinity, hygiene, etc should ideally be in save too
               displayText: "存档已成功加载，您可以继续之前的进度。",
-              nextOptions: ["继续剧情..."],
+              nextOptions: ["【进入下一幕】继续当前存档"],
               isEnd: false,
               history: gameState.history || [],
               wechatNotifications: []
+              ,
+              turnDebug: null
           });
       } catch (e) {
           console.error(e);
@@ -360,7 +386,8 @@ export const useGameStore = create<GameState>((set, get) => ({
               narrativeState: {},
               history: [],
               wechatNotifications: [],
-              displayText: ''
+              displayText: '',
+              turnDebug: null
           });
       } catch (e) {
           console.error('Failed to reset game:', e);

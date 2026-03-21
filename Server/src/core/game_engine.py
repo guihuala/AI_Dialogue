@@ -2,6 +2,7 @@ import os
 import json
 import re
 import csv
+import copy
 import concurrent.futures
 import asyncio
 import time
@@ -61,6 +62,7 @@ class GameEngine:
         self.prefetch_futures = {}
         self.event_repeat_state = {}
         self.recent_options_by_event = {}
+        self.event_bound_targets = {}
         self.debug_turn_payload = str(os.getenv("DEBUG_TURN_PAYLOAD", "")).strip().lower() in {"1", "true", "yes", "on"}
         self.profile_turns = str(os.getenv("PROFILE_TURNS", "")).strip().lower() in {"1", "true", "yes", "on"}
 
@@ -75,6 +77,139 @@ class GameEngine:
         self.recent_event_ids = []
         self.event_repeat_state = {}
         self.recent_options_by_event = {}
+        self.event_bound_targets = {}
+
+    def _replace_target_tokens(self, text, target_name):
+        raw = str(text or "")
+        if not raw:
+            return raw
+        patterns = [
+            r"\[\[?\s*TARGET\s*\]?\]",
+            r"\{\{\s*TARGET\s*\}\}",
+            r"【\s*TARGET\s*】",
+            r"<\s*TARGET\s*>",
+        ]
+        for pat in patterns:
+            raw = re.sub(pat, str(target_name), raw, flags=re.IGNORECASE)
+        return raw
+
+    def _has_target_tokens(self, text: str) -> bool:
+        if not text:
+            return False
+        return bool(re.search(r"\[\[?\s*TARGET\s*\]?\]|\{\{\s*TARGET\s*\}\}|【\s*TARGET\s*】|<\s*TARGET\s*>", str(text), flags=re.IGNORECASE))
+
+    def _replace_target_in_obj(self, obj, target_name):
+        if isinstance(obj, str):
+            return self._replace_target_tokens(obj, target_name)
+        if isinstance(obj, dict):
+            out = {}
+            for k, v in obj.items():
+                nk = self._replace_target_tokens(k, target_name)
+                out[nk] = self._replace_target_in_obj(v, target_name)
+            return out
+        if isinstance(obj, list):
+            return [self._replace_target_in_obj(x, target_name) for x in obj]
+        return obj
+
+    def _pick_runtime_target(self, active_chars, affinity):
+        chars = [str(c).strip() for c in (active_chars or []) if str(c).strip()]
+        if not chars:
+            aff_keys = [str(k).strip() for k in (affinity or {}).keys() if str(k).strip()]
+            if aff_keys:
+                return sorted(aff_keys, key=lambda n: float((affinity or {}).get(n, 50)))[0]
+            return "对方"
+        rel_map = {}
+        try:
+            rel_map = self.narrative_state_mgr.export().get("relationship_state", {}) or {}
+        except Exception:
+            rel_map = {}
+        ranked = []
+        if isinstance(rel_map, dict):
+            for name in chars:
+                rel = rel_map.get(name)
+                if not isinstance(rel, dict):
+                    continue
+                try:
+                    trust = float(rel.get("trust", 50) or 50)
+                except Exception:
+                    trust = 50.0
+                try:
+                    tension = float(rel.get("tension", 50) or 50)
+                except Exception:
+                    tension = 50.0
+                score = tension - trust * 0.6
+                ranked.append((score, name))
+        if ranked:
+            ranked.sort(reverse=True)
+            return ranked[0][1]
+        try:
+            return sorted(chars, key=lambda n: float((affinity or {}).get(n, 50)))[0]
+        except Exception:
+            return chars[0] if chars else "对方"
+
+    def _runtime_bind_event_target(self, event_obj, active_chars, affinity):
+        if not event_obj:
+            return event_obj
+        text_candidates = [
+            str(getattr(event_obj, "name", "") or ""),
+            str(getattr(event_obj, "description", "") or ""),
+            str(getattr(event_obj, "opening_goal", "") or ""),
+            str(getattr(event_obj, "pressure_goal", "") or ""),
+            str(getattr(event_obj, "turning_goal", "") or ""),
+            str(getattr(event_obj, "settlement_goal", "") or ""),
+        ]
+        text_candidates.extend([str(v or "") for v in (getattr(event_obj, "options", {}) or {}).values()])
+        text_candidates.extend([str(v or "") for v in (getattr(event_obj, "outcomes", {}) or {}).values()])
+        if not any(self._has_target_tokens(txt) for txt in text_candidates):
+            fixed_dialogue = getattr(event_obj, "fixed_dialogue", None)
+            if not self._has_target_tokens(json.dumps(fixed_dialogue, ensure_ascii=False) if fixed_dialogue is not None else ""):
+                return event_obj
+
+        evt_id = str(getattr(event_obj, "id", "") or "")
+        target = self.event_bound_targets.get(evt_id)
+        if not target:
+            target = self._pick_runtime_target(active_chars, affinity)
+            if target:
+                self.event_bound_targets[evt_id] = target
+        if not target:
+            target = "对方"
+
+        bound = copy.deepcopy(event_obj)
+        for field in ["name", "description", "opening_goal", "pressure_goal", "turning_goal", "settlement_goal", "fallback_consequence"]:
+            setattr(bound, field, self._replace_target_tokens(getattr(bound, field, ""), target))
+        if isinstance(getattr(bound, "potential_conflicts", None), list):
+            bound.potential_conflicts = [self._replace_target_tokens(x, target) for x in bound.potential_conflicts]
+        if isinstance(getattr(bound, "progress_beats", None), list):
+            bound.progress_beats = [self._replace_target_tokens(x, target) for x in bound.progress_beats]
+        if isinstance(getattr(bound, "end_signals", None), list):
+            bound.end_signals = [self._replace_target_tokens(x, target) for x in bound.end_signals]
+        if isinstance(getattr(bound, "options", None), dict):
+            bound.options = {k: self._replace_target_tokens(v, target) for k, v in bound.options.items()}
+        if isinstance(getattr(bound, "outcomes", None), dict):
+            bound.outcomes = {k: self._replace_target_tokens(v, target) for k, v in bound.outcomes.items()}
+        if isinstance(getattr(bound, "fixed_dialogue", None), list):
+            bound.fixed_dialogue = self._replace_target_in_obj(bound.fixed_dialogue, target)
+        return bound
+
+    def _sanitize_payload_target_tokens(self, parsed: dict, next_evt, active_chars, affinity):
+        if not isinstance(parsed, dict):
+            return parsed
+        evt_id = str(getattr(next_evt, "id", "") or "")
+        target = self.event_bound_targets.get(evt_id)
+        if not target:
+            target = self._pick_runtime_target(active_chars, affinity)
+            if target and evt_id:
+                self.event_bound_targets[evt_id] = target
+        if not target:
+            return parsed
+
+        parsed["narrator_transition"] = self._replace_target_tokens(parsed.get("narrator_transition", ""), target)
+        parsed["current_scene"] = self._replace_target_tokens(parsed.get("current_scene", ""), target)
+        parsed["dialogue_sequence"] = self._replace_target_in_obj(parsed.get("dialogue_sequence", []), target)
+        parsed["next_options"] = self._replace_target_in_obj(parsed.get("next_options", []), target)
+        parsed["npc_background_actions"] = self._replace_target_in_obj(parsed.get("npc_background_actions", []), target)
+        parsed["wechat_notifications"] = self._replace_target_in_obj(parsed.get("wechat_notifications", []), target)
+        return parsed
 
     def _get_latency_profile(self, event_obj) -> dict:
         """
@@ -176,7 +311,7 @@ class GameEngine:
             return {
                 "narrator_transition": "（系统受到干扰，尝试理清思绪...）",
                 "current_scene": "未知",
-                "dialogue_sequence": [{"speaker": "系统提示", "content": "（由于未知干扰，当前对话解析失败，请检查参数面板中的“原始输出”查明原因。）", "mood": "neutral"}],
+                "dialogue_sequence": [{"speaker": "系统提示", "content": "（由于未知干扰，当前对话解析失败，请检查参数面板中的“原始输出”查明原因。）"}],
                 "npc_background_actions": [],
                 "wechat_notifications": [],
                 "next_options": rescued_options if rescued_options else ["【深呼吸】", "【重试】", "【继续观察】"],
@@ -253,14 +388,12 @@ class GameEngine:
 
             speaker = str(item.get("speaker", "") or "").strip()
             content = str(item.get("content", "") or "").strip()
-            mood = str(item.get("mood", "") or "").strip()
-
             if not content:
                 # 从非标准字段中尽量抢救文本内容
                 candidate_pairs = []
                 for k, v in item.items():
                     key = str(k or "").strip()
-                    if key in {"speaker", "content", "mood"}:
+                    if key in {"speaker", "content"}:
                         continue
                     if key.startswith("_") or "placeholder" in key.lower():
                         continue
@@ -281,13 +414,9 @@ class GameEngine:
                 else:
                     speaker = "系统提示"
 
-            if not mood:
-                mood = "neutral"
-
             cleaned.append({
                 "speaker": speaker,
                 "content": content,
-                "mood": mood,
             })
 
         return cleaned
@@ -333,6 +462,17 @@ class GameEngine:
                 seen.add(key)
                 dedup.append(opt)
 
+        # 过滤泛化占位词，避免出现“继续剧情...”这类缺乏信息的按钮
+        generic_tokens = {"继续剧情", "继续剧情...", "继续", "下一步", "下一轮"}
+        filtered = []
+        for opt in dedup:
+            key = re.sub(r"[\s。.!！?？~～…]+", "", str(opt or ""))
+            if key in generic_tokens:
+                continue
+            filtered.append(opt)
+        if filtered:
+            dedup = filtered
+
         if dedup:
             return dedup[:4]
 
@@ -345,6 +485,26 @@ class GameEngine:
                 return evt_options[:4]
 
         return ["【深呼吸】", "【继续观察】", "【转移话题】"]
+
+    def _build_transition_option(self, next_evt=None):
+        evt_name = str(getattr(next_evt, "name", "") or "").strip() if next_evt is not None else ""
+        if evt_name:
+            return f"【进入下一幕】前往「{evt_name}」"
+        return "【进入下一幕】继续前进"
+
+    def _is_transition_choice(self, choice_text: str) -> bool:
+        text = str(choice_text or "").strip()
+        if not text:
+            return False
+        patterns = [
+            "继续剧情",
+            "进入下一幕",
+            "下一幕",
+            "转场",
+            "进入下一事件",
+            "继续前进",
+        ]
+        return any(p in text for p in patterns)
 
     def _diversify_options(self, event_id, options, next_evt=None):
         """
@@ -416,8 +576,9 @@ class GameEngine:
             "\n\n【强制 JSON 输出协议】\n"
             "1. 仅输出一个 JSON 对象，不要输出解释、注释、Markdown 代码块。\n"
             "2. 所有 key 与字符串 value 必须使用英文双引号。\n"
-            "3. dialogue_sequence 必须是数组，每项包含 speaker, content, mood。\n"
+            "3. dialogue_sequence 必须是数组，每项只包含 speaker, content。\n"
             "4. next_options 必须是 3-4 个独立字符串数组元素，不能把多个选项拼在一个字符串里。\n"
+            "4.1 next_options 不要使用“继续剧情...”这类占位词，必须是具体可执行动作。\n"
         )
         if self.stability_mode == "stable":
             base_contract += (
@@ -789,6 +950,7 @@ class GameEngine:
                 )
                 if not next_evt:
                     return {"error": "事件池为空，请检查事件 CSV 配置。"}
+            next_evt = self._runtime_bind_event_target(next_evt, selected_chars, affinity)
             mark_timing("event_select", event_select_started_at)
 
             if next_evt.chapter > chapter:
@@ -844,7 +1006,7 @@ class GameEngine:
                         "narrator_transition": cached_script.get("description", f" **{next_evt.name}**"),
                         "current_scene": first_turn.get("scene", "宿舍"),
                         "dialogue_sequence": first_turn.get("dialogue_sequence", []),
-                        "next_options": next_options if next_options else ["继续剧情..."],
+                        "next_options": next_options if next_options else [self._build_transition_option(next_evt)],
                         "stat_changes": {}, # Initial entry usually no changes
                         "is_end": first_turn.get("is_end", False),
                         "player_name": player_name,
@@ -875,6 +1037,7 @@ class GameEngine:
             next_evt = self.director.event_database.get(current_evt_id)
             if not next_evt:
                 return {"error": "事件丢失，请重置游戏。"}
+            next_evt = self._runtime_bind_event_target(next_evt, selected_chars, affinity)
             mark_timing("event_load", event_load_started_at)
             
             # --- [DEEP PREFETCH CONSUMPTION: IN-EVENT TURN] ---
@@ -961,6 +1124,17 @@ class GameEngine:
                             dialogue_sequence=res_data.get("dialogue_sequence", []),
                             is_end=bool(res_data.get("is_end", False)),
                         )
+                        if hasattr(self, "mm") and hasattr(self.mm, "save_narrative_milestones"):
+                            try:
+                                new_milestones = self.narrative_state_mgr.consume_new_milestones()
+                                if new_milestones:
+                                    self.mm.save_narrative_milestones(
+                                        new_milestones,
+                                        event_name=next_evt.name,
+                                        player_name=player_name,
+                                    )
+                            except Exception:
+                                pass
 
                     return {
                         "is_game_over": False,
@@ -1054,6 +1228,22 @@ class GameEngine:
                 affinity=affinity,
                 active_chars=selected_chars,
             )
+        milestone_rag = ""
+        if hasattr(self, "mm") and hasattr(self.mm, "search_narrative_milestones"):
+            try:
+                milestone_docs = self.mm.search_narrative_milestones(
+                    query=f"{next_evt.name} {action_text} {' '.join(selected_chars[:4])}",
+                    n_results=3,
+                )
+                lines = []
+                for doc in milestone_docs:
+                    text = str((doc or {}).get("content", "") or "").strip()
+                    if text:
+                        lines.append(f"- {text[:120]}")
+                if lines:
+                    milestone_rag = "【历史关系里程碑命中】\n" + "\n".join(lines)
+            except Exception:
+                milestone_rag = ""
         event_story_brief = self._build_event_story_brief(
             next_evt,
             player_name=player_name,
@@ -1065,6 +1255,7 @@ class GameEngine:
         if prompt_budget == "compact":
             narrative_summary = self._trim_prompt_block(narrative_summary, max_lines=7, max_chars=520)
             event_story_brief = self._trim_prompt_block(event_story_brief, max_lines=7, max_chars=520)
+            milestone_rag = self._trim_prompt_block(milestone_rag, max_lines=4, max_chars=360)
         mark_timing("prompt_build", prompt_started_at)
 
         # ========================================================
@@ -1159,15 +1350,17 @@ class GameEngine:
             author_note=author_note,
             prompt_budget=prompt_budget,
         )
+        if milestone_rag:
+            user_prompt_sections.setdefault("trimmable_blocks", []).append(("milestone_rag", milestone_rag))
         user_prm = self._compose_prompt_from_sections(user_prompt_sections)
 
         try:
             if getattr(next_evt, 'is_cg', False):
                 cg_dialogue = getattr(next_evt, 'fixed_dialogue', [])
                 if not cg_dialogue:
-                    cg_dialogue = [{"speaker": "系统提示", "content": "（剧情触发成功，但CSV对应行没有对话内容。）", "mood": "neutral"}]
-                # 固定剧情统一走“继续剧情...”进入下一事件，避免在开场阶段被误判为终局遮罩。
-                cg_options = ["继续剧情..."]
+                    cg_dialogue = [{"speaker": "系统提示", "content": "（剧情触发成功，但CSV对应行没有对话内容。）"}]
+                # 固定剧情结束时给出明确转场按钮，避免“继续剧情...”这类占位文案。
+                cg_options = [self._build_transition_option(next_evt)]
 
                 parsed = {
                     "narrator_transition": f"🎬 **[剧情演出] {next_evt.name}**\n---", 
@@ -1186,8 +1379,8 @@ class GameEngine:
                     parsed = {
                         "narrator_transition": "（系统提示：该事件以分支树模式运行。）",
                         "current_scene": "宿舍",
-                        "dialogue_sequence": [{"speaker": "系统提示", "content": "请使用选项推进剧情。", "mood": "neutral"}],
-                        "next_options": ["继续剧情..."],
+                        "dialogue_sequence": [{"speaker": "系统提示", "content": "请使用选项推进剧情。"}],
+                        "next_options": ["【推进当前事件】让场面继续发展"],
                         "stat_changes": {},
                         "wechat_notifications": [],
                         "npc_background_actions": [],
@@ -1279,19 +1472,28 @@ class GameEngine:
                 parsed.get("dialogue_sequence", []),
                 player_name,
             )
+            parsed = self._sanitize_payload_target_tokens(parsed, next_evt, selected_chars, affinity)
 
             # 新事件开场时，补充主角视角导语，避免玩家“直接进入角色台词”产生割裂感。
             if is_new_event_entry and not getattr(next_evt, 'is_cg', False):
                 intro = str(parsed.get("narrator_transition", "") or "").strip()
                 view_tag = f"{player_name}视角"
+                prev_evt_name = ""
+                try:
+                    prev_evt_name = str(getattr(self, "narrative_state_mgr").state.get("last_event_name", "") or "").strip()
+                except Exception:
+                    prev_evt_name = ""
+                bridge = ""
+                if prev_evt_name and prev_evt_name != str(getattr(next_evt, "name", "") or "").strip():
+                    bridge = f"承接刚刚在「{prev_evt_name}」发生的事，"
                 if intro:
-                    if view_tag not in intro:
-                        parsed["narrator_transition"] = f"【{view_tag}】{intro}"
+                    intro_body = re.sub(rf"^【{re.escape(view_tag)}】", "", intro).strip()
+                    parsed["narrator_transition"] = f"【{view_tag}】{bridge}{intro_body}"
                 else:
                     desc = str(getattr(next_evt, "description", "") or "").strip()
                     if len(desc) > 48:
                         desc = desc[:48] + "…"
-                    parsed["narrator_transition"] = f"【{view_tag}】我环顾四周，{desc or '空气里有股将起争执的味道。'}"
+                    parsed["narrator_transition"] = f"【{view_tag}】{bridge}我环顾四周，{desc or '空气里有股将起争执的味道。'}"
 
             stats_data = parsed.get("stat_changes", {})
             if not isinstance(stats_data, dict):
@@ -1340,7 +1542,7 @@ class GameEngine:
                 for t in seq:
                     if not isinstance(t, dict): continue
                     spk, cont = t.get("speaker", "神秘人"), t.get("content", "")
-                    if not cont: cont = max([str(v) for k, v in t.items() if k not in ['speaker', 'mood']], key=len, default="")
+                    if not cont: cont = max([str(v) for k, v in t.items() if k not in ['speaker']], key=len, default="")
                     if cont:
                         dialogue_lines.append(f"**[{spk}]** {cont}")
                         
@@ -1377,7 +1579,6 @@ class GameEngine:
                             seq.append({
                                 "speaker": "system",
                                 "content": f"（{c_name}{c_act}）",
-                                "mood": "平静"
                             })
             
             # ========================================================
@@ -1435,6 +1636,17 @@ class GameEngine:
                     dialogue_sequence=seq if isinstance(seq, list) else [],
                     is_end=is_end,
                 )
+                if hasattr(self, "mm") and hasattr(self.mm, "save_narrative_milestones"):
+                    try:
+                        new_milestones = self.narrative_state_mgr.consume_new_milestones()
+                        if new_milestones:
+                            self.mm.save_narrative_milestones(
+                                new_milestones,
+                                event_name=next_evt.name,
+                                player_name=player_name,
+                            )
+                    except Exception:
+                        pass
             mark_timing("narrative_update", narrative_update_started_at)
 
             memory_save_started_at = time.perf_counter()
@@ -1478,9 +1690,9 @@ class GameEngine:
 
             extracted_options = self._normalize_options(parsed.get("next_options", []), next_evt)
             if getattr(next_evt, 'is_cg', False):
-                extracted_options = ["继续剧情..."]
+                extracted_options = [self._build_transition_option(next_evt)]
             elif is_end:
-                extracted_options = ["继续剧情..."]
+                extracted_options = [self._build_transition_option(next_evt)]
             else:
                 extracted_options = self._diversify_options(next_evt.id, extracted_options, next_evt)
 

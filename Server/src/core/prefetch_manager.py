@@ -259,7 +259,7 @@ class ScriptPrefetcher:
      "turn_num": 1,
      "scene": "当前所在具体场景",
      "dialogue_sequence": [
-        {{ "speaker": "角色名", "content": "对话内容", "mood": "表情/情绪" }},
+        {{ "speaker": "角色名", "content": "对话内容" }},
         ...
      ],
      "player_choices": [
@@ -267,7 +267,7 @@ class ScriptPrefetcher:
           "text": "选项 A 文字",
           "leads_to_turn": 2,
           "immediate_outcome_dialogue": [
-             {{ "speaker": "角色名", "content": "（对该选项的即时反应）", "mood": "..." }}
+             {{ "speaker": "角色名", "content": "（对该选项的即时反应）" }}
           ],
           "stat_changes": {{ "san_delta": -5, "money_delta": 0, "affinity_changes": {{ "角色名": 2 }} }}
         }},

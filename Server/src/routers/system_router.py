@@ -16,6 +16,7 @@ class SettingsRequest(BaseModel):
     latency_mode: Optional[str] = None
     dialogue_mode: Optional[str] = None
     stability_mode: Optional[str] = None
+    turn_debug: Optional[bool] = None
 
 
 class ReflectionRequest(BaseModel):
@@ -60,6 +61,7 @@ def build_system_router(
                     "latency_mode": getattr(engine, "latency_mode", "balanced"),
                     "dialogue_mode": getattr(engine, "dialogue_mode", "single_dm"),
                     "stability_mode": getattr(engine, "stability_mode", "stable"),
+                    "turn_debug": bool(getattr(engine, "profile_turns", False)),
                 },
             }
         return {"status": "error", "message": "Engine not ready"}
@@ -90,6 +92,8 @@ def build_system_router(
                 if smode not in ["stable", "balanced"]:
                     raise HTTPException(status_code=400, detail="stability_mode must be one of: stable, balanced")
                 engine.stability_mode = smode
+            if req.turn_debug is not None:
+                engine.profile_turns = bool(req.turn_debug)
 
             current_api = req.api_key if req.api_key else engine.llm.api_key
             current_url = req.base_url if req.base_url else engine.llm.base_url

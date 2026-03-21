@@ -33,6 +33,36 @@ class MemoryManager:
         ai_mem = MemoryItem(id=str(uuid.uuid4()), type="action", content=f"I replied to {user_name}: {ai_response}")
         self.vector_store.add_memories([user_mem, ai_mem], save_id=self.current_save_id)
 
+    def save_narrative_milestones(self, milestones: List[str], event_name: str = "", player_name: str = ""):
+        if not isinstance(milestones, list):
+            return
+        payload: List[MemoryItem] = []
+        for item in milestones:
+            text = str(item or "").strip()
+            if not text:
+                continue
+            content = f"[叙事里程碑]{text}"
+            if event_name:
+                content += f" | 事件:{event_name}"
+            if player_name:
+                content += f" | 主角:{player_name}"
+            payload.append(
+                MemoryItem(
+                    id=str(uuid.uuid4()),
+                    type="narrative_milestone",
+                    content=content,
+                    summary=text[:120],
+                    importance=8,
+                    related_entities=[player_name] if player_name else []
+                )
+            )
+        if payload:
+            self.vector_store.add_memories(payload, save_id=self.current_save_id)
+
+    def search_narrative_milestones(self, query: str, n_results: int = 3) -> List[Dict]:
+        where = {"save_id": self.current_save_id, "type": "narrative_milestone"}
+        return self.vector_store.search(query=query, n_results=n_results, filter_metadata=where)
+
     def observe_interaction(self, source_name: str, content: str):
         observation = MemoryItem(
             id=str(uuid.uuid4()),

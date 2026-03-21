@@ -140,7 +140,7 @@ def load_all_events(events_dir: str) -> dict:
                             line = line.replace("：", ":") # 兼容中文冒号
                             if ":" in line:
                                 spk, cont = line.split(":", 1)
-                                fixed_dialogue.append({"speaker": spk.strip(), "content": cont.strip(), "mood": "neutral"})
+                                fixed_dialogue.append({"speaker": spk.strip(), "content": cont.strip()})
                     
                     is_cg = (len(fixed_dialogue) > 0 or "CG" in str(clean_row.get("事件类型", default_type)).upper())
 

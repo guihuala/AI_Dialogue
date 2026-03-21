@@ -29,6 +29,7 @@ export interface SystemSettings {
     latency_mode: 'balanced' | 'fast' | 'story';
     dialogue_mode: 'single_dm' | 'npc_dm' | 'hybrid' | 'tree_only';
     stability_mode: 'stable' | 'balanced';
+    turn_debug?: boolean;
 }
 
 export const settingsApi = {

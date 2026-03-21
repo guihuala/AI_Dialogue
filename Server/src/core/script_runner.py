@@ -67,7 +67,10 @@ class ScriptRunner:
         is_end = next_turn.get("is_end", False) if next_turn else True
 
         return {
-            "narrator_transition": f"你选择了：{choice_result.get('text')}",
+            "narrator_transition": (
+                f"承接你刚才的选择“{choice_result.get('text')}”，"
+                f"场面继续向前推进。"
+            ),
             "dialogue_sequence": dialogue_seq,
             "next_options": next_options,
             "stat_changes": choice_result.get("stat_changes", {}),
