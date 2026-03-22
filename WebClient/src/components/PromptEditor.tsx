@@ -934,7 +934,7 @@ ${data.content}`;
                             {(activeCategory === 'world' || activeCategory === 'skills') && !selectedFile ? (
                                 <TopicExplorer
                                     category={activeCategory as any}
-                                    files={activeCategory === 'world' ? files.md : [...files.md, 'main_system.md']}
+                                    files={files.md}
                                     onSelectTopic={handleSelectTopic}
                                     canEdit={canEditCurrentMod}
                                     onAddNew={activeCategory === 'skills' ? () => setNewItemModal({ type: 'skill', name: '', description: '' }) : undefined}

@@ -33,10 +33,10 @@ export const EditorSidebar = ({
         files.md.forEach(f => {
             const item = { type: 'md' as const, name: f };
             result.all.push(item);
-            if (f.startsWith('world/') || f === 'main_system.md') result.world.push(item);
+            if (f.startsWith('world/')) result.world.push(item);
             else if (f.endsWith('relationship.csv')) result.relation.push(item);
             else if (f.startsWith('characters/') || f.endsWith('roster.json')) result.char.push(item);
-            else if (f.startsWith('skills/')) result.skills.push(item);
+            else if (f.startsWith('skills/') || f.startsWith('system/')) result.skills.push(item);
             else result.world.push(item);
         });
         files.csv.forEach(f => {

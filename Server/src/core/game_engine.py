@@ -69,7 +69,8 @@ class GameEngine:
         self.event_bound_targets = {}
         self.debug_turn_payload = str(os.getenv("DEBUG_TURN_PAYLOAD", "")).strip().lower() in {"1", "true", "yes", "on"}
         self.profile_turns = str(os.getenv("PROFILE_TURNS", "")).strip().lower() in {"1", "true", "yes", "on"}
-        self.expression_only_mode = str(os.getenv("SYSTEM_EXPRESSION_ONLY", "1")).strip().lower() not in {"0", "false", "no", "off"}
+        # Hard switch: always use expression-only rendering pipeline.
+        self.expression_only_mode = True
         self.expression_max_tokens = max(
             280,
             min(900, int(str(os.getenv("SYSTEM_EXPRESSION_MAX_TOKENS", "420")).strip() or 420)),
@@ -636,7 +637,7 @@ class GameEngine:
         return base_contract
 
     def _build_expression_json_contract(self):
-        return (
+        fallback = (
             "\n\n【强制短文本 JSON 协议】\n"
             "1. 仅输出一个 JSON 对象，不要输出解释、注释、Markdown。\n"
             "2. 只允许这些字段：scene_line, current_scene, dialogue_lines, options_copy, is_end, effects。\n"
@@ -645,9 +646,16 @@ class GameEngine:
             "5. effects 必须是字符串数组命令，可为空数组；允许命令：san/money/arg/affinity/wechat；禁止输出 stat_changes/tool_calls。\n"
             "6. 不要输出 mood 字段，不要输出多余嵌套结构。\n"
         )
+        try:
+            content = self.pm.render_prompt_file("system/expression_json_contract.md", {})
+            if isinstance(content, str) and content.strip():
+                return "\n\n" + content.strip() + "\n"
+        except Exception:
+            pass
+        return fallback
 
     def _build_expression_system_prompt(self, player_name: str) -> str:
-        return (
+        fallback = (
             "你是校园宿舍生活的叙事导演，仅负责文本表现，不负责规则结算。\n"
             f"玩家主角名：{player_name}\n"
             "输出目标：短、清晰、可推进。\n"
@@ -659,6 +667,16 @@ class GameEngine:
             "- 不输出 mood 字段，不输出解释文本。\n"
             "风格：自然口语、具体动作，不要模板腔。"
         )
+        try:
+            content = self.pm.render_prompt_file(
+                "system/expression_system_prompt.md",
+                {"player_name": player_name},
+            )
+            if isinstance(content, str) and content.strip():
+                return content.strip()
+        except Exception:
+            pass
+        return fallback
 
     def _build_wechat_fallback_notifications(self, *, selected_chars, system_key_resolution):
         if not isinstance(system_key_resolution, dict) or not bool(system_key_resolution.get("ok", False)):
@@ -717,7 +735,7 @@ class GameEngine:
         week = int(((system_state or {}).get("time", {}) or {}).get("week", 1) or 1)
         mood = float((system_state or {}).get("dorm_mood", 50) or 50)
         plan_hint = self._build_system_plan_hint(system_daily_plan)
-        return (
+        fallback = (
             f"【事件】{getattr(next_evt, 'name', '')}\n"
             f"【场景】{getattr(next_evt, 'description', '')}\n"
             f"【当前时间】第{week}周-第{day}天\n"
@@ -728,6 +746,24 @@ class GameEngine:
             f"【系统事件线索】{plan_hint}\n"
             "【写作要求】直接给短表现，不要复述设定。"
         )
+        try:
+            context = {
+                "event_name": str(getattr(next_evt, "name", "") or "").strip(),
+                "event_desc": str(getattr(next_evt, "description", "") or "").strip(),
+                "system_week": str(week),
+                "system_day": str(day),
+                "dorm_mood": f"{mood:.1f}",
+                "active_chars": "、".join(selected_chars or []),
+                "player_action": str(action_text or "").strip(),
+                "resolved_hint": resolved_hint,
+                "plan_hint": plan_hint,
+            }
+            content = self.pm.render_prompt_file("system/expression_user_prompt.md", context)
+            if isinstance(content, str) and content.strip():
+                return content.strip()
+        except Exception:
+            pass
+        return fallback
 
     def _build_system_plan_hint(self, daily_plan) -> str:
         if not isinstance(daily_plan, dict):
@@ -1374,7 +1410,7 @@ class GameEngine:
             self.tm.set_player_name(player_name)
         effective_dialogue_mode = self.dialogue_mode
         use_branch_tree = effective_dialogue_mode in ["tree_only", "hybrid"]
-        expression_only_mode_active = bool(self.expression_only_mode and effective_dialogue_mode != "tree_only")
+        expression_only_mode_active = bool(self.expression_only_mode)
         if effective_dialogue_mode in ["tree_only", "hybrid"]:
             # 分支树模式依旧由单一 DM 兜底实时生成，只是额外启用剧本预生成/缓存能力。
             effective_dialogue_mode = "single_dm"
@@ -1801,10 +1837,12 @@ class GameEngine:
         }
 
         prompt_started_at = time.perf_counter()
-        system_prompt_bundle = self.pm.get_main_system_prompt_bundle(game_context)
-        sys_prm = system_prompt_bundle.get("final_prompt", "")
+        system_prompt_bundle = {"static_blocks": [], "repeated_blocks": [], "dynamic_blocks": [], "trimmable_blocks": [], "final_prompt": ""}
         if expression_only_mode_active:
             sys_prm = self._build_expression_system_prompt(player_name)
+        else:
+            system_prompt_bundle = self.pm.get_main_system_prompt_bundle(game_context)
+            sys_prm = system_prompt_bundle.get("final_prompt", "")
         safe_keys = ", ".join([str(k) for k in wechat_data_dict.keys()])
         narrative_summary = ""
         if (not expression_only_mode_active) and hasattr(self, "narrative_state_mgr"):
@@ -1917,28 +1955,7 @@ class GameEngine:
         if recent_opts:
             recent_opt_hint = "\n【上一轮选项（避免复读）】" + " | ".join(recent_opts[-1])
 
-        author_note = self.pm.get_main_author_note(
-            {"player_name": player_name},
-            compact=(prompt_budget == "compact"),
-        )
-        user_prompt_sections = self._build_user_prompt_sections(
-            event_context=event_context,
-            recent_opt_hint=recent_opt_hint,
-            player_name=player_name,
-            action_text=action_text,
-            reactions_str=reactions_str,
-            event_story_brief=event_story_brief,
-            narrative_summary=narrative_summary,
-            safe_keys=safe_keys,
-            wechat_summary=wechat_summary,
-            san=san,
-            money=money,
-            author_note=author_note,
-            prompt_budget=prompt_budget,
-        )
-        if milestone_rag:
-            user_prompt_sections.setdefault("trimmable_blocks", []).append(("milestone_rag", milestone_rag))
-        user_prm = self._compose_prompt_from_sections(user_prompt_sections)
+        user_prm = ""
         if expression_only_mode_active:
             user_prm = self._build_expression_user_prompt(
                 next_evt=next_evt,
@@ -1948,6 +1965,29 @@ class GameEngine:
                 selected_chars=selected_chars,
                 system_state=self._get_system_state_snapshot(),
             )
+        else:
+            author_note = self.pm.get_main_author_note(
+                {"player_name": player_name},
+                compact=(prompt_budget == "compact"),
+            )
+            user_prompt_sections = self._build_user_prompt_sections(
+                event_context=event_context,
+                recent_opt_hint=recent_opt_hint,
+                player_name=player_name,
+                action_text=action_text,
+                reactions_str=reactions_str,
+                event_story_brief=event_story_brief,
+                narrative_summary=narrative_summary,
+                safe_keys=safe_keys,
+                wechat_summary=wechat_summary,
+                san=san,
+                money=money,
+                author_note=author_note,
+                prompt_budget=prompt_budget,
+            )
+            if milestone_rag:
+                user_prompt_sections.setdefault("trimmable_blocks", []).append(("milestone_rag", milestone_rag))
+            user_prm = self._compose_prompt_from_sections(user_prompt_sections)
 
         try:
             if getattr(next_evt, 'is_cg', False):

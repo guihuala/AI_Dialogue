@@ -53,6 +53,14 @@ python src/app.py
 
 位于 `Server/src/core/`，负责游戏推进、Prompt 管理、事件调度、记忆系统、脚本执行、反思系统等核心能力。
 
+补充（expression-only 短输出提示词）：
+
+- 目前短输出链路的三段核心提示词已改为文件驱动，默认路径为：
+  - `Server/data/prompts/system/expression_system_prompt.md`
+  - `Server/data/prompts/system/expression_user_prompt.md`
+  - `Server/data/prompts/system/expression_json_contract.md`
+- `GameEngine` 会优先读取这些文件；读取失败时才回退到代码内置兜底文本。
+
 ### 数据模型层
 
 位于 `Server/src/models/`，定义结构化数据模型。

@@ -740,8 +740,16 @@ def build_validation_report(
         if ".." in str(p).replace("\\", "/"):
             errors.append(f"非法路径: csv/{p}")
 
-    if "main_system.md" not in md_files and "main_author_note.md" not in md_files:
-        warnings.append("未包含 main_system.md / main_author_note.md，可能只是局部补丁包")
+    has_legacy_main = ("main_system.md" in md_files) or ("main_author_note.md" in md_files)
+    has_expression_main = (
+        "system/expression_system_prompt.md" in md_files
+        and "system/expression_user_prompt.md" in md_files
+        and "system/expression_json_contract.md" in md_files
+    )
+    if not has_legacy_main and not has_expression_main:
+        warnings.append(
+            "未包含主提示词（legacy 或 expression-only），可能只是局部补丁包"
+        )
 
     roster_text = md_files.get("characters/roster.json") or md_files.get("roster.json")
     if roster_text:

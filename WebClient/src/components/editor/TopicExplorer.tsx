@@ -69,12 +69,28 @@ export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew, canEdi
 
     const systemTopics: Topic[] = [
         { 
-            id: 'main', 
-            title: 'DM 逻辑中枢', 
-            description: 'AI 跑团主控程序的决策逻辑、回复风格与意图解析规则。', 
+            id: 'exp_system', 
+            title: '短输出系统提示词', 
+            description: 'expression-only 的系统层提示词，控制整体文风与输出边界。', 
             icon: Cpu, 
-            fileName: 'main_system.md',
+            fileName: 'system/expression_system_prompt.md',
             color: 'bg-[var(--color-cyan-dark)]'
+        },
+        { 
+            id: 'exp_user', 
+            title: '短输出用户模板', 
+            description: '每回合输入模板，决定事件上下文如何喂给模型。', 
+            icon: MessageSquare, 
+            fileName: 'system/expression_user_prompt.md',
+            color: 'bg-[var(--color-cyan-main)]'
+        },
+        { 
+            id: 'exp_contract', 
+            title: '短输出 JSON 协议', 
+            description: '约束返回字段与格式，保证前端稳定解析。', 
+            icon: Book, 
+            fileName: 'system/expression_json_contract.md',
+            color: 'bg-[var(--color-yellow-main)]'
         },
         { 
             id: 'wechat', 
@@ -139,7 +155,7 @@ export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew, canEdi
     const filteredTopics = useMemo(() => {
         return allTopics.filter(topic => 
             (topic.title.includes(searchTerm) || topic.description.includes(searchTerm)) &&
-            (topic.fileName === 'main_system.md' || files.some(f => f.includes(topic.fileName)))
+            files.some(f => f.includes(topic.fileName))
         );
     }, [allTopics, searchTerm, files]);
 

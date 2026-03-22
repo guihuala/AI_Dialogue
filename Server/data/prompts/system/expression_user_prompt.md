@@ -1,0 +1,9 @@
+【事件】[EVENT_NAME]
+【场景】[EVENT_DESC]
+【当前时间】第[SYSTEM_WEEK]周-第[SYSTEM_DAY]天
+【宿舍氛围】[DORM_MOOD]
+【在场角色】[ACTIVE_CHARS]
+【玩家动作】[PLAYER_ACTION]
+【系统结算（已生效）】[RESOLVED_HINT]
+【系统事件线索】[PLAN_HINT]
+【写作要求】直接给短表现，不要复述设定。
