@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, List
 from datetime import datetime
 import json
 import os
@@ -21,6 +21,24 @@ class GenerateSkillPromptReq(BaseModel):
 
 class AdminLoginReq(BaseModel):
     password: str
+
+
+class EventSkeletonValidateReq(BaseModel):
+    name: str = "event_skeletons.generated.json"
+    content: str = ""
+    rules: Dict[str, Any] = {}
+
+
+class EventSkeletonPromoteReq(BaseModel):
+    source_name: str = "event_skeletons.generated.json"
+    target_name: str = "event_skeletons.json"
+    content: str = ""
+    allow_warnings: bool = True
+
+
+class EventSkeletonRulesSaveReq(BaseModel):
+    name: str = "event_skeleton_rules.json"
+    rules: Dict[str, Any]
 
 
 def build_admin_router(
@@ -106,6 +124,191 @@ def build_admin_router(
         )
         workshop_data["updated_at"] = library_data.get("timestamp")
         _write_json(workshop_path, workshop_data)
+
+    def _read_event_file_content(user_id: str, file_name: str) -> str:
+        editor_content = _load_editor_content(user_id)
+        csv_content = editor_content.get("csv", {}) if isinstance(editor_content, dict) else {}
+        if isinstance(csv_content, dict) and file_name in csv_content:
+            return str(csv_content.get(file_name) or "")
+        file_path = os.path.join(default_events_dir, file_name)
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                return f.read()
+        return ""
+
+    def _default_skeleton_rules() -> Dict[str, Any]:
+        return {
+            "key_min_options": 3,
+            "warn_on_empty_title": True,
+            "warn_on_legacy_flags": True,
+            "warn_on_migration_notes": True,
+            "require_reviewed_for_pass": False,
+            "allowed_types": ["daily", "key"],
+        }
+
+    def _normalize_skeleton_rules(raw: Dict[str, Any]) -> Dict[str, Any]:
+        base = _default_skeleton_rules()
+        if not isinstance(raw, dict):
+            return base
+        out = dict(base)
+        out["key_min_options"] = max(1, int(raw.get("key_min_options", base["key_min_options"]) or base["key_min_options"]))
+        out["warn_on_empty_title"] = bool(raw.get("warn_on_empty_title", base["warn_on_empty_title"]))
+        out["warn_on_legacy_flags"] = bool(raw.get("warn_on_legacy_flags", base["warn_on_legacy_flags"]))
+        out["warn_on_migration_notes"] = bool(raw.get("warn_on_migration_notes", base["warn_on_migration_notes"]))
+        out["require_reviewed_for_pass"] = bool(raw.get("require_reviewed_for_pass", base["require_reviewed_for_pass"]))
+        allowed_types = raw.get("allowed_types", base["allowed_types"])
+        if not isinstance(allowed_types, list) or not allowed_types:
+            allowed_types = base["allowed_types"]
+        out["allowed_types"] = [str(x).strip().lower() for x in allowed_types if str(x).strip()]
+        if not out["allowed_types"]:
+            out["allowed_types"] = base["allowed_types"]
+        return out
+
+    def _load_skeleton_rules(user_id: str, file_name: str = "event_skeleton_rules.json") -> Dict[str, Any]:
+        raw = _read_event_file_content(user_id, file_name)
+        if not raw:
+            return _default_skeleton_rules()
+        try:
+            data = json.loads(raw)
+            return _normalize_skeleton_rules(data if isinstance(data, dict) else {})
+        except Exception:
+            return _default_skeleton_rules()
+
+    def _write_event_file_content(user_id: str, file_name: str, content: str) -> None:
+        target = _editor_target(user_id)
+        if target["source"] != "library" or target["mod_id"] == "default":
+            raise HTTPException(status_code=400, detail="默认模组不可直接修改，请先另存到模组库")
+        library_path = _library_file_path(user_id, target["mod_id"])
+        if not os.path.exists(library_path):
+            raise HTTPException(status_code=404, detail="当前编辑模组不存在")
+        library_data = _read_json(library_path)
+        payload_content = library_data.get("content", {})
+        md_files = dict(payload_content.get("md", {}) or {})
+        csv_files = dict(payload_content.get("csv", {}) or {})
+        csv_files[file_name] = content
+        library_data["content"] = {"md": md_files, "csv": csv_files}
+        library_data["manifest"] = build_manifest(
+            mod_id=str(library_data.get("id", target["mod_id"])),
+            name=str(library_data.get("name", target["mod_id"])),
+            author=str(library_data.get("author", f"User_{user_id[:4]}")),
+            source="library",
+            content=library_data["content"],
+        )
+        library_data["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        _write_json(library_path, library_data)
+        _sync_linked_workshop_if_needed(user_id, library_data)
+
+    def _validate_event_skeleton_payload(payload: Dict[str, Any], rules: Dict[str, Any]) -> Dict[str, Any]:
+        cfg = _normalize_skeleton_rules(rules)
+        events = payload.get("events", []) if isinstance(payload, dict) else []
+        if not isinstance(events, list):
+            return {
+                "ok": False,
+                "summary": {"total_events": 0, "pending_review": 0, "error_count": 1, "warning_count": 0},
+                "issues": [{"level": "error", "code": "schema.events_not_list", "message": "events 字段必须是数组"}],
+                "checklist": [],
+            }
+
+        issues: List[Dict[str, Any]] = []
+        checklist: List[Dict[str, Any]] = []
+        pending_review = 0
+
+        for idx, evt in enumerate(events):
+            event_path = f"events[{idx}]"
+            if not isinstance(evt, dict):
+                issues.append(
+                    {
+                        "level": "error",
+                        "code": "event.not_object",
+                        "message": "事件项必须是对象",
+                        "path": event_path,
+                    }
+                )
+                continue
+
+            evt_id = str(evt.get("id", "")).strip()
+            title = str(evt.get("title", "")).strip()
+            evt_type = str(evt.get("type", "")).strip().lower()
+            triggers = evt.get("triggers", {})
+            options = evt.get("options", [])
+            meta = evt.get("meta", {}) if isinstance(evt.get("meta", {}), dict) else {}
+            migration_notes = meta.get("migration_notes", [])
+            reviewed = bool(meta.get("reviewed", False))
+            item_warnings: List[str] = []
+            item_errors: List[str] = []
+
+            if not evt_id:
+                item_errors.append("缺少 id")
+            if evt_type not in set(cfg.get("allowed_types", ["daily", "key"])):
+                item_errors.append(f"type 只能是 {', '.join(cfg.get('allowed_types', ['daily', 'key']))}")
+            if not title and bool(cfg.get("warn_on_empty_title", True)):
+                item_warnings.append("标题为空")
+            if not isinstance(triggers, dict):
+                item_errors.append("triggers 必须是对象")
+            if evt_type == "key":
+                if not isinstance(options, list):
+                    item_errors.append("key 事件 options 必须是数组")
+                elif len(options) < int(cfg.get("key_min_options", 3)):
+                    item_warnings.append(f"key 事件 options 建议至少 {int(cfg.get('key_min_options', 3))} 个")
+
+            if bool(cfg.get("warn_on_legacy_flags", True)) and isinstance(triggers, dict):
+                flags = triggers.get("flags_all_true", [])
+                if isinstance(flags, list) and any(str(x).startswith("legacy:") for x in flags):
+                    item_warnings.append("包含 legacy flags 条件，建议人工改为正式触发字段")
+
+            if bool(cfg.get("warn_on_migration_notes", True)) and isinstance(migration_notes, list) and migration_notes:
+                item_warnings.append(f"含迁移备注 {len(migration_notes)} 条")
+            if bool(cfg.get("require_reviewed_for_pass", False)) and not reviewed:
+                item_errors.append("事件尚未标记 reviewed=true")
+
+            needs_review = bool(item_warnings) or not reviewed
+            if needs_review:
+                pending_review += 1
+                checklist.append(
+                    {
+                        "id": evt_id or event_path,
+                        "title": title or evt_id or event_path,
+                        "reviewed": reviewed,
+                        "warnings": item_warnings,
+                        "errors": item_errors,
+                    }
+                )
+
+            for msg in item_errors:
+                issues.append(
+                    {
+                        "level": "error",
+                        "code": "event.invalid",
+                        "message": msg,
+                        "path": f"{event_path}.{evt_id or 'unknown'}",
+                        "event_id": evt_id or "",
+                    }
+                )
+            for msg in item_warnings:
+                issues.append(
+                    {
+                        "level": "warning",
+                        "code": "event.review",
+                        "message": msg,
+                        "path": f"{event_path}.{evt_id or 'unknown'}",
+                        "event_id": evt_id or "",
+                    }
+                )
+
+        error_count = len([x for x in issues if x.get("level") == "error"])
+        warning_count = len([x for x in issues if x.get("level") == "warning"])
+        return {
+            "ok": error_count == 0,
+            "rules": cfg,
+            "summary": {
+                "total_events": len(events),
+                "pending_review": pending_review,
+                "error_count": error_count,
+                "warning_count": warning_count,
+            },
+            "issues": issues,
+            "checklist": checklist,
+        }
 
     @router.post("/api/admin/login")
     def admin_login(req: AdminLoginReq):
@@ -414,5 +617,89 @@ def build_admin_router(
             return {"status": "success", "prompt": content}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"AI 生成失败: {str(e)}")
+
+    @router.post("/api/admin/event_skeletons/validate")
+    def validate_event_skeletons(req: EventSkeletonValidateReq, user_id: str = get_user_id):
+        raw = str(req.content or "").strip()
+        if not raw:
+            raw = _read_event_file_content(user_id, req.name)
+        if not raw:
+            raise HTTPException(status_code=404, detail=f"未找到骨架文件: {req.name}")
+        try:
+            payload = json.loads(raw)
+        except Exception:
+            raise HTTPException(status_code=400, detail="骨架文件不是合法 JSON")
+        use_rules = req.rules if isinstance(req.rules, dict) and req.rules else _load_skeleton_rules(user_id)
+        result = _validate_event_skeleton_payload(payload if isinstance(payload, dict) else {}, use_rules)
+        return {"status": "success", "data": result}
+
+    @router.post("/api/admin/event_skeletons/promote")
+    def promote_event_skeletons(req: EventSkeletonPromoteReq, user_id: str = get_user_id):
+        source_name = str(req.source_name or "event_skeletons.generated.json").strip() or "event_skeletons.generated.json"
+        target_name = str(req.target_name or "event_skeletons.json").strip() or "event_skeletons.json"
+        raw = str(req.content or "").strip()
+        if not raw:
+            raw = _read_event_file_content(user_id, source_name)
+        if not raw:
+            raise HTTPException(status_code=404, detail=f"未找到骨架草稿文件: {source_name}")
+        try:
+            payload = json.loads(raw)
+        except Exception:
+            raise HTTPException(status_code=400, detail="骨架草稿不是合法 JSON")
+
+        validate = _validate_event_skeleton_payload(payload if isinstance(payload, dict) else {}, _load_skeleton_rules(user_id))
+        summary = validate.get("summary", {})
+        errors = int(summary.get("error_count", 0) or 0)
+        warnings = int(summary.get("warning_count", 0) or 0)
+        if errors > 0:
+            raise HTTPException(status_code=400, detail=f"校验失败：存在 {errors} 个错误，无法发布正式骨架")
+        if warnings > 0 and not bool(req.allow_warnings):
+            raise HTTPException(status_code=400, detail=f"校验存在 {warnings} 个警告，未允许带警告发布")
+
+        now_tag = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_name = f"{target_name}.bak.{now_tag}"
+        target_prev = _read_event_file_content(user_id, target_name)
+
+        with with_user_write_lock(user_id):
+            if target_prev.strip():
+                _write_event_file_content(user_id, backup_name, target_prev)
+            _write_event_file_content(user_id, target_name, json.dumps(payload, ensure_ascii=False, indent=2))
+
+        append_audit_log(
+            user_id,
+            "promote_event_skeletons",
+            "ok",
+            f"{source_name}->{target_name}",
+            {"errors": errors, "warnings": warnings, "backup": backup_name if target_prev.strip() else ""},
+        )
+        return {
+            "status": "success",
+            "data": {
+                "source_name": source_name,
+                "target_name": target_name,
+                "backup_name": backup_name if target_prev.strip() else "",
+                "summary": summary,
+                "message": "骨架正式发布成功",
+            },
+        }
+
+    @router.get("/api/admin/event_skeletons/rules")
+    def get_event_skeleton_rules(name: str = "event_skeleton_rules.json", user_id: str = get_user_id):
+        rules = _load_skeleton_rules(user_id, file_name=name)
+        return {"status": "success", "data": {"name": name, "rules": rules}}
+
+    @router.post("/api/admin/event_skeletons/rules")
+    def save_event_skeleton_rules(req: EventSkeletonRulesSaveReq, user_id: str = get_user_id):
+        normalized = _normalize_skeleton_rules(req.rules if isinstance(req.rules, dict) else {})
+        with with_user_write_lock(user_id):
+            _write_event_file_content(user_id, req.name, json.dumps(normalized, ensure_ascii=False, indent=2))
+        append_audit_log(
+            user_id,
+            "save_event_skeleton_rules",
+            "ok",
+            req.name,
+            {"rules_keys": list(normalized.keys())},
+        )
+        return {"status": "success", "data": {"name": req.name, "rules": normalized}}
 
     return router

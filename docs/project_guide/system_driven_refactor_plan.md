@@ -1,8 +1,8 @@
-# 系统驱动重构计划（优先级版）
+# 系统驱动重构计划
 
 本文档用于指导把当前“回合制 AI 生成”重构为“系统驱动 + AI 表现层”。
 
-## 当前进度（2026-03-21）
+## 当前进度（2026-03-22）
 
 - 已完成：`P0-1` 第一版落地（统一状态容器）
   - 新增 `SystemStateManager`
@@ -23,146 +23,116 @@
 - 已完成：`P0` 收尾准备（前端可观测性）
   - 调试面板已接入 `system_state / system_daily_plan / system_key_resolution` 展示
   - 可直接观察“系统是否先结算、关键事件是否已解决”
-- 当前阻塞：本地后端未启动（`127.0.0.1:8000` 连接失败），暂未完成真实回合压测
-- 下一步：后端启动后执行 `P0` 最终验收（真实回合压测 + 关键事件触发覆盖）
-
-## 1. 目标与原则
-
-- 目标：降低单轮耗时、提升玩法稳定性与可控性、增强长期可玩性。
-- 核心原则：系统决定结构，AI 负责表达。
-- 兼容原则：保留现有模组与事件资产，通过适配层逐步迁移，不做一次性推倒重来。
-
-## 2. 现有系统影响评估
-
-- 模组系统：保留。继续承担角色设定、世界观、事件素材与文本风格。
-- 事件内容资产（CSV/JSON）：保留。新增“事件骨架字段”，旧格式通过适配器兼容。
-- AI 调用链：重构。由“决策+表达”改为“仅表达（短文本）”。
-- 前端主流程：部分调整。新增日/周推进反馈、关键事件入口与周总结展示。
-
-结论：不是报废，而是架构重心迁移。
-
-## 3. 里程碑与优先级
-
-## P0（最高优先级）- 先跑通“系统决定结果”
-
-### P0-1 状态模型落地
-
-- 新增统一 `GameState`：
-  - 时间：`day/week/phase`
-  - 关系：`trust/tension/intimacy/stage`
-  - 全局：`dorm_mood`
-  - 记忆：`memory_points[]`
-  - 运行标记：`flags`
-- 将状态变更统一收口到单一 service（避免 router / engine 分散写值）。
-
-验收标准：
-- 同一回合内，所有状态变化有单点日志与可回放记录。
-
-### P0-2 事件骨架引擎（无 AI 版本）
-
-- 定义事件骨架规范：
-  - `triggers`（触发条件）
-  - `choices`（态度选项）
-  - `effects`（状态结果）
-  - `cooldown/once/priority`
-- 实现事件调度器：
-  - 每天生成 `0~2` 日常事件（自动结算）
-  - 每天最多 `1` 关键事件（提供选择）
-- 结果先算状态，再进入文本层。
-
-验收标准：
-- 不调用 AI 也可完整推进“日 -> 周”流程并正确更新状态。
-
-### P0-3 AI 改为表现层
-
-- AI 输入仅包含：
-  - 当前事件骨架摘要
-  - 参与角色简短状态
-  - 已结算后的结果
-- AI 输出严格限制：
-  - `scene_line` 1句
-  - `dialogue` 3~6句
-  - `options_copy`（仅文案润色，不改变语义）
-- 后端增加输出 schema 校验与超长截断。
-
-验收标准：
-- AI 不参与事件决策与数值计算，响应时长明显下降且格式稳定。
-
-## P1（高优先级）- 强化“可玩性差异”
-
-### P1-1 NPC 主动行为
-
-- 为 NPC 增加主动触发权重与冷却。
-- 支持“聊天/请求/冲突”三类主动事件入口。
-
-### P1-2 信息不对称机制
-
-- 事件支持 `info_gate`（关系阈值/前置记忆）。
-- 同一事实可有多视角版本，不同 NPC 提供不同信息。
-
-### P1-3 不可逆选择与关系阶段跃迁
-
-- 在 `effects` 中支持 `irreversible` 与 `stage_transition`。
-- 阶段变化写入 `memory_points`，用于后续触发。
-
-验收标准：
-- 玩家选择对后续剧情路径有可感知、可追踪的差异。
-
-## P2（中优先级）- 体验与运营能力
-
-### P2-1 每周总结
-
-- 自动输出：
-  - 关系变化摘要
-  - 宿舍氛围变化
-  - 关键事件回顾
-- 可选：AI 生成一句周报旁白。
-
-### P2-2 调参与观测
-
-- 增加调试面板字段：
-  - 当日事件来源、触发条件命中、状态变化明细
-  - AI token / 耗时
-- 为后续平衡调整提供数据基础。
-
-### P2-3 内容迁移工具
-
-- 提供旧事件 -> 新骨架的半自动映射脚本。
-- 给编辑器增加骨架字段可视化编辑能力（后续）。
-
-## 4. 推荐实施顺序（可直接开工）
-
-1. 落地 `GameState` 与状态写入 service（P0-1）
-2. 落地“无 AI 的事件骨架调度器”（P0-2）
-3. 把 AI 调用切成“表现层短文本”（P0-3）
-4. 接入 NPC 主动行为与信息不对称（P1-1/P1-2）
-5. 做不可逆选择与阶段跃迁（P1-3）
-6. 做周总结与调试观测（P2-1/P2-2）
-7. 做迁移工具与编辑器增强（P2-3）
-
-## 5. 风险与对策
-
-- 风险：事件过硬导致“脚本味”重。
-  - 对策：骨架固定、文本表达保持弹性；保留多模板文风。
-- 风险：状态维度过多导致调参困难。
-  - 对策：首版只保留 `trust/tension/intimacy + dorm_mood`，后续再扩展。
-- 风险：旧内容迁移成本高。
-  - 对策：先兼容运行，再逐步替换高频事件。
-
-## 6. 与当前仓库的对接建议
-
-- 后端优先新增：
-  - `Server/src/core/state_service.py`
-  - `Server/src/core/event_skeleton_engine.py`
-  - `Server/src/core/text_renderer_service.py`
-- 路由层仅保留参数校验与返回结构，逻辑尽量下沉 service。
-- 文档与测试同步新增：
-  - 单元测试：触发条件、效果结算、不可逆选择
-  - 回归测试：日/周推进与周总结
-
-## 7. 完成定义（DoD）
-
-- 可完整跑完至少 2 周流程，系统状态稳定演进。
-- 关键事件选择后，结果先落状态再出文本。
-- AI 平均响应时长与失败率相较旧链路有明显改善。
-- 旧模组可通过适配层继续游玩，新模组支持骨架字段。
+- 已完成：`P0-3` 第二轮提速（按文档任务继续优化）
+  - expression-only 模式改为极简 system/user prompt（仅保留短表现所需上下文）
+  - 默认 `SYSTEM_EXPRESSION_MAX_TOKENS=420`，并收紧采样参数
+  - expression-only 下跳过 lore / milestone RAG，减少每轮拼接与检索成本
+  - 关键事件选项注入逻辑加强：即使选项满位也保留至少一个关键事件入口
+- 已完成：`P1` 基础能力预埋（主动事件/信息门槛/不可逆钩子）
+  - `EventSkeletonEngine` 增加 `info_gate`、`relation_target`、`memory_any_tags/all_tags`、`flags_all_false` 触发支持
+  - 事件权重增加 `meta.npc_proactive` / `kind(chat|request|conflict)` / `initiator` 加权逻辑
+  - `SystemStateManager.apply_external_effects` 支持 `stage_transition` 与 `irreversible` 标记落盘（flags + memory tags）
+- 已完成：`P1-1/P1-2` 首轮落地（可见玩法）
+  - 注入基线“NPC 主动事件”骨架：`chat/request/conflict`，并携带 `public_line + info_fragments`
+  - `EventSkeletonEngine` 会按 `info_gate` 过滤可见选项与可见线索，形成信息不对称
+  - expression-only 提示词已接入“系统事件线索摘要”（日常事件发起者/类型/公开线索 + 关键事件态度入口）
+  - 调试面板已显示关键事件 `kind/initiator`，便于验证主动触发来源
+- 已完成：`P1-3` 第一轮落地（不可逆选择 + 阶段跃迁可感知）
+  - 关键选项支持显式风险元数据：`is_irreversible` / `stage_transition`
+  - 关键选项文案会附加风险提示（如“不可逆 / 角色->阶段”）
+  - 关键事件结算返回 `is_irreversible / has_stage_transition`，前端调试面板可直接观察
+  - `rumor_public_break` 进入不可逆后，相关冲突事件会通过 `flags_all_false` 自动退场（避免反复触发同一破局）
+- 已完成：测试脚本可控性修正
+  - `run_relation_test.py --turns` 现可按输入生效（不再强制最少 6 回合）
+  - 报告新增 `render_source` 与“文本兜底回合”统计，可直接识别是否连续 `expression_fallback_*`
+- 已完成：`P2-2` 观测能力补强（第一步）
+  - `system_daily_plan` 增加 `debug` 字段（候选池大小、抽样目标、关键事件触发概率/随机值）
+  - 前端调试面板 `System Loop` 已展示上述关键观测字段
+- 已完成：`P2-2` 观测能力补强（第二步）
+  - 事件观测：回包新增 `source / trigger_debug`（当日事件来源、触发条件命中）
+  - 状态观测：回包新增 `state_delta`（day/week、宿舍氛围、关系多维变化与阶段变化）
+  - 模型观测：回包新增 `ai_usage`（model/prompt_tokens/completion_tokens/total_tokens）
+  - 调试面板已新增 `AI Usage / State Delta / trigger hit/source` 展示
+- 已完成：`P2-1` 每周总结（第一版）
+  - 周切换（如第7天结束进入第2周）会自动生成 `weekly_summary`（关系变化 / 宿舍氛围 / 关键事件回顾 / highlights）
+  - `weekly_summary` 会写入系统记忆点并通过接口返回，可被前端消费展示
+  - 主对话文本会在周切换时自动插入“第N周总结”摘要横幅，避免玩家无感过周
+- 已完成：`P2-3` 内容迁移工具（第一步）
+  - 新增脚本：`Server/scripts/migrate_events_to_skeleton.py`
+  - 已支持旧 CSV 事件半自动映射为骨架草稿（`type/triggers/options/meta`）
+  - 产出文件：
+    - `Server/data/events/event_skeletons.generated.json`（非破坏草稿）
+    - `Server/data/events/event_skeletons.migration_report.md`（迁移统计与人工复核提示）
+  - 已在默认事件库执行一次迁移（47 条）
+- 已完成：`P2-3` 内容迁移工具（第二步 / 前端第一版）
+  - 编辑器新增“骨架事件复核台”（`event_skeletons*.json` 可视化编辑）
+  - 支持按“待复核项”筛选、关键词搜索、`reviewed` 标记
+  - 可直接编辑 `type/priority/cooldown/once/triggers/options` 并保存回 JSON
+- 已完成：`P2-3` 第二步补强（后端校验接口）
+  - 新增 `POST /api/admin/event_skeletons/validate`
+  - 支持对当前骨架 JSON 做批量规则校验，返回 `summary + issues + checklist`
+  - 复核台已接入“一键运行校验”并展示错误/警告统计
+- 已完成：`P2-3` 第三步（第一版）
+  - 复核台新增“批量修复”按钮（基础自动修复：非法 type、缺失 triggers、key 选项不足）
+  - 新增 `POST /api/admin/event_skeletons/promote`，支持“草稿 -> 正式骨架”发布
+  - 发布前闸门已接入：有 error 阻止发布；有 warning 需要二次确认；发布时自动备份旧正式骨架
+- 已完成：`P2-3` 第三步补强（issues 可视化定位）
+  - 校验接口 issue 已返回 `event_id`
+  - 复核台新增“问题清单（前12条）”，支持一键定位到对应事件卡
+  - 批量修复规则补强：会规范 key 选项的 `id/attitude/effects.dorm_mood_delta`
+- 已完成：`P2-3` 收尾（issues 分页 + 自动修复策略配置化）
+  - 问题清单升级为全量分页浏览（不再只看前 12 条）
+  - 批量修复新增策略开关（type/数值/triggers/key选项规范与补齐/reviewed 重置）
+  - 支持按项目阶段逐步启用修复策略，降低误修风险
+- 已完成：`P2-3` 交互优化（复核台减负布局）
+  - 默认仅展示核心操作（校验 / 发布 / 待复核筛选）
+  - 自动修复策略与问题清单改为折叠区，降低顶部拥挤感
+  - 保留一键定位与分页能力，不牺牲问题处理效率
+  - 事件卡默认改为摘要模式（标题 + 核心标签），点击“展开编辑”才显示完整字段
+- 已完成：`P2` 收尾第一步（规则外置 + 预设模板）
+  - 新增规则文件：`Server/data/events/event_skeleton_rules.json`
+  - 校验接口支持读取外置规则，并可通过 `/api/admin/event_skeletons/rules` 读写
+  - 复核台新增自动修复预设（严格 / 平衡 / 宽松）
+- 已完成：`P3-1/P3-2` 第一版落地（调度层能力）
+  - `EventSkeletonEngine` 新增触发条件：`relation_stage_any / relation_stage_target / weekly_rhythm_any`
+  - 事件权重新增偏置：`meta.weekly_bias` 与 `meta.relation_stage_bias`
+  - `SystemStateManager` 周总结会产出并写回 `weekly_rhythm`（`calm/repair/active/progress/escalate`）
+  - 周节奏会写入 `state.meta.weekly_rhythm` 与 `flags.weekly_rhythm*`，供下周调度直接使用
+- 已完成：`P3-1/P3-2` 第二版落地（首批关系链骨架）
+  - 注入三条关键事件链（6 个关键节点）：
+    - 冲突链：`spark -> showdown`
+    - 修复链：`open -> deepen`
+    - 暧昧链：`hint -> date`
+  - 关键选项支持 `set_flags / clear_flags / memory_tags`，链路可通过触发条件串联
+  - 调度已可基于阶段与周节奏对链路事件进行加权与筛选
+- 已完成：`P3-3` 第一轮验收（脚本与观测）
+  - `run_relation_test.py` 新增关系链指标：
+    - 链路事件命中 / 节点覆盖 / 完成旗标 / 记忆标签
+    - 关键池非空/触发/强制触发统计
+    - day/week 推进观测
+  - 修正系统时间推进判定：转场且事件切换时会推进 day，避免长期停在 day1
+  - 本地 8 回合样本已命中修复链 2 个节点（`repair_open -> repair_deepen`）
+- 已完成：`P3-3` 第二轮（链路调优 + 回归策略优化）
+  - 关系链关键节点补充了更明确的 `relation_delta` 与阶段跃迁效果（冲突/修复/暧昧）
+  - 调整关键事件测试策略：不再固定选第一个关键选项，改为优先“支持/中立”，避免总是落入单一对抗分支
+  - 回归脚本新增 `--key-focus`（`balanced/conflict/repair/romance`）用于定向验证链路命中
+  - 增加链路推进加权：当前置旗标已满足时，后续节点会获得额外权重（减少“链路停在中间”）
+  - 报告阶段变化统计已补齐：会纳入 `system_key_resolution.effects.stage_transition`，不再漏记系统层阶段跃迁
+  - 下调通用关键事件 `key_daily_room_decision` 优先级，减少其对关系链入口的挤占
+  - 14 回合（`--key-focus romance`）样本已命中 `repair_open -> repair_deepen -> romance_hint -> romance_date`，并观测到阶段变化记录
+- 验收快照（local 模式，8 回合）：
+  - 平均回合耗时约 `7.8s`（此前 18 回合样本约 `11.8s`）
+  - system prompt 约 `176 chars`，user prompt 约 `120-162 chars`
+- 验收快照（local 模式，6 回合，2026-03-21）：
+  - 关键事件入口出现 `1` 回合，关键事件被选择 `1` 次，关键事件结算成功 `1` 次
+  - 回合耗时 P50/P95：`2.226s / 2.249s`（含本地记忆写入与流程开销）
+- 验收快照（http 模式，6 回合，2026-03-22）：
+  - 主链路可跑通：`/api/game/start` + `6` 回合 `turn`
+  - 关系类事件命中 `2/6`，关键事件入口出现 `1` 回合，关键事件被选择 `1` 次，关键事件结算成功 `1` 次
+  - 回合耗时 P50/P95：`8.506s / 9.356s`
+- 验收快照（local 模式，4 回合，2026-03-22）：
+  - 关键事件入口出现 `1` 回合，关键事件被选择 `1` 次，关键事件结算成功 `1` 次
+  - 回合耗时 P50/P95：`2.36s / 2.471s`
+- 结论：P0 的“速度与结构”方向有效，但仍需继续压缩模型端生成耗时
+- 当前状态：local + http 验证都已覆盖关键事件主链，`/api/game/monitor` 返回 `200`
+- 下一步：推进 `P3-3` 第三轮（提升“完整单链闭环”命中率，并补齐阶段跃迁样本稳定复现）

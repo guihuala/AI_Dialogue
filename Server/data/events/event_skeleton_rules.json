@@ -1,0 +1,11 @@
+{
+  "key_min_options": 3,
+  "warn_on_empty_title": true,
+  "warn_on_legacy_flags": true,
+  "warn_on_migration_notes": true,
+  "require_reviewed_for_pass": false,
+  "allowed_types": [
+    "daily",
+    "key"
+  ]
+}

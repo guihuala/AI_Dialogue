@@ -6,6 +6,7 @@ import { EditorHeader } from './editor/EditorHeader';
 import { EditorSidebar } from './editor/EditorSidebar';
 import { CharacterEditor } from './editor/CharacterEditor';
 import { EventEditor } from './editor/EventEditor';
+import { EventSkeletonEditor } from './editor/EventSkeletonEditor';
 import { CodeWorkspace } from './editor/CodeWorkspace';
 import { TimelineView } from './editor/TimelineView';
 import { TopicExplorer } from './editor/TopicExplorer';
@@ -13,10 +14,12 @@ import { EditorModals } from './editor/EditorModals';
 import { EditorGuide } from './editor/EditorGuide';
 import { CharacterDetailModal } from './editor/CharacterDetailModal';
 import { RelationshipMatrix } from './editor/RelationshipMatrix';
+import { AUTO_FIX_PRESETS, AutoFixPresetId } from '../config/eventSkeletonAutoFixPresets';
 
 import { Category } from './editor/types';
 
 export const PromptEditor = () => {
+    const [eventWorkbench, setEventWorkbench] = useState<'story' | 'skeleton'>('story');
     const [activeCategory, setActiveCategory] = useState<Category>('char');
     const [files, setFiles] = useState<{ md: string[], csv: string[] }>({ md: [], csv: [] });
     const [selectedFile, setSelectedFile] = useState<{ type: 'md' | 'csv', name: string } | null>(null);
@@ -30,6 +33,19 @@ export const PromptEditor = () => {
     const [libraryMods, setLibraryMods] = useState<any[]>([]);
     const [workshopMods, setWorkshopMods] = useState<any[]>([]);
     const [accountInfo, setAccountInfo] = useState<any>(null);
+    const [skeletonValidation, setSkeletonValidation] = useState<any>(null);
+    const [isValidatingSkeleton, setIsValidatingSkeleton] = useState(false);
+    const [isPromotingSkeleton, setIsPromotingSkeleton] = useState(false);
+    const [skeletonAutoFixConfig, setSkeletonAutoFixConfig] = useState({
+        fixInvalidType: true,
+        fixInvalidNumbers: true,
+        fixInvalidTriggers: true,
+        normalizeKeyOptions: true,
+        fillKeyOptions: true,
+        resetReviewed: true,
+    });
+    const [skeletonAutoFixPreset, setSkeletonAutoFixPreset] = useState<AutoFixPresetId>('balanced');
+    const [skeletonRules, setSkeletonRules] = useState<any>(null);
 
     const [message, setMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -105,12 +121,29 @@ export const PromptEditor = () => {
                 setEditMode('visual');
             }
         } else if (activeCategory === 'event') {
+            const skeletonDraft = files.csv.find(f => f.includes('event_skeletons.generated.json'))
+                || files.csv.find(f => f.includes('event_skeletons.json'));
             const timeline = files.csv.find(f => f.includes('timeline.json'));
-            console.log('[PromptEditor] Event category, found timeline:', timeline);
-            if (timeline) {
-                setSelectedFile({ type: 'csv', name: timeline });
-                setShowExplorer(false);
-                setEditMode('visual');
+            const firstStoryCsv = files.csv.find(
+                f => f.endsWith('.csv') && !f.includes('event_skeletons') && !f.includes('timeline.json')
+            );
+            console.log('[PromptEditor] Event category, workbench/files:', eventWorkbench, skeletonDraft, timeline, firstStoryCsv);
+            setShowExplorer(false);
+            setEditMode('visual');
+            if (eventWorkbench === 'skeleton') {
+                if (skeletonDraft) {
+                    setSelectedFile({ type: 'csv', name: skeletonDraft });
+                } else if (timeline) {
+                    setSelectedFile({ type: 'csv', name: timeline });
+                }
+            } else {
+                if (timeline) {
+                    setSelectedFile({ type: 'csv', name: timeline });
+                } else if (firstStoryCsv) {
+                    setSelectedFile({ type: 'csv', name: firstStoryCsv });
+                } else if (skeletonDraft) {
+                    setSelectedFile({ type: 'csv', name: skeletonDraft });
+                }
             }
         } else if (activeCategory === 'world' || activeCategory === 'skills') {
             setShowExplorer(false);
@@ -127,7 +160,7 @@ export const PromptEditor = () => {
         } else {
             setShowExplorer(true);
         }
-    }, [activeCategory, files]);
+    }, [activeCategory, files, eventWorkbench]);
 
     useEffect(() => {
         fetchFiles();
@@ -170,6 +203,24 @@ export const PromptEditor = () => {
         };
         loadContent();
     }, [selectedFile]);
+
+    useEffect(() => {
+        setSkeletonValidation(null);
+    }, [selectedFile?.name, activeCategory]);
+
+    useEffect(() => {
+        const loadRules = async () => {
+            if (activeCategory !== 'event') return;
+            if (!selectedFile?.name?.includes('event_skeletons')) return;
+            try {
+                const res = await gameApi.getEventSkeletonRules();
+                setSkeletonRules(res?.data?.rules || null);
+            } catch {
+                setSkeletonRules(null);
+            }
+        };
+        loadRules();
+    }, [activeCategory, selectedFile?.name]);
 
     const handleSave = async (contentToSave = fileContent) => {
         if (!selectedFile) return;
@@ -294,7 +345,7 @@ export const PromptEditor = () => {
         if (selectedFile?.type === 'csv' || selectedFile?.name.endsWith('.csv')) {
             const lines = fileContent.split('\n').filter(l => l.trim());
             if (lines.length === 0) return { headers: [], rows: [] };
-            // Normalize headers to avoid BOM/CRLF issues (e.g. "﻿评价者")
+            // Normalize headers to avoid BOM/CRLF issues (e.g. "评价者")
             const headers = lines[0]
                 .split(',')
                 .map((h, idx) => {
@@ -356,6 +407,179 @@ export const PromptEditor = () => {
 
         return { headers, rows: fullRows };
     }, [activeCategory, selectedFile, parsedCsv, parsedRoster]);
+
+    const eventSkeletonPayload = useMemo(() => {
+        if (activeCategory !== 'event') return null;
+        if (!selectedFile?.name?.includes('event_skeletons')) return null;
+        try {
+            const parsed = JSON.parse(fileContent || '{}');
+            if (!parsed || typeof parsed !== 'object') return null;
+            const events = Array.isArray(parsed.events) ? parsed.events : [];
+            return {
+                version: parsed.version,
+                generated_at: parsed.generated_at,
+                events
+            };
+        } catch {
+            return null;
+        }
+    }, [activeCategory, selectedFile, fileContent]);
+
+    const saveSkeletonPayload = (nextPayload: { version?: number; generated_at?: string; events: any[] }) => {
+        handleSave(JSON.stringify(nextPayload, null, 2));
+    };
+
+    const runSkeletonValidation = async () => {
+        if (!selectedFile?.name?.includes('event_skeletons')) return;
+        setIsValidatingSkeleton(true);
+        try {
+            const res = await gameApi.validateEventSkeletons({
+                name: selectedFile.name,
+                content: fileContent || '',
+                rules: skeletonRules || undefined,
+            });
+            setSkeletonValidation(res?.data || null);
+            setMessage('校验完成');
+        } catch (e: any) {
+            const detail = e?.response?.data?.detail || '校验失败';
+            setMessage(String(detail));
+        } finally {
+            setIsValidatingSkeleton(false);
+            setTimeout(() => setMessage(''), 2400);
+        }
+    };
+
+    const runSkeletonAutoFix = () => {
+        if (!eventSkeletonPayload) return;
+        const cfg = skeletonAutoFixConfig;
+        const safeEvents = Array.isArray(eventSkeletonPayload.events) ? eventSkeletonPayload.events : [];
+        const fixedEvents = safeEvents.map((evt: any) => {
+            const next = { ...evt };
+            const meta = { ...(next.meta || {}) };
+            const noteList = Array.isArray(meta.migration_notes) ? [...meta.migration_notes] : [];
+            const evtType = String(next.type || '').toLowerCase();
+            if (cfg.fixInvalidType && evtType !== 'daily' && evtType !== 'key') {
+                next.type = 'daily';
+                noteList.push('auto_fix: 无效 type 已回退为 daily');
+            }
+            if (cfg.fixInvalidNumbers) {
+                if (!Number.isFinite(Number(next.priority))) next.priority = 50;
+                if (!Number.isFinite(Number(next.cooldown_days))) next.cooldown_days = 1;
+                if (typeof next.once !== 'boolean') next.once = false;
+            }
+            if (cfg.fixInvalidTriggers && (!next.triggers || typeof next.triggers !== 'object' || Array.isArray(next.triggers))) {
+                next.triggers = { day_min: 1 };
+                noteList.push('auto_fix: triggers 非对象已重置');
+            }
+            if (String(next.type) === 'key' && (cfg.normalizeKeyOptions || cfg.fillKeyOptions)) {
+                const options = Array.isArray(next.options) ? [...next.options] : [];
+                const normalizeAttitude = (raw: string) => {
+                    const text = String(raw || '').trim();
+                    if (['支持', '中立', '回避', '对抗'].includes(text)) return text;
+                    if (text.includes('支')) return '支持';
+                    if (text.includes('避') || text.includes('拒')) return '回避';
+                    if (text.includes('抗') || text.includes('怼')) return '对抗';
+                    return '中立';
+                };
+                const normalizeMood = (attitude: string) => {
+                    const moodMap: Record<string, number> = { 支持: 2, 中立: 0, 回避: -2, 对抗: -3 };
+                    return moodMap[attitude] ?? 0;
+                };
+                const normalized = cfg.normalizeKeyOptions
+                    ? options.map((opt: any, idx: number) => {
+                    const attitude = normalizeAttitude(String(opt?.attitude || '中立'));
+                    return {
+                        ...opt,
+                        id: String(opt?.id || `${String(next.id || 'evt')}_opt_${idx + 1}`),
+                        attitude,
+                        effects: {
+                            ...(opt?.effects || {}),
+                            dorm_mood_delta: Number((opt?.effects || {}).dorm_mood_delta ?? normalizeMood(attitude))
+                        }
+                    };
+                })
+                    : options;
+                while (cfg.fillKeyOptions && normalized.length < 3) {
+                    const idx = normalized.length + 1;
+                    const attitudes = ['支持', '中立', '回避'];
+                    const moodMap: Record<string, number> = { 支持: 2, 中立: 0, 回避: -2 };
+                    const attitude = attitudes[Math.min(idx - 1, 2)];
+                    normalized.push({
+                        id: `${String(next.id || 'evt')}_auto_opt_${idx}`,
+                        attitude,
+                        effects: { dorm_mood_delta: moodMap[attitude] || 0 },
+                        text_hint: `自动补全选项 ${idx}`
+                    });
+                }
+                next.options = normalized;
+            }
+            if (cfg.resetReviewed) {
+                meta.reviewed = false;
+            }
+            meta.migration_notes = noteList;
+            next.meta = meta;
+            return next;
+        });
+
+        saveSkeletonPayload({
+            ...eventSkeletonPayload,
+            events: fixedEvents
+        });
+        setMessage('已执行批量修复（请再次运行校验）');
+        setTimeout(() => setMessage(''), 2400);
+    };
+
+    const runSkeletonPromote = async () => {
+        if (!selectedFile?.name?.includes('event_skeletons')) return;
+        setIsPromotingSkeleton(true);
+        try {
+            const latestValidationRes = await gameApi.validateEventSkeletons({
+                name: selectedFile.name,
+                content: fileContent || '',
+                rules: skeletonRules || undefined,
+            });
+            const validationData = latestValidationRes?.data || null;
+            setSkeletonValidation(validationData);
+            const errors = Number(validationData?.summary?.error_count || 0);
+            const warnings = Number(validationData?.summary?.warning_count || 0);
+            if (errors > 0) {
+                setMessage(`存在 ${errors} 个错误，已阻止发布`);
+                return;
+            }
+            let allowWarnings = true;
+            if (warnings > 0) {
+                allowWarnings = window.confirm(`当前还有 ${warnings} 个警告，是否继续发布正式骨架？`);
+                if (!allowWarnings) {
+                    setMessage('已取消发布');
+                    return;
+                }
+            }
+            const promoteRes = await gameApi.promoteEventSkeletons({
+                source_name: selectedFile.name,
+                target_name: 'event_skeletons.json',
+                content: fileContent || '',
+                allow_warnings: allowWarnings
+            });
+            const data = promoteRes?.data || {};
+            setMessage(data?.message || '发布成功');
+            fetchFiles();
+        } catch (e: any) {
+            const detail = e?.response?.data?.detail || '发布失败';
+            setMessage(String(detail));
+        } finally {
+            setIsPromotingSkeleton(false);
+            setTimeout(() => setMessage(''), 2800);
+        }
+    };
+
+    const applyAutoFixPreset = (presetId: AutoFixPresetId) => {
+        const preset = AUTO_FIX_PRESETS[presetId];
+        if (!preset) return;
+        setSkeletonAutoFixPreset(presetId);
+        setSkeletonAutoFixConfig({ ...preset.config });
+        setMessage(`已切换修复预设：${preset.label}`);
+        setTimeout(() => setMessage(''), 1800);
+    };
 
     const updateCsvRow = (rowIndex: number, field: string, value: string) => {
         if (!parsedCsv) return;
@@ -655,6 +879,38 @@ ${data.content}`;
                 />
 
                 <div className="flex-1 flex flex-col bg-[var(--color-cyan-light)]/10 p-6 md:p-8 overflow-hidden relative">
+                    {activeCategory === 'event' && (
+                        <div className="mb-4 rounded-2xl border border-[var(--color-cyan-main)]/15 bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div className="text-sm font-black text-[var(--color-cyan-dark)]">剧情编排工作台</div>
+                                <div className="text-[10px] font-bold text-slate-500 mt-1">
+                                    关系说明：先由骨架决定触发什么事件、结算什么结果，再由事件文本负责怎么演出来。
+                                </div>
+                            </div>
+                            <div className="inline-flex items-center rounded-xl border border-[var(--color-cyan-main)]/20 bg-[var(--color-cyan-light)]/30 p-1">
+                                <button
+                                    onClick={() => setEventWorkbench('story')}
+                                    className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition-all ${
+                                        eventWorkbench === 'story'
+                                            ? 'bg-[var(--color-cyan-main)] text-white'
+                                            : 'text-[var(--color-cyan-dark)] hover:bg-white'
+                                    }`}
+                                >
+                                    事件编辑（CSV）
+                                </button>
+                                <button
+                                    onClick={() => setEventWorkbench('skeleton')}
+                                    className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition-all ${
+                                        eventWorkbench === 'skeleton'
+                                            ? 'bg-[var(--color-cyan-main)] text-white'
+                                            : 'text-[var(--color-cyan-dark)] hover:bg-white'
+                                    }`}
+                                >
+                                    骨架编辑
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     {message && (
                         <div className="fixed top-24 right-10 z-[100] animate-fade-in-up">
                             <div className="bg-[var(--color-cyan-dark)]/90 backdrop-blur-xl text-white px-8 py-5 rounded-[2rem] border border-white/20 shadow-2xl shadow-cyan-900/40 flex items-center">
@@ -667,7 +923,11 @@ ${data.content}`;
                     {(!selectedFile && activeCategory !== 'world' && activeCategory !== 'skills') ? (
                         <div className="flex-1 flex flex-col items-center justify-center opacity-10">
                             <Sparkles size={80} className="text-slate-300 mb-6" />
-                            <p className="text-xl font-black text-[var(--color-cyan-main)] uppercase tracking-widest">请选择操作节点</p>
+                            <p className="text-xl font-black text-[var(--color-cyan-main)] uppercase tracking-widest">
+                                {activeCategory === 'event'
+                                    ? (eventWorkbench === 'skeleton' ? '未找到骨架文件' : '未找到事件文件')
+                                    : '请选择操作节点'}
+                            </p>
                         </div>
                     ) : (
                         <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-[var(--color-cyan-main)]/10 overflow-hidden relative group transition-all">
@@ -694,6 +954,23 @@ ${data.content}`;
                                     content={fileContent}
                                     onSave={(c) => handleSave(c)}
                                     onSelectPool={handleSelectPool}
+                                    canEdit={canEditCurrentMod}
+                                />
+                            ) : activeCategory === 'event' && selectedFile?.name?.includes('event_skeletons') && editMode === 'visual' ? (
+                                <EventSkeletonEditor
+                                    payload={eventSkeletonPayload as any}
+                                    onSavePayload={saveSkeletonPayload}
+                                    onValidate={runSkeletonValidation}
+                                    onAutoFix={runSkeletonAutoFix}
+                                    autoFixPreset={skeletonAutoFixPreset}
+                                    autoFixPresets={AUTO_FIX_PRESETS}
+                                    onApplyAutoFixPreset={applyAutoFixPreset}
+                                    autoFixConfig={skeletonAutoFixConfig}
+                                    onAutoFixConfigChange={(next) => setSkeletonAutoFixConfig((prev) => ({ ...prev, ...next }))}
+                                    onPromote={runSkeletonPromote}
+                                    validating={isValidatingSkeleton}
+                                    promoting={isPromotingSkeleton}
+                                    validationResult={skeletonValidation}
                                     canEdit={canEditCurrentMod}
                                 />
                             ) : activeCategory === 'event' && selectedFile?.type === 'csv' && editMode === 'visual' ? (

@@ -54,7 +54,43 @@ class SystemStateManagerTests(unittest.TestCase):
         self.assertIsInstance(state["time"], dict)
         self.assertLessEqual(state["dorm_mood"], 100)
 
+    def test_weekly_summary_emits_on_week_boundary(self):
+        self.mgr.load(
+            {
+                "time": {"day": 7, "week": 1, "chapter": 1, "event_turn": 0},
+                "relations": {
+                    "林飒": {"trust": 50, "tension": 50, "intimacy": 30, "stage": "普通"},
+                },
+                "dorm_mood": 50,
+            }
+        )
+        self.mgr.bootstrap(
+            active_chars=["林飒"],
+            affinity={"林飒": 50},
+            chapter=1,
+            event_turn=0,
+        )
+        self.mgr.update_after_turn(
+            active_chars=["林飒"],
+            affinity={"林飒": 58},
+            chapter=1,
+            event_turn=1,
+            effects_data={
+                "san_delta": 0,
+                "arg_delta": 0,
+                "affinity_changes": {"林飒": 6},
+            },
+            event_id="evt_demo_week_end",
+            event_name="周末事件",
+            is_end=True,
+        )
+        weekly = self.mgr.consume_weekly_summary()
+        self.assertIsInstance(weekly, dict)
+        self.assertEqual(int(weekly.get("week", 0)), 1)
+        self.assertTrue(str(weekly.get("title", "")).startswith("第1周"))
+        self.assertIn("relation_changes", weekly)
+        self.assertIn("dorm_mood", weekly)
+
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -33,6 +33,7 @@ class EventDirector:
         self.last_affinity_snapshot = {}
         self.affinity_shock_threshold = 8.0
         self.affinity_feedback_trigger_prob = 0.68
+        self.materialized_origin_map = {}
         
     def reset(self):
         self.used_events = []
@@ -48,6 +49,7 @@ class EventDirector:
         self.affinity_feedback_tags = []
         self.affinity_feedback_target = None
         self.last_affinity_snapshot = {}
+        self.materialized_origin_map = {}
         
     def reload_timeline(self):
         """支持热更新读取"""
@@ -418,7 +420,10 @@ class EventDirector:
         base_id = str(getattr(event, "id", "") or "")
         safe_target = re.sub(r"[^0-9a-zA-Z_\u4e00-\u9fff]+", "_", str(target))
         materialized.id = f"{base_id}__tgt_{safe_target}"
-        materialized.source_template_id = base_id
+        # ScriptedEvent 是严格模型，不能随意写入未定义字段；模板来源单独由 director 维护。
+        if not hasattr(self, "materialized_origin_map") or not isinstance(self.materialized_origin_map, dict):
+            self.materialized_origin_map = {}
+        self.materialized_origin_map[materialized.id] = base_id
         materialized.name = self._replace_target_tokens(getattr(event, "name", ""), target)
         materialized.description = self._replace_target_tokens(getattr(event, "description", ""), target)
         materialized.opening_goal = self._replace_target_tokens(getattr(event, "opening_goal", ""), target)
@@ -651,7 +656,7 @@ class EventDirector:
 
         if not getattr(chosen, "allow_repeat", False):
             self.used_events.append(chosen.id)
-            template_base_id = str(getattr(chosen, "source_template_id", "") or "")
+            template_base_id = str(self.materialized_origin_map.get(str(getattr(chosen, "id", "") or ""), "") or "")
             if template_base_id:
                 self.used_events.append(template_base_id)
         self.recent_events.append(chosen.id)

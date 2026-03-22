@@ -44,7 +44,8 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         turnDebug,
         systemState,
         systemDailyPlan,
-        systemKeyResolution
+        systemKeyResolution,
+        weeklySummary
     } = useGameStore();
 
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -496,6 +497,46 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                                         </div>
                                     </div>
                                 )}
+                                {turnDebug?.render_source && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">Render Source</div>
+                                        <div className="text-[10px] text-slate-600">{turnDebug.render_source}</div>
+                                    </div>
+                                )}
+                                {turnDebug?.ai_usage && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">AI Usage</div>
+                                        <div className="text-[10px] text-slate-600">
+                                            model {turnDebug.ai_usage?.model || '-'}
+                                        </div>
+                                        <div className="text-[10px] text-slate-600">
+                                            tokens p/c/t {turnDebug.ai_usage?.prompt_tokens ?? '-'} / {turnDebug.ai_usage?.completion_tokens ?? '-'} / {turnDebug.ai_usage?.total_tokens ?? '-'}
+                                        </div>
+                                    </div>
+                                )}
+                                {turnDebug?.state_delta && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">State Delta</div>
+                                        <div className="text-[10px] text-slate-600">
+                                            day {turnDebug.state_delta?.time?.day_from ?? '-'} → {turnDebug.state_delta?.time?.day_to ?? '-'}
+                                            {" / "}
+                                            week {turnDebug.state_delta?.time?.week_from ?? '-'} → {turnDebug.state_delta?.time?.week_to ?? '-'}
+                                        </div>
+                                        <div className="text-[10px] text-slate-600">
+                                            dorm mood Δ {turnDebug.state_delta?.dorm_mood_delta ?? 0}
+                                        </div>
+                                        {Array.isArray(turnDebug.state_delta?.relation_deltas) && turnDebug.state_delta.relation_deltas.length > 0 && (
+                                            <div className="mt-1 text-[10px] text-slate-500 space-y-0.5">
+                                                {turnDebug.state_delta.relation_deltas.slice(0, 3).map((item: any, idx: number) => (
+                                                    <div key={idx}>
+                                                        {item?.name}: t{item?.trust_delta ?? 0} / z{item?.tension_delta ?? 0}
+                                                        {item?.stage_from !== item?.stage_to ? ` (${item?.stage_from}→${item?.stage_to})` : ''}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                                 {(systemState?.time || systemDailyPlan || systemKeyResolution) && (
                                     <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2 space-y-1.5">
                                         <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">System Loop</div>
@@ -511,11 +552,53 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                                                 key {systemDailyPlan?.key_event ? 'pending' : (systemDailyPlan?.key_event_resolved ? 'resolved' : 'none')}
                                             </div>
                                         )}
+                                        {systemDailyPlan?.key_event?.source && (
+                                            <div className="text-[10px] text-slate-500">
+                                                source {systemDailyPlan.key_event.source}
+                                            </div>
+                                        )}
+                                        {systemDailyPlan?.key_event?.trigger_debug && (
+                                            <div className="text-[10px] text-slate-500">
+                                                trigger {systemDailyPlan.key_event.trigger_debug?.hit ? 'hit' : 'miss'}
+                                            </div>
+                                        )}
+                                        {systemDailyPlan?.key_event?.meta && (
+                                            <div className="text-[10px] text-slate-500">
+                                                {systemDailyPlan?.key_event?.meta?.kind ? `kind ${systemDailyPlan.key_event.meta.kind}` : 'kind -'}
+                                                {" / "}
+                                                {systemDailyPlan?.key_event?.meta?.initiator ? `from ${systemDailyPlan.key_event.meta.initiator}` : 'from -'}
+                                            </div>
+                                        )}
+                                        {systemDailyPlan?.debug && (
+                                            <div className="text-[10px] text-slate-500">
+                                                pool d{systemDailyPlan.debug?.daily_pool_size ?? 0} / k{systemDailyPlan.debug?.key_pool_size ?? 0}
+                                                {" · "}
+                                                roll {systemDailyPlan.debug?.key_roll ?? "-"}
+                                                {" · "}
+                                                p {systemDailyPlan.debug?.key_trigger_probability ?? 0}
+                                            </div>
+                                        )}
                                         {systemKeyResolution?.ok && (
                                             <div className="text-[10px] text-emerald-700">
                                                 key settled: {systemKeyResolution?.event_id} / {systemKeyResolution?.choice_id}
                                             </div>
                                         )}
+                                        {systemKeyResolution?.ok && (systemKeyResolution?.is_irreversible || systemKeyResolution?.has_stage_transition) && (
+                                            <div className="text-[10px] text-amber-700">
+                                                {systemKeyResolution?.is_irreversible ? 'irreversible ' : ''}
+                                                {systemKeyResolution?.has_stage_transition ? 'stage-shift' : ''}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {weeklySummary && (
+                                    <div className="rounded-xl border border-amber-200/80 bg-amber-50 p-2 space-y-1">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-amber-700">{weeklySummary?.title || 'Weekly Summary'}</div>
+                                        {Array.isArray(weeklySummary?.highlights) && weeklySummary.highlights.slice(0, 3).map((item: any, idx: number) => (
+                                            <div key={idx} className="text-[10px] text-amber-800">
+                                                - {String(item || '')}
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
                             </div>

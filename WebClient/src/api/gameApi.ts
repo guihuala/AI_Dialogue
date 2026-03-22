@@ -349,6 +349,26 @@ export const gameApi = {
     const res = await apiClient.post(`/admin/generate_skill_prompt`, { concept });
     return res.data;
   },
+
+  validateEventSkeletons: async (payload: { name?: string; content?: string; rules?: Record<string, any> }) => {
+    const res = await apiClient.post(`/admin/event_skeletons/validate`, payload || {});
+    return res.data;
+  },
+
+  promoteEventSkeletons: async (payload: { source_name?: string; target_name?: string; content?: string; allow_warnings?: boolean }) => {
+    const res = await apiClient.post(`/admin/event_skeletons/promote`, payload || {});
+    return res.data;
+  },
+
+  getEventSkeletonRules: async (name: string = 'event_skeleton_rules.json') => {
+    const res = await apiClient.get(`/admin/event_skeletons/rules`, { params: { name } });
+    return res.data;
+  },
+
+  saveEventSkeletonRules: async (payload: { name?: string; rules: Record<string, any> }) => {
+    const res = await apiClient.post(`/admin/event_skeletons/rules`, payload || {});
+    return res.data;
+  },
   
   // Memory Management
   getMemories: async (saveId: string, charName?: string, type?: string) => {

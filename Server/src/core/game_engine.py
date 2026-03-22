@@ -70,6 +70,14 @@ class GameEngine:
         self.debug_turn_payload = str(os.getenv("DEBUG_TURN_PAYLOAD", "")).strip().lower() in {"1", "true", "yes", "on"}
         self.profile_turns = str(os.getenv("PROFILE_TURNS", "")).strip().lower() in {"1", "true", "yes", "on"}
         self.expression_only_mode = str(os.getenv("SYSTEM_EXPRESSION_ONLY", "1")).strip().lower() not in {"0", "false", "no", "off"}
+        self.expression_max_tokens = max(
+            280,
+            min(900, int(str(os.getenv("SYSTEM_EXPRESSION_MAX_TOKENS", "420")).strip() or 420)),
+        )
+        self.max_game_turns = max(
+            8,
+            min(60, int(str(os.getenv("SYSTEM_MAX_GAME_TURNS", "20")).strip() or 20)),
+        )
 
     def reset(self):
         self.director.reset()
@@ -106,6 +114,25 @@ class GameEngine:
         if not text:
             return False
         return bool(re.search(r"\[\[?\s*TARGET\s*\]?\]|\{\{\s*TARGET\s*\}\}|【\s*TARGET\s*】|<\s*TARGET\s*>", str(text), flags=re.IGNORECASE))
+
+    def _apply_global_turn_cap(self, payload: dict) -> dict:
+        if not isinstance(payload, dict):
+            return payload
+        try:
+            turn_now = int(payload.get("turn", 0) or 0)
+        except Exception:
+            turn_now = 0
+        if turn_now < int(self.max_game_turns):
+            return payload
+
+        payload["is_game_over"] = True
+        payload["is_end"] = True
+        payload["next_options"] = []
+        cap_tip = f"（本局已达到 {int(self.max_game_turns)} 回合上限，先到这里。可返回主菜单开启新一局。）"
+        display_text = str(payload.get("display_text", "") or "")
+        if cap_tip not in display_text:
+            payload["display_text"] = (display_text + "\n\n" + cap_tip).strip() if display_text else cap_tip
+        return payload
 
     def _replace_target_in_obj(self, obj, target_name):
         if isinstance(obj, str):
@@ -615,16 +642,239 @@ class GameEngine:
             "2. 只允许这些字段：scene_line, current_scene, dialogue_lines, options_copy, is_end, effects。\n"
             "3. scene_line 必须是一句场景叙述；dialogue_lines 必须是 3-6 条字符串。\n"
             "4. options_copy 必须是 3-4 个具体动作选项，不要输出“继续剧情”。\n"
-            "5. effects 必须是字符串数组命令，可为空数组；禁止输出 stat_changes/tool_calls。\n"
+            "5. effects 必须是字符串数组命令，可为空数组；允许命令：san/money/arg/affinity/wechat；禁止输出 stat_changes/tool_calls。\n"
             "6. 不要输出 mood 字段，不要输出多余嵌套结构。\n"
         )
+
+    def _build_expression_system_prompt(self, player_name: str) -> str:
+        return (
+            "你是校园宿舍生活的叙事导演，仅负责文本表现，不负责规则结算。\n"
+            f"玩家主角名：{player_name}\n"
+            "输出目标：短、清晰、可推进。\n"
+            "必须：\n"
+            "- 场景一句话（scene_line）\n"
+            "- 3-6句对话（dialogue_lines）\n"
+            "- 3-4个可执行选项文案（options_copy）\n"
+            "- 可选：若本轮存在明显互动后果，可在 effects 添加 0-1 条 wechat:群聊名|发送者|消息内容\n"
+            "- 不输出 mood 字段，不输出解释文本。\n"
+            "风格：自然口语、具体动作，不要模板腔。"
+        )
+
+    def _build_wechat_fallback_notifications(self, *, selected_chars, system_key_resolution):
+        if not isinstance(system_key_resolution, dict) or not bool(system_key_resolution.get("ok", False)):
+            return []
+        effects = system_key_resolution.get("effects", {}) if isinstance(system_key_resolution.get("effects", {}), dict) else {}
+        stage_transition = effects.get("stage_transition", {}) if isinstance(effects.get("stage_transition", {}), dict) else {}
+        sender = ""
+        if "char" in stage_transition and "to" in stage_transition:
+            sender = str(stage_transition.get("char", "") or "").strip()
+        elif isinstance(stage_transition, dict):
+            for k in stage_transition.keys():
+                sender = str(k or "").strip()
+                if sender:
+                    break
+        if not sender:
+            sender = str((selected_chars or ["室友"])[0] or "室友").strip() or "室友"
+
+        attitude = str(system_key_resolution.get("attitude", "") or "").strip()
+        if attitude == "支持":
+            msg = "刚才谢谢你站我这边，晚点一起复盘下。"
+        elif attitude == "中立":
+            msg = "你刚才处理得很稳，后面我们再细聊。"
+        elif attitude == "回避":
+            msg = "你刚才没接话，我有点在意，等会聊聊？"
+        elif attitude == "对抗":
+            msg = "刚才火药味有点重，等会冷静后再谈。"
+        else:
+            msg = "刚才那件事我记下了，回头我们单聊。"
+
+        return [
+            {
+                "chat_name": sender,
+                "sender": sender,
+                "message": msg,
+            }
+        ]
+
+    def _build_expression_user_prompt(
+        self,
+        *,
+        next_evt,
+        action_text: str,
+        system_key_resolution,
+        system_daily_plan,
+        selected_chars,
+        system_state,
+    ) -> str:
+        resolved_hint = "无"
+        if isinstance(system_key_resolution, dict) and system_key_resolution.get("ok"):
+            resolved_hint = (
+                f"event={system_key_resolution.get('event_id','')}, "
+                f"choice={system_key_resolution.get('choice_id','')}, "
+                f"attitude={system_key_resolution.get('attitude','')}"
+            )
+        day = int(((system_state or {}).get("time", {}) or {}).get("day", 1) or 1)
+        week = int(((system_state or {}).get("time", {}) or {}).get("week", 1) or 1)
+        mood = float((system_state or {}).get("dorm_mood", 50) or 50)
+        plan_hint = self._build_system_plan_hint(system_daily_plan)
+        return (
+            f"【事件】{getattr(next_evt, 'name', '')}\n"
+            f"【场景】{getattr(next_evt, 'description', '')}\n"
+            f"【当前时间】第{week}周-第{day}天\n"
+            f"【宿舍氛围】{mood:.1f}\n"
+            f"【在场角色】{'、'.join(selected_chars or [])}\n"
+            f"【玩家动作】{action_text}\n"
+            f"【系统结算（已生效）】{resolved_hint}\n"
+            f"【系统事件线索】{plan_hint}\n"
+            "【写作要求】直接给短表现，不要复述设定。"
+        )
+
+    def _build_system_plan_hint(self, daily_plan) -> str:
+        if not isinstance(daily_plan, dict):
+            return "无"
+        lines = []
+        daily = daily_plan.get("daily_events", [])
+        if isinstance(daily, list) and daily:
+            for item in daily[:2]:
+                if not isinstance(item, dict):
+                    continue
+                title = str(item.get("title", "")).strip()
+                meta = item.get("meta", {}) if isinstance(item.get("meta"), dict) else {}
+                initiator = str(meta.get("initiator", "")).strip()
+                kind = str(meta.get("kind", "")).strip()
+                public_line = str(meta.get("public_line", "")).strip()
+                fragment = ""
+                frags = meta.get("info_fragments", [])
+                if isinstance(frags, list) and frags:
+                    fragment = str(frags[0] or "").strip()
+                seg = f"日常:{title}"
+                if kind:
+                    seg += f"({kind})"
+                if initiator:
+                    seg += f"[发起:{initiator}]"
+                if public_line:
+                    seg += f" {public_line}"
+                if fragment:
+                    seg += f" 线索:{fragment}"
+                lines.append(seg.strip())
+        key_evt = daily_plan.get("key_event")
+        if isinstance(key_evt, dict):
+            key_title = str(key_evt.get("title", "")).strip() or "关键事件"
+            opts = key_evt.get("options", [])
+            opt_text = []
+            if isinstance(opts, list):
+                for x in opts[:3]:
+                    if isinstance(x, dict):
+                        att = str(x.get("attitude", "")).strip()
+                        if att:
+                            opt_text.append(att)
+            lines.append(f"关键:{key_title} 可选[{ '/'.join(opt_text) if opt_text else '待决策'}]")
+        if daily_plan.get("key_event_resolved"):
+            lines.append("关键事件已结算")
+        if not lines:
+            return "无明显系统事件"
+        return "；".join(lines[:3])
+
+    def _format_weekly_summary_banner(self, weekly_summary) -> str:
+        if not isinstance(weekly_summary, dict):
+            return ""
+        title = str(weekly_summary.get("title", "") or "").strip() or "本周总结"
+        mood = weekly_summary.get("dorm_mood", {}) if isinstance(weekly_summary.get("dorm_mood"), dict) else {}
+        trend = str(mood.get("trend", "平稳") or "平稳")
+        delta = float(mood.get("delta", 0) or 0)
+        sign = "+" if delta >= 0 else ""
+        highlights = weekly_summary.get("highlights", [])
+        if not isinstance(highlights, list):
+            highlights = []
+        lines = [f"【{title}】", f"- 宿舍氛围：{trend}（{sign}{round(delta, 1)}）"]
+        for item in highlights[:3]:
+            text = str(item or "").strip()
+            if text:
+                lines.append(f"- {text}")
+        return "\n".join(lines)
+
+    def _get_llm_usage_snapshot(self):
+        usage = getattr(self.llm, "last_usage", {}) if hasattr(self, "llm") else {}
+        if not isinstance(usage, dict):
+            usage = {}
+        model = str(usage.get("model", "") or getattr(self.llm, "model", "") or "").strip()
+        prompt_tokens = usage.get("prompt_tokens")
+        completion_tokens = usage.get("completion_tokens")
+        total_tokens = usage.get("total_tokens")
+        def _to_int(v):
+            try:
+                return int(v)
+            except Exception:
+                return None
+        return {
+            "model": model,
+            "prompt_tokens": _to_int(prompt_tokens),
+            "completion_tokens": _to_int(completion_tokens),
+            "total_tokens": _to_int(total_tokens),
+        }
+
+    def _build_system_state_delta(self, before_state, after_state):
+        if not isinstance(before_state, dict) or not isinstance(after_state, dict):
+            return {}
+        before_time = before_state.get("time", {}) if isinstance(before_state.get("time"), dict) else {}
+        after_time = after_state.get("time", {}) if isinstance(after_state.get("time"), dict) else {}
+        before_rel = before_state.get("relations", {}) if isinstance(before_state.get("relations"), dict) else {}
+        after_rel = after_state.get("relations", {}) if isinstance(after_state.get("relations"), dict) else {}
+        rel_delta = []
+        for name, now in after_rel.items():
+            if not isinstance(now, dict):
+                continue
+            old = before_rel.get(name, {}) if isinstance(before_rel.get(name), dict) else {}
+            trust_delta = round(float(now.get("trust", 50) or 50) - float(old.get("trust", now.get("trust", 50)) or now.get("trust", 50) or 50), 2)
+            tension_delta = round(float(now.get("tension", 50) or 50) - float(old.get("tension", now.get("tension", 50)) or now.get("tension", 50) or 50), 2)
+            intimacy_delta = round(float(now.get("intimacy", 30) or 30) - float(old.get("intimacy", now.get("intimacy", 30)) or now.get("intimacy", 30) or 30), 2)
+            old_stage = str(old.get("stage", now.get("stage", "普通")) or now.get("stage", "普通"))
+            new_stage = str(now.get("stage", "普通") or "普通")
+            if any(abs(v) >= 0.01 for v in [trust_delta, tension_delta, intimacy_delta]) or old_stage != new_stage:
+                rel_delta.append({
+                    "name": str(name),
+                    "trust_delta": trust_delta,
+                    "tension_delta": tension_delta,
+                    "intimacy_delta": intimacy_delta,
+                    "stage_from": old_stage,
+                    "stage_to": new_stage,
+                })
+        rel_delta.sort(key=lambda x: abs(float(x.get("trust_delta", 0))) + abs(float(x.get("tension_delta", 0))), reverse=True)
+        return {
+            "time": {
+                "day_from": int(before_time.get("day", 1) or 1),
+                "day_to": int(after_time.get("day", 1) or 1),
+                "week_from": int(before_time.get("week", 1) or 1),
+                "week_to": int(after_time.get("week", 1) or 1),
+            },
+            "dorm_mood_delta": round(float(after_state.get("dorm_mood", 50) or 50) - float(before_state.get("dorm_mood", 50) or 50), 2),
+            "relation_deltas": rel_delta[:6],
+        }
 
     def _normalize_expression_payload(self, parsed, next_evt=None, player_name: str = ""):
         if not isinstance(parsed, dict):
             parsed = {}
+        def _clean_speaker(raw_speaker: str) -> str:
+            spk = str(raw_speaker or "").strip()
+            if not spk:
+                return player_name or "旁白"
+            spk = re.sub(
+                r"(压低声音说|小声嘀咕|清了清嗓子|回头应了声|转向你|看向你|轻声说|低声说|问道|说道|喊道|应了声)$",
+                "",
+                spk,
+            ).strip(" ，。:：'\"“”‘’")
+            if not spk:
+                return player_name or "旁白"
+            if len(spk) > 10:
+                return player_name or "旁白"
+            if spk in {"她", "他", "室友", "对方"}:
+                return player_name or "旁白"
+            return spk
+
         scene_line = str(parsed.get("scene_line", "") or parsed.get("narrator_transition", "") or "").strip()
         current_scene = str(parsed.get("current_scene", "") or parsed.get("scene", "") or "宿舍").strip() or "宿舍"
         dialogue_lines = parsed.get("dialogue_lines", [])
+        legacy_dialogue = parsed.get("dialogue_sequence", [])
         if isinstance(dialogue_lines, str):
             dialogue_lines = [line.strip() for line in re.split(r"[\n；;]+", dialogue_lines) if line.strip()]
         if not isinstance(dialogue_lines, list):
@@ -636,15 +886,34 @@ class GameEngine:
                 continue
             m = re.match(r"^\[?([^\]:：]{1,12})\]?[：:]\s*(.+)$", text)
             if m:
-                spk = str(m.group(1) or "").strip() or "旁白"
+                spk = _clean_speaker(str(m.group(1) or "").strip())
                 cont = str(m.group(2) or "").strip()
             else:
                 spk = player_name or "旁白"
                 cont = text
             if cont:
                 dialogue_sequence.append({"speaker": spk, "content": cont})
+
+        # 兼容旧 schema：若模型仍返回 dialogue_sequence，直接复用其有效内容。
         if not dialogue_sequence:
-            dialogue_sequence = [{"speaker": player_name or "系统提示", "content": "（场面短暂沉默，等待你下一步动作。）"}]
+            if isinstance(legacy_dialogue, dict):
+                legacy_dialogue = [legacy_dialogue]
+            if isinstance(legacy_dialogue, list):
+                for item in legacy_dialogue:
+                    if not isinstance(item, dict):
+                        continue
+                    spk = _clean_speaker(str(item.get("speaker", "") or "").strip())
+                    cont = str(item.get("content", "") or "").strip()
+                    if cont:
+                        dialogue_sequence.append({"speaker": spk, "content": cont})
+
+        if not dialogue_sequence:
+            default_name = player_name or "我"
+            dialogue_sequence = [
+                {"speaker": default_name, "content": "我先稳住情绪，观察每个人的反应。"},
+                {"speaker": "室友", "content": "你先说说看，你准备怎么处理眼前这件事？"},
+                {"speaker": default_name, "content": "我们先把信息说清楚，再决定下一步。"},
+            ]
 
         options = parsed.get("options_copy", parsed.get("next_options", []))
         normalized = {
@@ -660,6 +929,62 @@ class GameEngine:
             "tool_calls": [],
         }
         return normalized
+
+    def _build_expression_fallback_payload(
+        self,
+        *,
+        next_evt,
+        player_name: str,
+        selected_chars,
+        action_text: str,
+        system_daily_plan,
+    ):
+        evt_name = str(getattr(next_evt, "name", "") or "当下事件").strip()
+        evt_desc = str(getattr(next_evt, "description", "") or "宿舍里气氛有些紧绷。").strip()
+        scene_line = evt_desc[:48] + ("…" if len(evt_desc) > 48 else "")
+        if not scene_line:
+            scene_line = "宿舍里气氛有些紧绷，大家都在等你表态。"
+
+        lead_npc = str((selected_chars or ["室友"])[0]).strip() or "室友"
+        plan_hint = self._build_system_plan_hint(system_daily_plan)
+        action_hint = str(action_text or "先听听大家想法").strip()
+        if len(action_hint) > 22:
+            action_hint = action_hint[:22] + "…"
+
+        dialogue_sequence = [
+            {"speaker": player_name or "我", "content": f"围绕「{evt_name}」，我先把注意力放回眼前。"},
+            {"speaker": lead_npc, "content": f"你刚才提到“{action_hint}”，那你是想现在就推进吗？"},
+            {"speaker": player_name or "我", "content": f"先按眼下线索走一步：{plan_hint or '把分歧摊开说清楚'}。"},
+        ]
+
+        raw_evt_options = getattr(next_evt, "options", {}) if next_evt is not None else {}
+        options_seed = []
+        if isinstance(raw_evt_options, dict):
+            options_seed = [str(v).strip() for v in raw_evt_options.values() if str(v).strip()]
+        if not options_seed:
+            options_seed = ["先澄清事实再表态", "先安抚情绪再谈方案", "先把任务拆成可执行步骤"]
+        options = self._normalize_options(options_seed, next_evt)
+        options = self._inject_system_key_options(options, system_daily_plan)
+        options = options[:4]
+        if len(options) < 3:
+            for opt in ["请求对方给出具体证据", "提出折中方案先试行", "暂缓争论，先完成眼前任务"]:
+                if opt not in options:
+                    options.append(opt)
+                if len(options) >= 3:
+                    break
+
+        return {
+            "narrator_transition": scene_line,
+            "current_scene": str(getattr(next_evt, "description", "") or "宿舍").strip() or "宿舍",
+            "dialogue_sequence": dialogue_sequence,
+            "npc_background_actions": [],
+            "wechat_notifications": [],
+            "next_options": options,
+            "stat_changes": {},
+            "effects": [],
+            "is_end": False,
+            "tool_calls": [],
+        }
 
     def _is_payload_usable(self, parsed, next_evt=None):
         if not isinstance(parsed, dict):
@@ -804,7 +1129,19 @@ class GameEngine:
             attitude = str(item.get("attitude", "")).strip() or "中立"
             if not cid:
                 continue
-            result.append(f"【关键事件:{evt_id}:{cid}】{evt_title} - {attitude}")
+            risk_tags = []
+            if bool(item.get("is_irreversible", False)):
+                risk_tags.append("不可逆")
+            st = item.get("stage_transition", {})
+            if isinstance(st, dict) and st:
+                target = str(st.get("char", "")).strip()
+                to_stage = str(st.get("to", "")).strip()
+                if target and to_stage:
+                    risk_tags.append(f"{target}->{to_stage}")
+                else:
+                    risk_tags.append("阶段变化")
+            suffix = f"（{' / '.join(risk_tags)}）" if risk_tags else ""
+            result.append(f"【关键事件:{evt_id}:{cid}】{evt_title} - {attitude}{suffix}")
         return result
 
     def _inject_system_key_options(self, options, daily_plan):
@@ -824,7 +1161,14 @@ class GameEngine:
                 continue
             seen.add(key)
             merged.append(text)
-        return merged[:4]
+        merged = merged[:4]
+        # 若普通选项已占满，至少保留一个关键事件入口（替换末位）。
+        if key_options:
+            key_set = {re.sub(r"\s+", " ", str(x or "").strip()) for x in key_options if str(x or "").strip()}
+            has_key = any(re.sub(r"\s+", " ", str(x or "").strip()) in key_set for x in merged)
+            if (not has_key) and merged:
+                merged[-1] = key_options[0]
+        return merged
 
     def _parse_system_key_choice(self, action_text):
         raw = str(action_text or "").strip()
@@ -1030,9 +1374,12 @@ class GameEngine:
             self.tm.set_player_name(player_name)
         effective_dialogue_mode = self.dialogue_mode
         use_branch_tree = effective_dialogue_mode in ["tree_only", "hybrid"]
+        expression_only_mode_active = bool(self.expression_only_mode and effective_dialogue_mode != "tree_only")
         if effective_dialogue_mode in ["tree_only", "hybrid"]:
             # 分支树模式依旧由单一 DM 兜底实时生成，只是额外启用剧本预生成/缓存能力。
             effective_dialogue_mode = "single_dm"
+        # 兜底：即便前端没正确传 is_transition，只要动作文本明确是转场也强制转场。
+        is_transition = bool(is_transition or self._is_transition_choice(str(action_text or "")))
         
         # --- 动态映射逻辑 ---
         roster_name_map = self.pm.get_roster_name_map() if hasattr(self.pm, "get_roster_name_map") else {}
@@ -1065,6 +1412,7 @@ class GameEngine:
         player_stats = {"money": money, "san": san, "hygiene": hygiene, "gpa": gpa, "reputation": reputation}
         settlement_msg = ""
         system_key_resolution = None
+        weekly_summary = None
         system_daily_plan = self._build_system_daily_plan(selected_chars)
         parsed_key_choice = self._parse_system_key_choice(action_text)
         if parsed_key_choice and not is_prefetch and hasattr(self, "skeleton_engine") and hasattr(self, "system_state_mgr"):
@@ -1185,6 +1533,9 @@ class GameEngine:
                         "system_state": self._get_system_state_snapshot(),
                         "system_daily_plan": self._build_system_daily_plan(selected_chars),
                         "system_key_resolution": system_key_resolution,
+                        "weekly_summary": None,
+                        "state_delta": {},
+                        "ai_usage": self._get_llm_usage_snapshot(),
                     }
             elif not is_prefetch and not getattr(next_evt, 'is_cg', False):
                 prefetcher.mark_fallback()
@@ -1274,6 +1625,15 @@ class GameEngine:
                     if dialogue_lines:
                         display_text += "\n\n".join(dialogue_lines)
 
+                    max_turn_for_end = max(
+                        3,
+                        min(20, int(getattr(next_evt, "max_turn_for_end", 8) or 8)),
+                    )
+                    if int(res_data.get("turn", turn + 1) or (turn + 1)) >= max_turn_for_end:
+                        res_data["is_end"] = True
+                        if "阶段性收束" not in display_text:
+                            display_text += "\n\n（本事件达到阶段性收束点，你决定先进入下一幕。）"
+
                     # 如果事件结束，清理缓存
                     if res_data.get("is_end"):
                         prefetcher.clear_cache(next_evt.id)
@@ -1306,8 +1666,15 @@ class GameEngine:
                                     )
                             except Exception:
                                 pass
+                    before_system_state = self._get_system_state_snapshot()
                     if hasattr(self, "system_state_mgr"):
                         try:
+                            prev_evt_id = str(current_evt_id or "").strip()
+                            next_evt_id = str(getattr(next_evt, "id", "") or "").strip()
+                            system_end = bool(res_data.get("is_end", False))
+                            if not system_end and bool(is_transition) and prev_evt_id and next_evt_id and prev_evt_id != next_evt_id:
+                                # P3: 转场且事件切换时，系统时间应推进，避免 day/week 长期停滞。
+                                system_end = True
                             self.system_state_mgr.update_after_turn(
                                 active_chars=selected_chars,
                                 affinity=affinity,
@@ -1321,12 +1688,29 @@ class GameEngine:
                                 },
                                 event_id=getattr(next_evt, "id", ""),
                                 event_name=getattr(next_evt, "name", ""),
-                                is_end=bool(res_data.get("is_end", False)),
+                                is_end=system_end,
                             )
+                            if hasattr(self.system_state_mgr, "consume_weekly_summary"):
+                                weekly_summary = self.system_state_mgr.consume_weekly_summary()
                         except Exception:
                             pass
+                    after_system_state = self._get_system_state_snapshot()
+                    state_delta = self._build_system_state_delta(before_system_state, after_system_state)
+                    if isinstance(weekly_summary, dict):
+                        banner = self._format_weekly_summary_banner(weekly_summary)
+                        if banner:
+                            display_text = banner + "\n\n" + display_text
+                    cached_wechat_notifications = []
+                    stat_wechat = stats_data.get("wechat_notifications", []) if isinstance(stats_data, dict) else []
+                    if isinstance(stat_wechat, list):
+                        cached_wechat_notifications.extend([w for w in stat_wechat if isinstance(w, dict)])
+                    if not cached_wechat_notifications:
+                        cached_wechat_notifications = self._build_wechat_fallback_notifications(
+                            selected_chars=selected_chars,
+                            system_key_resolution=system_key_resolution,
+                        )
 
-                    return {
+                    return self._apply_global_turn_cap({
                         "is_game_over": False,
                         "display_text": display_text,
                         "san": san,
@@ -1347,10 +1731,14 @@ class GameEngine:
                         "dialogue_sequence": res_data.get("dialogue_sequence", []),
                         "narrator_transition": res_data.get("narrator_transition", ""),
                         "narrative_state": self._get_narrative_state_snapshot(),
-                        "system_state": self._get_system_state_snapshot(),
+                        "system_state": after_system_state,
                         "system_daily_plan": self._build_system_daily_plan(selected_chars),
                         "system_key_resolution": system_key_resolution,
-                    }
+                        "weekly_summary": weekly_summary,
+                        "state_delta": state_delta,
+                        "ai_usage": self._get_llm_usage_snapshot(),
+                        "wechat_notifications": cached_wechat_notifications,
+                    })
             elif not is_prefetch:
                 prefetcher.mark_fallback()
 
@@ -1381,18 +1769,21 @@ class GameEngine:
 
         lore_started_at = time.perf_counter()
         prompt_budget = "full" if self.latency_mode == "story" else "compact"
-        try:
-            relevant_docs = self.mm.vector_store.search(f"{next_evt.name} {action_text}", n_results=6)
-            valid_lores = []
-            active_plus_player = selected_chars + [player_name]
-            for d in relevant_docs:
-                content = d.get('content', '')
-                if "语录" in content and any(f"[{c}" in content for c in active_plus_player):
-                    valid_lores.append(content)
-            lore_limit = 3 if prompt_budget == "full" else 2
-            lore_str = "\n".join(valid_lores[:lore_limit])
-        except: 
+        if expression_only_mode_active:
             lore_str = ""
+        else:
+            try:
+                relevant_docs = self.mm.vector_store.search(f"{next_evt.name} {action_text}", n_results=6)
+                valid_lores = []
+                active_plus_player = selected_chars + [player_name]
+                for d in relevant_docs:
+                    content = d.get('content', '')
+                    if "语录" in content and any(f"[{c}" in content for c in active_plus_player):
+                        valid_lores.append(content)
+                lore_limit = 3 if prompt_budget == "full" else 2
+                lore_str = "\n".join(valid_lores[:lore_limit])
+            except:
+                lore_str = ""
         mark_timing("lore_search", lore_started_at)
 
         wechat_summary = self._build_wechat_summary(wechat_data_dict, compact=(prompt_budget == "compact"))
@@ -1412,9 +1803,11 @@ class GameEngine:
         prompt_started_at = time.perf_counter()
         system_prompt_bundle = self.pm.get_main_system_prompt_bundle(game_context)
         sys_prm = system_prompt_bundle.get("final_prompt", "")
+        if expression_only_mode_active:
+            sys_prm = self._build_expression_system_prompt(player_name)
         safe_keys = ", ".join([str(k) for k in wechat_data_dict.keys()])
         narrative_summary = ""
-        if hasattr(self, "narrative_state_mgr"):
+        if (not expression_only_mode_active) and hasattr(self, "narrative_state_mgr"):
             narrative_summary = self.narrative_state_mgr.build_prompt_summary(
                 player_name=player_name,
                 san=san,
@@ -1422,7 +1815,7 @@ class GameEngine:
                 active_chars=selected_chars,
             )
         milestone_rag = ""
-        if hasattr(self, "mm") and hasattr(self.mm, "search_narrative_milestones"):
+        if (not expression_only_mode_active) and hasattr(self, "mm") and hasattr(self.mm, "search_narrative_milestones"):
             try:
                 milestone_docs = self.mm.search_narrative_milestones(
                     query=f"{next_evt.name} {action_text} {' '.join(selected_chars[:4])}",
@@ -1546,6 +1939,15 @@ class GameEngine:
         if milestone_rag:
             user_prompt_sections.setdefault("trimmable_blocks", []).append(("milestone_rag", milestone_rag))
         user_prm = self._compose_prompt_from_sections(user_prompt_sections)
+        if expression_only_mode_active:
+            user_prm = self._build_expression_user_prompt(
+                next_evt=next_evt,
+                action_text=action_text,
+                system_key_resolution=system_key_resolution,
+                system_daily_plan=system_daily_plan,
+                selected_chars=selected_chars,
+                system_state=self._get_system_state_snapshot(),
+            )
 
         try:
             if getattr(next_evt, 'is_cg', False):
@@ -1582,7 +1984,7 @@ class GameEngine:
                     res_text = json.dumps(parsed, ensure_ascii=False)
                 else:
                     t2 = time.time()
-                    expression_only_mode_active = bool(self.expression_only_mode and effective_dialogue_mode != "tree_only")
+                    render_source = "llm"
                     profile_cap = int(latency_profile.get("llm_max_tokens", 1000))
                     try:
                         llm_max_tokens = int(max_t) if max_t is not None else profile_cap
@@ -1590,7 +1992,7 @@ class GameEngine:
                         llm_max_tokens = profile_cap
                     llm_max_tokens = max(300, min(llm_max_tokens, 2000))
                     if expression_only_mode_active:
-                        llm_max_tokens = max(360, min(llm_max_tokens, 760))
+                        llm_max_tokens = max(280, min(llm_max_tokens, self.expression_max_tokens))
 
                     gen_tmp = float(tmp)
                     gen_tokens = int(llm_max_tokens)
@@ -1609,31 +2011,22 @@ class GameEngine:
                         gen_freq = max(0.0, min(gen_freq, 0.4))
                     if expression_only_mode_active:
                         gen_tmp = max(0.2, min(gen_tmp, 0.55))
-                        gen_tokens = max(360, min(gen_tokens, 760))
+                        gen_tokens = max(280, min(gen_tokens, self.expression_max_tokens))
                         gen_pres = max(-0.1, min(gen_pres, 0.15))
                         gen_freq = max(0.0, min(gen_freq, 0.15))
 
                     parsed = None
                     res_text = ""
-                    attempts = 2 if (self.stability_mode == "stable" and self.latency_mode != "fast") else 1
+                    attempts = (
+                        2
+                        if expression_only_mode_active
+                        else (2 if (self.stability_mode == "stable" and self.latency_mode != "fast") else 1)
+                    )
                     last_error = None
                     json_contract = self._build_expression_json_contract() if expression_only_mode_active else self._build_json_contract()
                     expression_user_prompt = ""
                     if expression_only_mode_active:
-                        resolved_hint = ""
-                        if isinstance(system_key_resolution, dict) and system_key_resolution.get("ok"):
-                            resolved_hint = (
-                                f"关键事件已结算：event={system_key_resolution.get('event_id','')}, "
-                                f"choice={system_key_resolution.get('choice_id','')}, "
-                                f"attitude={system_key_resolution.get('attitude','')}。"
-                            )
-                        expression_user_prompt = (
-                            f"【事件】{next_evt.name}\n"
-                            f"【场景】{getattr(next_evt, 'description', '')}\n"
-                            f"【玩家动作】{action_text}\n"
-                            f"【系统结算约束】{resolved_hint or '本回合按当前状态继续演出，不新增系统裁定。'}\n"
-                            "【写作要求】只输出短表现：1句场景+3-6句对话+3-4个可执行选项。"
-                        )
+                        expression_user_prompt = user_prm
                     try:
                         for attempt_idx in range(attempts):
                             attempt_tmp = gen_tmp
@@ -1645,7 +2038,7 @@ class GameEngine:
 
                             if attempt_idx == 1:
                                 attempt_tmp = max(0.2, gen_tmp - 0.2)
-                                attempt_tokens = max(1000, min(gen_tokens, 1300)) if not expression_only_mode_active else max(420, min(gen_tokens, 760))
+                                attempt_tokens = max(1000, min(gen_tokens, 1300)) if not expression_only_mode_active else max(280, min(gen_tokens, self.expression_max_tokens))
                                 attempt_pres = 0.0
                                 attempt_freq = 0.0
                                 if expression_only_mode_active:
@@ -1682,13 +2075,39 @@ class GameEngine:
                         timings["llm_generate"] = round(time.time() - t2, 4)
                         if parsed is None:
                             raise ValueError(last_error or "empty payload")
-                        prefetcher.mark_non_fallback()
+                        if not self._is_payload_usable(parsed, next_evt):
+                            if expression_only_mode_active:
+                                parsed = self._build_expression_fallback_payload(
+                                    next_evt=next_evt,
+                                    player_name=player_name,
+                                    selected_chars=selected_chars,
+                                    action_text=action_text,
+                                    system_daily_plan=system_daily_plan,
+                                )
+                                render_source = "expression_fallback_unusable_payload"
+                                prefetcher.mark_fallback()
+                            else:
+                                raise ValueError("payload unusable")
+                        else:
+                            prefetcher.mark_non_fallback()
                     except Exception as e:
                         print(f"⚠️ [LLM Error] 实时生成异常，返回解析兜底: {e}", flush=True)
                         prefetcher.mark_fallback()
                         safe_err = str(e).replace('"', "'").replace("\n", " ")
-                        parsed = self.parse_and_repair_json(json.dumps({"error": safe_err}, ensure_ascii=False))
-                        parsed = self._normalize_parsed_payload(parsed)
+                        if expression_only_mode_active:
+                            parsed = self._build_expression_fallback_payload(
+                                next_evt=next_evt,
+                                player_name=player_name,
+                                selected_chars=selected_chars,
+                                action_text=action_text,
+                                system_daily_plan=system_daily_plan,
+                            )
+                            parsed["error"] = safe_err
+                            render_source = "expression_fallback_exception"
+                        else:
+                            parsed = self.parse_and_repair_json(json.dumps({"error": safe_err}, ensure_ascii=False))
+                            parsed = self._normalize_parsed_payload(parsed)
+                            render_source = "legacy_fallback_exception"
                         res_text = json.dumps(parsed, ensure_ascii=False)
 
             parsed["dialogue_sequence"] = self._sanitize_dialogue_sequence(
@@ -1824,12 +2243,19 @@ class GameEngine:
             
             # 防止事件过早结束：按事件定义控制收尾窗口。
             min_turn_for_end = max(2, min(12, int(getattr(next_evt, "min_turn_for_end", 5) or 5)))
+            max_turn_for_end = max(min_turn_for_end + 1, min(20, int(getattr(next_evt, "max_turn_for_end", min_turn_for_end + 3) or (min_turn_for_end + 3))))
             if getattr(next_evt, 'is_cg', False):
                 is_end = True
             elif turn < min_turn_for_end:
                 is_end = False
             else:
                 is_end = bool(parsed.get("is_end", False))
+
+            # 强制收束保护：事件达到最大回合后不再允许继续打转。
+            if not getattr(next_evt, 'is_cg', False) and turn >= max_turn_for_end:
+                is_end = True
+                if "阶段性收束" not in display_text:
+                    display_text += "\n\n（本事件达到阶段性收束点，你决定先进入下一幕。）"
 
             # 若连续重复输出，直接收束当前事件，切到下一事件，避免玩家困在同一话题循环。
             beats = getattr(next_evt, "progress_beats", []) or []
@@ -1842,6 +2268,7 @@ class GameEngine:
                 self.event_repeat_state.pop(next_evt.id, None)
 
             narrative_update_started_at = time.perf_counter()
+            before_system_state = self._get_system_state_snapshot()
             if hasattr(self, "narrative_state_mgr"):
                 self.narrative_state_mgr.update_after_turn(
                     player_name=player_name,
@@ -1872,6 +2299,11 @@ class GameEngine:
                         pass
             if hasattr(self, "system_state_mgr"):
                 try:
+                    prev_evt_id = str(current_evt_id or "").strip()
+                    next_evt_id = str(getattr(next_evt, "id", "") or "").strip()
+                    system_end = bool(is_end)
+                    if not system_end and bool(is_transition) and prev_evt_id and next_evt_id and prev_evt_id != next_evt_id:
+                        system_end = True
                     self.system_state_mgr.update_after_turn(
                         active_chars=selected_chars,
                         affinity=affinity,
@@ -1885,10 +2317,18 @@ class GameEngine:
                         },
                         event_id=getattr(next_evt, "id", ""),
                         event_name=getattr(next_evt, "name", ""),
-                        is_end=is_end,
+                        is_end=system_end,
                     )
+                    if hasattr(self.system_state_mgr, "consume_weekly_summary"):
+                        weekly_summary = self.system_state_mgr.consume_weekly_summary()
                 except Exception:
                     pass
+            after_system_state = self._get_system_state_snapshot()
+            state_delta = self._build_system_state_delta(before_system_state, after_system_state)
+            if isinstance(weekly_summary, dict):
+                banner = self._format_weekly_summary_banner(weekly_summary)
+                if banner:
+                    display_text = banner + "\n\n" + display_text
             mark_timing("narrative_update", narrative_update_started_at)
 
             memory_save_started_at = time.perf_counter()
@@ -1902,6 +2342,11 @@ class GameEngine:
             effect_wechat = effects_data.get("wechat_notifications", []) if isinstance(effects_data, dict) else []
             if isinstance(effect_wechat, list) and effect_wechat:
                 wechat_list = wechat_list + effect_wechat
+            if (not isinstance(wechat_list, list) or not wechat_list) and not is_prefetch:
+                wechat_list = self._build_wechat_fallback_notifications(
+                    selected_chars=selected_chars,
+                    system_key_resolution=system_key_resolution,
+                )
             if isinstance(wechat_list, list):
                 for w in wechat_list:
                     if not isinstance(w, dict): continue 
@@ -2004,10 +2449,15 @@ class GameEngine:
                 "event_script": final_script, # 关键：即使当前回合是实时生成的，也要把后台生好的剧本传回前端
                 "error": parsed.get("error", ""),
                 "narrative_state": self._get_narrative_state_snapshot(),
-                "system_state": self._get_system_state_snapshot(),
+                "system_state": after_system_state,
                 "system_daily_plan": self._build_system_daily_plan(selected_chars),
                 "system_key_resolution": system_key_resolution,
+                "weekly_summary": weekly_summary,
+                "state_delta": state_delta,
+                "ai_usage": self._get_llm_usage_snapshot(),
+                "render_source": render_source if "render_source" in locals() else "",
             }
+            result = self._apply_global_turn_cap(result)
             timings["total"] = round(time.perf_counter() - turn_started_at, 4)
             if self.profile_turns:
                 prompt_diagnostics = self._build_prompt_diagnostics(

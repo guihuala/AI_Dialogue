@@ -218,14 +218,13 @@ def build_game_router(
             roster = get_current_roster(user_id)
             all_ids = [cid for cid, info in roster.items() if not bool((info or {}).get("is_player", False))]
 
-            # 过滤掉不属于当前模组 roster 的旧选择，并补齐到最多 3 人
+            # 过滤掉不属于当前模组 roster 的旧选择
             selected_ids = [sid for sid in selected_ids if sid in all_ids]
-            if len(selected_ids) < min(3, len(all_ids)):
-                remaining = [cid for cid in all_ids if cid not in selected_ids]
-                random.shuffle(remaining)
-                selected_ids.extend(remaining[: max(0, min(3, len(all_ids)) - len(selected_ids))])
 
-            if not selected_ids:
+            # 若前端已明确选择，则严格尊重选择（不再自动补齐）
+            if selected_ids:
+                selected_ids = selected_ids[:3]
+            else:
                 selected_ids = random.sample(all_ids, min(3, len(all_ids)))
 
             if engine and hasattr(engine, "mm"):
@@ -381,24 +380,38 @@ def build_game_router(
 
     @router.get("/api/game/monitor")
     def monitor_game(user_id: str = get_user_id):
-        engine = get_engine(user_id)
-        engine_stats = {
-            "event_completion_count": engine.event_completion_count if engine else 0,
-            "recent_event_ids": engine.recent_event_ids if engine else [],
-        }
-        prefetch_stats = {}
-        if engine and hasattr(engine, "prefetch_mgr") and hasattr(engine, "llm") and hasattr(engine, "pm"):
-            try:
-                prefetcher = engine.prefetch_mgr.get_prefetcher(user_id, engine.llm, engine.pm)
-                prefetch_stats = prefetcher.get_metrics()
-            except Exception:
-                prefetch_stats = {}
-        return {
-            "status": "success",
-            "data": engine.latest_game_state_cache,
-            "engine_stats": engine_stats,
-            "prefetch_stats": prefetch_stats,
-        }
+        try:
+            engine = get_engine(user_id)
+            latest_cache = {}
+            if engine:
+                try:
+                    latest_cache = getattr(engine, "latest_game_state_cache", {}) or {}
+                except Exception:
+                    latest_cache = {}
+            engine_stats = {
+                "event_completion_count": int(getattr(engine, "event_completion_count", 0) or 0) if engine else 0,
+                "recent_event_ids": list(getattr(engine, "recent_event_ids", []) or []) if engine else [],
+            }
+            prefetch_stats = {}
+            if engine and hasattr(engine, "prefetch_mgr") and hasattr(engine, "llm") and hasattr(engine, "pm"):
+                try:
+                    prefetcher = engine.prefetch_mgr.get_prefetcher(user_id, engine.llm, engine.pm)
+                    prefetch_stats = prefetcher.get_metrics()
+                except Exception:
+                    prefetch_stats = {}
+            return {
+                "status": "success",
+                "data": latest_cache,
+                "engine_stats": engine_stats,
+                "prefetch_stats": prefetch_stats,
+            }
+        except Exception:
+            return {
+                "status": "success",
+                "data": {},
+                "engine_stats": {"event_completion_count": 0, "recent_event_ids": []},
+                "prefetch_stats": {},
+            }
 
     @router.post("/api/game/save")
     def save_game(req: SaveGameRequest, user_id: str = get_user_id):

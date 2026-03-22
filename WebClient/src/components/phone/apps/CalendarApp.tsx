@@ -26,7 +26,7 @@ export const CalendarApp = ({ chapter, turn, history }: CalendarAppProps) => {
              <div className="text-xl font-black">2026/03/18 周三</div>
           </div>
         </div>
-        <h3 className="text-2xl font-black tracking-tight mb-1">学年成长日历</h3>
+        <h3 className="text-2xl font-black tracking-tight mb-1">日历</h3>
         <p className="text-white/60 text-xs font-bold flex items-center gap-1">
           <Clock size={12} /> 当前累计推进: {turn} 个阶段
         </p>
@@ -55,7 +55,7 @@ export const CalendarApp = ({ chapter, turn, history }: CalendarAppProps) => {
                 </div>
                 <div>
                    <div className="text-sm font-black text-slate-800">{years[activeYearTab]}</div>
-                   <div className="text-[10px] font-bold text-slate-400 mt-0.5">滨海大学 2024 级</div>
+                   <div className="text-[10px] font-bold text-slate-400 mt-0.5">江城传媒学院 2022 级</div>
                 </div>
             </div>
             {activeYearTab === currentYearIndex && (

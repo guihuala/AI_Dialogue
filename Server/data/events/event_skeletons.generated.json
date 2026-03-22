@@ -1,0 +1,2718 @@
+{
+  "version": 1,
+  "generated_at": "2026-03-22T01:45:34",
+  "source": {
+    "events_dir": "/Users/xuzi/Downloads/AI_Dialogue/Server/data/events",
+    "csv_files": 5,
+    "rows": 47
+  },
+  "events": [
+    {
+      "id": "evt_opening",
+      "type": "key",
+      "title": "大学生活开启",
+      "priority": 88,
+      "cooldown_days": 99,
+      "once": true,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [
+        {
+          "id": "evt_opening_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：欢迎来到大学。这是一段充满挑战与机遇"
+        },
+        {
+          "id": "evt_opening_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：欢迎来到大学。这是一段充满挑战与机遇"
+        },
+        {
+          "id": "evt_opening_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：欢迎来到大学。这是一段充满挑战与机遇"
+        }
+      ],
+      "meta": {
+        "source_csv": "00_开局剧情.csv",
+        "source_event_type": "开局",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "系统:九月的热气还没散尽",
+          "你拖着行李站在校门口",
+          "望着写有“江州传媒学院”字样的拱门",
+          "心里既紧张又期待。",
+          "系统:校园里到处都是报道的新生",
+          "学长学姐举着各院系的牌子穿梭在人群中",
+          "广播里循环播放着迎新通知。",
+          "辅导员:同学们先别急着回寝室",
+          "来这边集合。大家都是一个班的新生",
+          "先做个简单的破冰认识一下。",
+          "系统:你跟着人群来到宿舍楼下的小广场",
+          "几位即将和你共同生活四年的新同学也站到了你身边。",
+          "女生A:我先来吧",
+          "我叫……很高兴认识大家",
+          "希望以后多多关照。",
+          "女生B:我是外地来的",
+          "第一次离家这么远",
+          "说实话有点紧张",
+          "不过也很期待大学生活。",
+          "女生C:大家之后要住在同一个寝室啦",
+          "要不要先加个联系方式？以后有事也方便照应。",
+          "系统:轮到你开口时",
+          "周围安静了一瞬",
+          "几道目光友好地落在你身上。新的生活",
+          "正从这一句自我介绍开始。"
+        ],
+        "potential_conflicts": [
+          "初来乍到"
+        ],
+        "hooks": {
+          "state_hooks": [],
+          "relationship_hooks": []
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "欢迎来到大学。这是一段充满挑战与机遇的旅程。"
+      }
+    },
+    {
+      "id": "evt_ch4_boss_job",
+      "type": "key",
+      "title": "散伙饭晒Offer",
+      "priority": 80,
+      "cooldown_days": 4,
+      "once": true,
+      "triggers": {
+        "day_min": 22
+      },
+      "options": [
+        {
+          "id": "evt_ch4_boss_job_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：最后的散伙饭上。有人拿到了大厂Off"
+        },
+        {
+          "id": "evt_ch4_boss_job_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：最后的散伙饭上。有人拿到了大厂Off"
+        },
+        {
+          "id": "evt_ch4_boss_job_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：最后的散伙饭上。有人拿到了大厂Off"
+        }
+      ],
+      "meta": {
+        "source_csv": "01_固定剧情.csv",
+        "source_event_type": "固定池",
+        "chapter": 4,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "毕业清算",
+          "比较",
+          "旧账总爆发"
+        ],
+        "potential_conflicts": [
+          "阶层分化",
+          "虚荣心与自卑"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角口碑高=>更容易被人拿来当比较坐标",
+            "主角压力高=>更容易在最后一顿饭上破防"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会在炫耀和安慰之间犹豫",
+            "低亲密角色=>更可能借着酒意翻出大学四年的旧账"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "最后的散伙饭上。有人拿到了大厂Offer年薪30w，有人考公上岸，而有人还没着落。气氛微妙，暗流涌动。这是你们大学四年恩怨的最终清算。",
+        "opening_goal": "先让每个人的去向差异和桌上的微妙比较感立住",
+        "pressure_goal": "把场面从分享近况推进到炫耀 自卑 嫉妒和不甘交织",
+        "turning_goal": "逼出一轮真正的旧账翻盘或和解尝试",
+        "settlement_goal": "让四年关系在这场饭局里得到阶段性盖章"
+      }
+    },
+    {
+      "id": "evt_ch4_photo",
+      "type": "key",
+      "title": "毕业照C位之争",
+      "priority": 80,
+      "cooldown_days": 4,
+      "once": true,
+      "triggers": {
+        "day_min": 22
+      },
+      "options": [
+        {
+          "id": "evt_ch4_photo_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：拍毕业照时，有人想站在C位，但大家觉"
+        },
+        {
+          "id": "evt_ch4_photo_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：拍毕业照时，有人想站在C位，但大家觉"
+        },
+        {
+          "id": "evt_ch4_photo_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：拍毕业照时，有人想站在C位，但大家觉"
+        }
+      ],
+      "meta": {
+        "source_csv": "01_固定剧情.csv",
+        "source_event_type": "固定池",
+        "chapter": 4,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "体面收官",
+          "虚荣",
+          "最后印象"
+        ],
+        "potential_conflicts": [
+          "虚荣心",
+          "公平诉求",
+          "毕业前的最后冲突"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角近期可靠=>更容易被推出来调站位",
+            "主角口碑低=>说什么都像夹带私货"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>愿意给主角面子调整位置",
+            "低亲密角色=>会怀疑主角在偏袒"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "拍毕业照时，有人想站在C位，但大家觉得她平时贡献最小。现场气氛尴尬，摄影师等着你们排好。",
+        "opening_goal": "先让拍照前的体面需求和私下不爽同时出现",
+        "pressure_goal": "把局面从站位小事推进到大学四年贡献和存在感的清算",
+        "turning_goal": "逼出是维持体面合影 还是最后一次撕开脸皮",
+        "settlement_goal": "形成毕业前最后一次“谁才配站中间”的象征性结论"
+      }
+    },
+    {
+      "id": "evt_ch4_thesis",
+      "type": "key",
+      "title": "毕业论文查重",
+      "priority": 80,
+      "cooldown_days": 4,
+      "once": true,
+      "triggers": {
+        "day_min": 22
+      },
+      "options": [
+        {
+          "id": "evt_ch4_thesis_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：大四下学期。有人的论文查重率高达80"
+        },
+        {
+          "id": "evt_ch4_thesis_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：大四下学期。有人的论文查重率高达80"
+        },
+        {
+          "id": "evt_ch4_thesis_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：大四下学期。有人的论文查重率高达80"
+        }
+      ],
+      "meta": {
+        "source_csv": "01_固定剧情.csv",
+        "source_event_type": "固定池",
+        "chapter": 4,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "毕业压力",
+          "底线",
+          "最后的人情账"
+        ],
+        "potential_conflicts": [
+          "学术底线与人情"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角最近常心软=>更容易被拖进不属于自己的风险里",
+            "主角边界变强=>更可能明确拒绝"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会把求助说得像最后一次信任托付",
+            "低亲密角色=>会把求助包装成理所当然"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "大四下学期。有人的论文查重率高达80%，她绝望之下求你帮她降重，甚至想直接抄你废弃的初稿。",
+        "opening_goal": "先让对方的绝望和主角的风险意识同时成立",
+        "pressure_goal": "把局面从求帮忙推进到是否触碰学术底线",
+        "turning_goal": "逼出主角是帮她找替代方案 直接拒绝 还是冒险帮忙",
+        "settlement_goal": "形成毕业前最后一次关于原则和情面的印象结算"
+      }
+    },
+    {
+      "id": "evt_ch3_boss_baoyan",
+      "type": "key",
+      "title": "保研名额争夺战",
+      "priority": 78,
+      "cooldown_days": 4,
+      "once": true,
+      "triggers": {
+        "day_min": 15
+      },
+      "options": [
+        {
+          "id": "evt_ch3_boss_baoyan_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：保研边缘。你和另一个室友分数极其接近"
+        },
+        {
+          "id": "evt_ch3_boss_baoyan_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：保研边缘。你和另一个室友分数极其接近"
+        },
+        {
+          "id": "evt_ch3_boss_baoyan_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：保研边缘。你和另一个室友分数极其接近"
+        }
+      ],
+      "meta": {
+        "source_csv": "01_固定剧情.csv",
+        "source_event_type": "固定池",
+        "chapter": 3,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "背刺",
+          "证据战",
+          "不可逆撕裂"
+        ],
+        "potential_conflicts": [
+          "背刺与背叛",
+          "绝境反击"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角口碑高=>别人表面更犹豫是否完全站到对面",
+            "主角压力高=>更容易在被冤枉后迅速失控"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会面临是否为主角作证的抉择",
+            "低亲密角色=>会借机把旧账一起倒出来"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "保研边缘。你和另一个室友分数极其接近。她突然举报你大一时的某次作业涉嫌抄袭，辅导员找你谈话。寝室彻底撕破脸。",
+        "opening_goal": "先让举报带来的震惊和耻辱感落地",
+        "pressure_goal": "把冲突从单点指控推进到证据和动机的全面撕扯",
+        "turning_goal": "逼出寝室内部谁愿意作证 谁选择沉默 谁继续补刀",
+        "settlement_goal": "让这场争夺成为真正无法回头的关系断裂点"
+      }
+    },
+    {
+      "id": "evt_ch3_graduate",
+      "type": "key",
+      "title": "考研还是工作",
+      "priority": 78,
+      "cooldown_days": 4,
+      "once": true,
+      "triggers": {
+        "day_min": 15
+      },
+      "options": [
+        {
+          "id": "evt_ch3_graduate_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：大三分岔路口。寝室四人面对未来选择产"
+        },
+        {
+          "id": "evt_ch3_graduate_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：大三分岔路口。寝室四人面对未来选择产"
+        },
+        {
+          "id": "evt_ch3_graduate_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：大三分岔路口。寝室四人面对未来选择产"
+        }
+      ],
+      "meta": {
+        "source_csv": "01_固定剧情.csv",
+        "source_event_type": "固定池",
+        "chapter": 3,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "前途分叉",
+          "价值观",
+          "自我投射"
+        ],
+        "potential_conflicts": [
+          "人生规划冲突",
+          "价值观撕裂",
+          "群体焦虑"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角SAN低=>更容易把别人的路径焦虑映射到自己身上",
+            "主角近期常观察=>更容易被当成最后发表看法的人"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>更愿意袒露自己真实害怕什么",
+            "低亲密角色=>更容易把观点说成评判别人"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "大三分岔路口。寝室四人面对未来选择产生严重分歧。有人要考研，有人要工作，有人想gap year。深夜话题变得沉重。",
+        "opening_goal": "先让每个人的未来选择和恐惧说得具体",
+        "pressure_goal": "推动讨论从单纯分享规划升级到彼此质疑对方选择",
+        "turning_goal": "逼出主角是安抚 分析 站队 还是沉默",
+        "settlement_goal": "留下谁理解彼此 谁最爱评判的未来印象"
+      }
+    },
+    {
+      "id": "evt_ch2_birthday",
+      "type": "key",
+      "title": "生日惊喜变惊吓",
+      "priority": 76,
+      "cooldown_days": 4,
+      "once": true,
+      "triggers": {
+        "day_min": 8
+      },
+      "options": [
+        {
+          "id": "evt_ch2_birthday_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：室友过生日，大家偷偷准备惊喜派对。结"
+        },
+        {
+          "id": "evt_ch2_birthday_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：室友过生日，大家偷偷准备惊喜派对。结"
+        },
+        {
+          "id": "evt_ch2_birthday_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：室友过生日，大家偷偷准备惊喜派对。结"
+        }
+      ],
+      "meta": {
+        "source_csv": "01_固定剧情.csv",
+        "source_event_type": "固定池",
+        "chapter": 2,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "好意失手",
+          "面子",
+          "补救"
+        ],
+        "potential_conflicts": [
+          "好心办坏事",
+          "信任危机",
+          "集体尴尬"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角压力高=>更容易过度道歉或把场面弄得更僵",
+            "主角近期可靠形象高=>别人会更在意这次失误"
+          ],
+          "relationship_hooks": [
+            "高亲密寿星=>更可能真心别扭但不舍得翻脸",
+            "低亲密寿星=>会把这次失误记成不靠谱"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "室友过生日，大家偷偷准备惊喜派对。结果你无意中说漏嘴，惊喜提前暴露。寿星假装惊喜但明显很尴尬。",
+        "opening_goal": "先让惊喜被戳破后的空气尴尬落地",
+        "pressure_goal": "把局面从意外失误推进到有人怀疑主角不够上心或故意嘴快",
+        "turning_goal": "推动大家决定是继续补救 还是干脆把话挑明",
+        "settlement_goal": "形成主角是笨拙好心还是关键时刻掉链子的印象"
+      }
+    },
+    {
+      "id": "evt_ch2_boss_intern",
+      "type": "key",
+      "title": "寒假实习名额",
+      "priority": 76,
+      "cooldown_days": 4,
+      "once": true,
+      "triggers": {
+        "day_min": 8
+      },
+      "options": [
+        {
+          "id": "evt_ch2_boss_intern_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：系里只有一个去顶尖传媒公司实习的内推"
+        },
+        {
+          "id": "evt_ch2_boss_intern_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：系里只有一个去顶尖传媒公司实习的内推"
+        },
+        {
+          "id": "evt_ch2_boss_intern_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：系里只有一个去顶尖传媒公司实习的内推"
+        }
+      ],
+      "meta": {
+        "source_csv": "01_固定剧情.csv",
+        "source_event_type": "固定池",
+        "chapter": 2,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "嫉妒",
+          "阶梯竞争",
+          "背地流言"
+        ],
+        "potential_conflicts": [
+          "嫉妒与造谣",
+          "竞争压力"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角口碑高=>别人表面更难直接质疑你",
+            "主角压力高=>更容易在被刺后失去耐心"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会尝试私下确认而非公开发难",
+            "低亲密角色=>会借落选情绪带动旁人怀疑"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "系里只有一个去顶尖传媒公司实习的内推名额。你和室友都投了简历，结果你收到了面试通知，而室友落选了。她阴阳怪气地说你“肯定找了关系”。",
+        "opening_goal": "先让落选者的不甘和主角的错愕都落地",
+        "pressure_goal": "推动场面从阴阳怪气升级到是否公开质问或传播流言",
+        "turning_goal": "逼主角面对要解释 自证 还是反击的选择",
+        "settlement_goal": "让宿舍竞争关系在这一轮真正撕开口子"
+      }
+    },
+    {
+      "id": "evt_ch2_scholarship",
+      "type": "key",
+      "title": "奖学金评定",
+      "priority": 76,
+      "cooldown_days": 4,
+      "once": true,
+      "triggers": {
+        "day_min": 8
+      },
+      "options": [
+        {
+          "id": "evt_ch2_scholarship_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：大二综合测评。为了零点几的加分，有人"
+        },
+        {
+          "id": "evt_ch2_scholarship_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：大二综合测评。为了零点几的加分，有人"
+        },
+        {
+          "id": "evt_ch2_scholarship_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：大二综合测评。为了零点几的加分，有人"
+        }
+      ],
+      "meta": {
+        "source_csv": "01_固定剧情.csv",
+        "source_event_type": "固定池",
+        "chapter": 2,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "功劳归属",
+          "精致利己",
+          "学业竞争"
+        ],
+        "potential_conflicts": [
+          "学术造假",
+          "利益侵占"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角口碑高=>更容易被当成可借力对象",
+            "主角近期常缓和=>更容易先犹豫不撕破脸"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会试图软磨硬泡让主角让渡成果",
+            "低亲密角色=>会把主角的拒绝解读成故意卡人"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "大二综合测评。为了零点几的加分，有人开始疯狂包装自己的水水比赛证书，甚至要求你把你做的PPT署她的名。",
+        "opening_goal": "先把对方索要署名这件事说得理直气壮",
+        "pressure_goal": "把矛盾从人情请求推进到对成果归属和公平的争论",
+        "turning_goal": "逼主角在保全关系和保全边界之间做出清晰回应",
+        "settlement_goal": "形成一次关于学业底线和功劳归属的长效记恨"
+      }
+    },
+    {
+      "id": "evt_ch1_boss_grant",
+      "type": "key",
+      "title": "贫困生助学金投票",
+      "priority": 74,
+      "cooldown_days": 4,
+      "once": true,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [
+        {
+          "id": "evt_ch1_boss_grant_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：期末助学金评定，寝室有一个名额。有人"
+        },
+        {
+          "id": "evt_ch1_boss_grant_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：期末助学金评定，寝室有一个名额。有人"
+        },
+        {
+          "id": "evt_ch1_boss_grant_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：期末助学金评定，寝室有一个名额。有人"
+        }
+      ],
+      "meta": {
+        "source_csv": "01_固定剧情.csv",
+        "source_event_type": "固定池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "道德审判",
+          "利益冲突",
+          "站队"
+        ],
+        "potential_conflicts": [
+          "道德绑架",
+          "利益争夺",
+          "查消费记录对峙"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角压力高=>更容易逃避表态",
+            "口碑低=>更容易被怀疑立场不纯"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会试图争取主角这一票",
+            "低亲密角色=>会先扣帽子再逼主角站队"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "期末助学金评定，寝室有一个名额。有人偷偷买了最新款iPhone却还在哭穷申请，而另一个真正困难的室友默默流泪。导员要求寝室内部不记名投票。",
+        "opening_goal": "先让每个人公开给出自己的理由和姿态",
+        "pressure_goal": "把争论从表面同情推进到翻旧账和查消费记录",
+        "turning_goal": "逼主角面对价值判断而不是继续模糊带过",
+        "settlement_goal": "形成明确裂痕与记仇对象 让这次投票成为长期关系转折点"
+      }
+    },
+    {
+      "id": "evt_ch1_nighttalk",
+      "type": "key",
+      "title": "寝室夜谈会",
+      "priority": 74,
+      "cooldown_days": 4,
+      "once": true,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [
+        {
+          "id": "evt_ch1_nighttalk_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：熄灯后有人提议玩“真心话大冒险”。玩"
+        },
+        {
+          "id": "evt_ch1_nighttalk_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：熄灯后有人提议玩“真心话大冒险”。玩"
+        },
+        {
+          "id": "evt_ch1_nighttalk_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：熄灯后有人提议玩“真心话大冒险”。玩"
+        }
+      ],
+      "meta": {
+        "source_csv": "01_固定剧情.csv",
+        "source_event_type": "固定池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "夜谈",
+          "试探",
+          "口不择言"
+        ],
+        "potential_conflicts": [
+          "隐私边界",
+          "社交尴尬",
+          "潜在矛盾爆发"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角低SAN=>更容易把玩笑听成针对",
+            "宿舍紧张=>一句真话就会变成导火索"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会帮主角圆话或转移火力",
+            "低亲密角色=>会借游戏之名输出真实不满"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "熄灯后有人提议玩“真心话大冒险”。玩到一半，有人问出了一个致命问题：“你们觉得咱们寝室谁最难相处？”",
+        "opening_goal": "先营造半开玩笑半认真的微妙气氛",
+        "pressure_goal": "让每个人的回答开始带出真实偏见而不是纯敷衍",
+        "turning_goal": "推动场面从游戏互动升级为有点走心的互相点名",
+        "settlement_goal": "留下至少一条新的宿舍印象或隐形伤口"
+      }
+    },
+    {
+      "id": "evt_ch1_seat",
+      "type": "key",
+      "title": "早八占座风波",
+      "priority": 74,
+      "cooldown_days": 4,
+      "once": true,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [
+        {
+          "id": "evt_ch1_seat_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：早八课。你帮全寝室占了一排座（放了书"
+        },
+        {
+          "id": "evt_ch1_seat_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：早八课。你帮全寝室占了一排座（放了书"
+        },
+        {
+          "id": "evt_ch1_seat_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：早八课。你帮全寝室占了一排座（放了书"
+        }
+      ],
+      "meta": {
+        "source_csv": "01_固定剧情.csv",
+        "source_event_type": "固定池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "尴尬",
+          "脸面",
+          "集体责任"
+        ],
+        "potential_conflicts": [
+          "集体利益与个人脸面的冲突",
+          "室友的拖延症"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角低SAN=>更容易慌乱解释",
+            "宿舍局势紧张=>其他人更容易把火撒到主角身上"
+          ],
+          "relationship_hooks": [
+            "高亲密室友=>到场后更愿意帮主角解释",
+            "低亲密室友=>容易甩锅给主角"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "早八课。你帮全寝室占了一排座（放了书），结果只有你一个人来了。其他同学站在旁边指指点点，问你“这有人吗”。",
+        "opening_goal": "先建立主角独自面对全场质疑的尴尬处境",
+        "pressure_goal": "让迟到室友陆续到场并形成不同态度",
+        "turning_goal": "把矛盾从“占座是否合理”推进到“谁该为主角难堪负责”",
+        "settlement_goal": "形成一次清晰的印象更新：有人护着主角，有人觉得主角活该"
+      }
+    },
+    {
+      "id": "evt_cond_broke",
+      "type": "key",
+      "title": "月底吃泡面",
+      "priority": 72,
+      "cooldown_days": 3,
+      "once": true,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [
+        {
+          "id": "evt_cond_broke_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：月底了，你的生活费所剩无几，只能天天"
+        },
+        {
+          "id": "evt_cond_broke_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：月底了，你的生活费所剩无几，只能天天"
+        },
+        {
+          "id": "evt_cond_broke_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：月底了，你的生活费所剩无几，只能天天"
+        }
+      ],
+      "meta": {
+        "source_csv": "04_条件触发.csv",
+        "source_event_type": "条件触发池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "Money<300",
+        "narrative_tags": [
+          "贫穷焦虑",
+          "面子",
+          "群体压力"
+        ],
+        "potential_conflicts": [
+          "穷人的自尊心",
+          "集体活动的隐形强制性"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角缺钱=>本轮必须体现算账和窘迫感",
+            "主角近期爱缓和=>更可能委婉拒绝而不是直说没钱"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会察觉主角窘迫并给台阶",
+            "低亲密角色=>会把拒绝理解成扫兴"
+          ]
+        },
+        "migration_notes": [],
+        "legacy_scene": "月底了，你的生活费所剩无几，只能天天在寝室吃泡面。室友在这个时候提议全寝室出去聚餐吃烤肉（AA制）。",
+        "opening_goal": "先让主角的拮据和大家的兴奋形成反差",
+        "pressure_goal": "把问题从去不去吃推进到AA制是否真的公平",
+        "turning_goal": "逼出主角是坦白现状 逞强跟去 还是找借口推脱",
+        "settlement_goal": "留下谁体谅穷困 谁只顾热闹的印象"
+      }
+    },
+    {
+      "id": "evt_cond_conflict",
+      "type": "key",
+      "title": "寝室冷战爆发",
+      "priority": 72,
+      "cooldown_days": 3,
+      "once": true,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [
+        {
+          "id": "evt_cond_conflict_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：你在寝室口碑变差，大家开始有意无意孤"
+        },
+        {
+          "id": "evt_cond_conflict_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：你在寝室口碑变差，大家开始有意无意孤"
+        },
+        {
+          "id": "evt_cond_conflict_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：你在寝室口碑变差，大家开始有意无意孤"
+        }
+      ],
+      "meta": {
+        "source_csv": "04_条件触发.csv",
+        "source_event_type": "条件触发池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "Reputation<30",
+        "narrative_tags": [
+          "冷暴力",
+          "口碑崩塌",
+          "自我怀疑"
+        ],
+        "potential_conflicts": [
+          "被孤立",
+          "社交死亡边缘",
+          "自我怀疑"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角SAN低=>更容易把沉默理解成敌意并进一步崩溃",
+            "主角近期边界变强=>可能会突然反问或摊牌"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>仍可能保留一点迟疑和愧疚",
+            "低亲密角色=>会更自然地参与排斥氛围"
+          ]
+        },
+        "migration_notes": [],
+        "legacy_scene": "你在寝室口碑变差，大家开始有意无意孤立你。吃饭不叫你，话题避开你。你回到寝室时笑声戛然而止。",
+        "opening_goal": "先让“你被排除在外”的空气感明确出现",
+        "pressure_goal": "把局面从冷处理推进到主角是否打破沉默追问原因",
+        "turning_goal": "逼出室友是继续装作没事 还是终于把真实不满说出来",
+        "settlement_goal": "让主角在宿舍中的位置出现明显变化"
+      }
+    },
+    {
+      "id": "evt_cond_fame",
+      "type": "key",
+      "title": "绯闻缠身",
+      "priority": 72,
+      "cooldown_days": 3,
+      "once": true,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [
+        {
+          "id": "evt_cond_fame_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：你在学校里风头正劲，但有人开始在论坛"
+        },
+        {
+          "id": "evt_cond_fame_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：你在学校里风头正劲，但有人开始在论坛"
+        },
+        {
+          "id": "evt_cond_fame_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：你在学校里风头正劲，但有人开始在论坛"
+        }
+      ],
+      "meta": {
+        "source_csv": "04_条件触发.csv",
+        "source_event_type": "条件触发池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "Reputation>80",
+        "narrative_tags": [
+          "名誉危机",
+          "匿名背刺",
+          "公开对质"
+        ],
+        "potential_conflicts": [
+          "信任危机",
+          "是否公开对质",
+          "维护名誉 vs 寝室和谐"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角口碑高=>这轮更容易有失望和背叛感",
+            "主角压力高=>更容易想立刻撕开真相"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会面临是否站出来替主角说话的选择",
+            "低亲密角色=>更容易在背后顺势推波助澜"
+          ]
+        },
+        "migration_notes": [],
+        "legacy_scene": "你在学校里风头正劲，但有人开始在论坛匿名发帖造谣你“靠关系拿奖学金”。你发现IP地址竟然是你们寝室。",
+        "opening_goal": "先让谣言带来的羞耻和愤怒真正落地",
+        "pressure_goal": "把局面从发现帖子推进到怀疑对象和是否公开对质",
+        "turning_goal": "逼出主角是忍着查证 直接摊牌 还是先保护名声",
+        "settlement_goal": "形成宿舍信任系统的一次大地震"
+      }
+    },
+    {
+      "id": "evt_cond_hair",
+      "type": "key",
+      "title": "下水道的头发",
+      "priority": 72,
+      "cooldown_days": 3,
+      "once": true,
+      "triggers": {
+        "day_min": 1,
+        "flags_all_true": [
+          "legacy:hygiene_below_60"
+        ]
+      },
+      "options": [
+        {
+          "id": "evt_cond_hair_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：浴室下水道堵了，水漫金山。挖出来全是"
+        },
+        {
+          "id": "evt_cond_hair_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：浴室下水道堵了，水漫金山。挖出来全是"
+        },
+        {
+          "id": "evt_cond_hair_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：浴室下水道堵了，水漫金山。挖出来全是"
+        }
+      ],
+      "meta": {
+        "source_csv": "04_条件触发.csv",
+        "source_event_type": "条件触发池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "Hygiene<60",
+        "narrative_tags": [
+          "卫生危机",
+          "甩锅",
+          "烦躁积累"
+        ],
+        "potential_conflicts": [
+          "互相推诿甩锅",
+          "卫生极度恶化导致所有人烦躁"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角卫生压力高=>更容易急于解决而不是讲情面",
+            "宿舍紧张=>任何解释都会被当成甩锅"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>更愿意帮主角先处理残局",
+            "低亲密角色=>会借题翻旧账"
+          ]
+        },
+        "migration_notes": [
+          "触发条件含 hygiene/卫生，已降级映射到 legacy flags，请人工复核。"
+        ],
+        "legacy_scene": "浴室下水道堵了，水漫金山。挖出来全是长头发。长发二人组互相指责是对方掉的。",
+        "opening_goal": "先把恶心和烦躁的现场感做出来",
+        "pressure_goal": "推动责任争论从互相嫌弃升级到翻过去卫生旧账",
+        "turning_goal": "逼出是先解决问题还是先分锅的选择",
+        "settlement_goal": "形成谁靠谱 谁最会躲责任的印象"
+      }
+    },
+    {
+      "id": "evt_cond_mood",
+      "type": "key",
+      "title": "情绪爆发夜",
+      "priority": 72,
+      "cooldown_days": 3,
+      "once": true,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [
+        {
+          "id": "evt_cond_mood_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：你的SAN值长期偏低，情绪已经濒临崩"
+        },
+        {
+          "id": "evt_cond_mood_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：你的SAN值长期偏低，情绪已经濒临崩"
+        },
+        {
+          "id": "evt_cond_mood_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：你的SAN值长期偏低，情绪已经濒临崩"
+        }
+      ],
+      "meta": {
+        "source_csv": "04_条件触发.csv",
+        "source_event_type": "条件触发池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "San<40",
+        "narrative_tags": [
+          "崩溃边缘",
+          "误解放大",
+          "自我防御"
+        ],
+        "potential_conflicts": [
+          "长期压抑 vs 突然爆发",
+          "是否该暴露脆弱"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角SAN低=>本轮必须体现感受被放大的主观体验",
+            "主角近期一直退让=>更容易在这轮突然爆掉"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会先察觉不对并尝试拉住主角",
+            "低亲密角色=>会把情绪爆发理解为无理取闹"
+          ]
+        },
+        "migration_notes": [],
+        "legacy_scene": "你的SAN值长期偏低，情绪已经濒临崩溃。室友因为一点小事（比如你忘关灯）开始指责你。你突然觉得全世界都在针对你。",
+        "opening_goal": "先让导火索看似很小但刺痛主角",
+        "pressure_goal": "把局面从普通指责推进到主角情绪失控或强烈自我防御",
+        "turning_goal": "逼出别人是继续施压 还是终于意识到主角状态不对",
+        "settlement_goal": "形成一次关于脆弱是否被看见的关键记忆"
+      }
+    },
+    {
+      "id": "evt_su_comic",
+      "type": "key",
+      "title": "漫展突发状况",
+      "priority": 66,
+      "cooldown_days": 3,
+      "once": false,
+      "triggers": {
+        "day_min": 8,
+        "active_any": [
+          "su_qian"
+        ],
+        "relation_target": {
+          "char": "su_qian",
+          "trust_gte": 60
+        }
+      },
+      "options": [
+        {
+          "id": "evt_su_comic_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：苏浅邀请你一起去漫展，结果她的cos"
+        },
+        {
+          "id": "evt_su_comic_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：苏浅邀请你一起去漫展，结果她的cos"
+        },
+        {
+          "id": "evt_su_comic_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：苏浅邀请你一起去漫展，结果她的cos"
+        }
+      ],
+      "meta": {
+        "source_csv": "03_角色专属.csv",
+        "source_event_type": "角色专属事件",
+        "chapter": 2,
+        "exclusive_char": "苏浅",
+        "trigger_conditions_raw": "Affinity>60",
+        "narrative_tags": [
+          "危机救场",
+          "脆弱依赖",
+          "陪伴"
+        ],
+        "potential_conflicts": [
+          "突发危机",
+          "友情考验",
+          "动手能力"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角高压=>容易手忙脚乱但也会更想硬撑帮忙",
+            "主角近期可靠形象高=>苏浅会更主动依赖"
+          ],
+          "relationship_hooks": [
+            "高亲密苏浅=>她会把慌乱和求助说得更真实",
+            "关系一般=>她可能先道歉再退缩"
+          ]
+        },
+        "migration_notes": [],
+        "legacy_scene": "苏浅邀请你一起去漫展，结果她的cos服在出发前撕裂了。她急得快哭了。",
+        "opening_goal": "先让苏浅的崩溃和时间压力落地",
+        "pressure_goal": "推动到主角是动手补救 重新安排行程 还是安抚她放弃",
+        "turning_goal": "让危机里谁真正靠得住这件事被看见",
+        "settlement_goal": "形成一次明显的信任升温或失落退缩"
+      }
+    },
+    {
+      "id": "evt_lin_concert",
+      "type": "key",
+      "title": "音乐节搭子",
+      "priority": 64,
+      "cooldown_days": 3,
+      "once": false,
+      "triggers": {
+        "day_min": 1,
+        "active_any": [
+          "lin_sa"
+        ],
+        "relation_target": {
+          "char": "lin_sa",
+          "trust_gte": 40
+        }
+      },
+      "options": [
+        {
+          "id": "evt_lin_concert_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：林飒搞到两张音乐节门票，但她不想一个"
+        },
+        {
+          "id": "evt_lin_concert_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：林飒搞到两张音乐节门票，但她不想一个"
+        },
+        {
+          "id": "evt_lin_concert_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：林飒搞到两张音乐节门票，但她不想一个"
+        }
+      ],
+      "meta": {
+        "source_csv": "03_角色专属.csv",
+        "source_event_type": "角色专属事件",
+        "chapter": 1,
+        "exclusive_char": "林飒",
+        "trigger_conditions_raw": "Affinity>40",
+        "narrative_tags": [
+          "邀请",
+          "试探",
+          "亲近升级"
+        ],
+        "potential_conflicts": [
+          "社交恐惧的突破",
+          "信任试探"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角压力高=>更容易退缩错过机会",
+            "主角近期封闭=>更需要有人主动拽一把"
+          ],
+          "relationship_hooks": [
+            "高亲密林飒=>会把真实期待说得更直接",
+            "关系一般=>会用玩笑掩饰被拒绝的风险"
+          ]
+        },
+        "migration_notes": [],
+        "legacy_scene": "林飒搞到两张音乐节门票，但她不想一个人去。她犹豫了很久，终于开口问你愿不愿意一起去。",
+        "opening_goal": "先让林飒的试探感和别扭感被看见",
+        "pressure_goal": "把邀约从普通出门推进到信任和陪伴意味",
+        "turning_goal": "推动主角做出接受 推迟 或拒绝的清晰回应",
+        "settlement_goal": "形成你们关系是更靠近还是重新退回安全距离的结果"
+      }
+    },
+    {
+      "id": "evt_tang_afternoon",
+      "type": "key",
+      "title": "名媛的邀约",
+      "priority": 64,
+      "cooldown_days": 3,
+      "once": false,
+      "triggers": {
+        "day_min": 1,
+        "active_any": [
+          "tang_mengqi"
+        ],
+        "relation_target": {
+          "char": "tang_mengqi",
+          "trust_gte": 50
+        }
+      },
+      "options": [
+        {
+          "id": "evt_tang_afternoon_support",
+          "attitude": "支持",
+          "effects": {
+            "dorm_mood_delta": 2
+          },
+          "text_hint": "支持并推进：唐梦琪想去网红店拍照，但是月底没钱了"
+        },
+        {
+          "id": "evt_tang_afternoon_neutral",
+          "attitude": "中立",
+          "effects": {
+            "dorm_mood_delta": 0
+          },
+          "text_hint": "保留意见：唐梦琪想去网红店拍照，但是月底没钱了"
+        },
+        {
+          "id": "evt_tang_afternoon_avoid",
+          "attitude": "回避",
+          "effects": {
+            "dorm_mood_delta": -2
+          },
+          "text_hint": "先回避冲突：唐梦琪想去网红店拍照，但是月底没钱了"
+        }
+      ],
+      "meta": {
+        "source_csv": "03_角色专属.csv",
+        "source_event_type": "角色专属事件",
+        "chapter": 1,
+        "exclusive_char": "唐梦琪",
+        "trigger_conditions_raw": "Affinity>50",
+        "narrative_tags": [
+          "消费观",
+          "友情试探",
+          "体面"
+        ],
+        "potential_conflicts": [
+          "被吐槽花冤枉钱",
+          "中消费主义的陷阱"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角缺钱=>更容易在心里计算成本并感到压力",
+            "主角近期常缓和=>可能会先顾及她的面子"
+          ],
+          "relationship_hooks": [
+            "高亲密唐梦琪=>会把邀约说得更像依赖和撒娇",
+            "关系一般=>更像情感绑架和默认索取"
+          ]
+        },
+        "migration_notes": [],
+        "legacy_scene": "唐梦琪想去网红店拍照，但是月底没钱了，也不好意思向爸妈伸手。她极力邀请你一起去，并暗示“你拍照技术好”。",
+        "opening_goal": "先让唐梦琪的期待和主角的犹豫同时成立",
+        "pressure_goal": "把话题从单纯邀约推进到谁买单和谁承担情绪价值",
+        "turning_goal": "逼主角表态是陪她圆梦还是为自己设边界",
+        "settlement_goal": "形成一次关于体面 消费和友情分寸的印象更新"
+      }
+    },
+    {
+      "id": "evt_chen_organize",
+      "type": "daily",
+      "title": "活动策划翻车",
+      "priority": 62,
+      "cooldown_days": 2,
+      "once": false,
+      "triggers": {
+        "day_min": 8
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "03_角色专属.csv",
+        "source_event_type": "角色专属事件",
+        "chapter": 2,
+        "exclusive_char": "陈雨婷",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "崩溃",
+          "控制失效",
+          "面子危机"
+        ],
+        "potential_conflicts": [
+          "能者多劳的代价",
+          "责任与能力的错位"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角最近常缓和=>更容易被拉去善后",
+            "主角口碑高=>她更可能把真实脆弱露给主角看"
+          ],
+          "relationship_hooks": [
+            "高亲密陈雨婷=>会少一点控制姿态 多一点求助",
+            "低亲密=>会边求助边保持强硬"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "陈雨婷主动接下班级聚会的组织工作，但预算超支、场地被放鸽子、参与人数锐减。她深夜崩溃。",
+        "opening_goal": "先让陈雨婷失控的一面真正出现",
+        "pressure_goal": "推动局面从抱怨翻车升级到要不要让主角帮忙收拾残局",
+        "turning_goal": "逼出一次求助与掌控欲之间的碰撞",
+        "settlement_goal": "形成主角在她心里是工具 盟友 还是可依赖之人的变化"
+      }
+    },
+    {
+      "id": "evt_tang_photo",
+      "type": "daily",
+      "title": "照片被P事件",
+      "priority": 62,
+      "cooldown_days": 2,
+      "once": false,
+      "triggers": {
+        "day_min": 8,
+        "active_any": [
+          "tang_mengqi"
+        ]
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "03_角色专属.csv",
+        "source_event_type": "角色专属事件",
+        "chapter": 2,
+        "exclusive_char": "唐梦琪",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "外貌羞辱",
+          "体面",
+          "假道歉"
+        ],
+        "potential_conflicts": [
+          "虚荣与友谊",
+          "表面功夫"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角SAN低=>更容易把这件事当成公开羞辱",
+            "主角近期退让=>这轮更容易被逼到边界上"
+          ],
+          "relationship_hooks": [
+            "高亲密唐梦琪=>会更想挽回 但也更会撒娇糊弄",
+            "低亲密=>道歉会显得特别像公关辞令"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "唐梦琪发了你们的合照没P你，评论区有人说“你室友怎么长这样”。她来道歉但你觉得她是故意的。",
+        "opening_goal": "先让评论带来的刺痛和尴尬感落地",
+        "pressure_goal": "把话题从一句道歉推进到她平时是否一直在消费主角形象",
+        "turning_goal": "逼出主角是接受 避开 还是彻底挑明心结",
+        "settlement_goal": "形成一次关于表面友好和真实尊重的关系重估"
+      }
+    },
+    {
+      "id": "evt_yinuo_score",
+      "type": "daily",
+      "title": "成绩焦虑发作",
+      "priority": 62,
+      "cooldown_days": 2,
+      "once": false,
+      "triggers": {
+        "day_min": 8,
+        "active_any": [
+          "li_yinuo"
+        ]
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "03_角色专属.csv",
+        "source_event_type": "角色专属事件",
+        "chapter": 2,
+        "exclusive_char": "李一诺",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "失控",
+          "自尊受伤",
+          "角色反差"
+        ],
+        "potential_conflicts": [
+          "完美主义崩塌",
+          "脆弱时刻"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角近期常缓和=>更容易主动去接近她",
+            "主角口碑低=>她可能把关心听成看笑话"
+          ],
+          "relationship_hooks": [
+            "高亲密李一诺=>会更可能露出脆弱和动摇",
+            "低亲密=>会嘴硬拒绝帮助"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "李一诺期中考砸了，这是她人生第一次不及格。她在床上躺了一天没吃饭。",
+        "opening_goal": "先让李一诺罕见失序的一面真正出现",
+        "pressure_goal": "把对话从简单安慰推进到她对失败的恐惧和自我价值危机",
+        "turning_goal": "推动主角做出靠近 拉开距离 或强行劝吃饭的选择",
+        "settlement_goal": "形成一次她是否愿意把软肋暴露给主角的关系变化"
+      }
+    },
+    {
+      "id": "evt_yinuo_rule",
+      "type": "daily",
+      "title": "公约保卫战",
+      "priority": 60,
+      "cooldown_days": 2,
+      "once": false,
+      "triggers": {
+        "day_min": 1,
+        "active_any": [
+          "li_yinuo"
+        ]
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "03_角色专属.csv",
+        "source_event_type": "角色专属事件",
+        "chapter": 1,
+        "exclusive_char": "李一诺",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "规则",
+          "控制欲",
+          "反弹"
+        ],
+        "potential_conflicts": [
+          "自由派当场撕下公约",
+          "规矩与自由的直接碰撞"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角最近常调停=>容易被推成中间裁判",
+            "主角口碑低=>任何立场都会被人解读为站队"
+          ],
+          "relationship_hooks": [
+            "高亲密李一诺=>会期待主角认可规则合理性",
+            "低亲密角色=>会逼主角一起反对她"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "李一诺受不了寝室的脏乱，单方面贴出《寝室卫生公约》，要求每人每天轮值。对此舍友们表达了强烈的反对意见。",
+        "opening_goal": "先让李一诺把公约说得合情合理",
+        "pressure_goal": "推动其他人从抱怨升级到公开反抗或阴阳怪气",
+        "turning_goal": "逼主角面对秩序和自由之间的取舍",
+        "settlement_goal": "形成宿舍里谁掌权 谁最不服的阶段性格局"
+      }
+    },
+    {
+      "id": "evt_zhao_network",
+      "type": "daily",
+      "title": "网线争夺战",
+      "priority": 60,
+      "cooldown_days": 2,
+      "once": false,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "03_角色专属.csv",
+        "source_event_type": "角色专属事件",
+        "chapter": 1,
+        "exclusive_char": "赵鑫",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "怀疑",
+          "技术压迫",
+          "隐私边界"
+        ],
+        "potential_conflicts": [
+          "技术宅的执念",
+          "室友隐私"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角近期爱观察=>更容易被卷进谁在撒谎的推理里",
+            "主角口碑低=>会更容易成为被怀疑对象之一"
+          ],
+          "relationship_hooks": [
+            "高亲密赵鑫=>她会提前向主角解释思路",
+            "低亲密角色=>会觉得这是借技术压人"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "赵鑫发现网速变慢，怀疑有人在蹭网。她开始技术排查，气氛变得紧张。",
+        "opening_goal": "先让赵鑫拿出她怀疑有人蹭网的证据感",
+        "pressure_goal": "把问题从网速变慢推进到谁愿不愿意自证清白",
+        "turning_goal": "逼出是公开检查设备还是适可而止",
+        "settlement_goal": "形成关于信任和隐私边界的新结"
+      }
+    },
+    {
+      "id": "evt_ch4_breakup",
+      "type": "daily",
+      "title": "毕业即分手",
+      "priority": 56,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 22
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 4,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "情感崩塌",
+          "现实挤压",
+          "最后互助"
+        ],
+        "potential_conflicts": [
+          "情感危机与现实的冲突",
+          "集体情绪安抚"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角SAN低=>更容易被对方情绪拖垮",
+            "主角近期可靠=>大家会默认主角来收残局"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会更愿意在主角面前哭崩",
+            "低亲密角色=>会觉得主角的安慰太浅或太理性"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "室友被分手，在寝室哭得撕心裂肺。明天还有毕业答辩，所有人都很慌。",
+        "opening_goal": "先让分手带来的失控状态和答辩压力同时压上来",
+        "pressure_goal": "把局势从单纯陪哭推进到明天现实问题谁来兜底",
+        "turning_goal": "逼出主角是先安抚 先处理答辩危机 还是拉大家一起分担",
+        "settlement_goal": "让毕业前最后一次互相扶持或互相埋怨被看见"
+      }
+    },
+    {
+      "id": "evt_ch4_contract",
+      "type": "daily",
+      "title": "三方协议骗局",
+      "priority": 56,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 22
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 4,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "毕业选择",
+          "善意泼冷水",
+          "面子风险"
+        ],
+        "potential_conflicts": [
+          "善意提醒与扫兴",
+          "识人辨事能力"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角口碑高=>提醒更容易被当真但也更有压力",
+            "主角近期退让=>可能选择先旁敲侧击"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会在高兴和怀疑之间摇摆",
+            "低亲密角色=>会把提醒听成见不得别人好"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "室友签了个看起来很不错的公司，但你觉得那是个骗子公司（网上搜到差评）。她兴奋地请客吃饭。",
+        "opening_goal": "先让她的兴奋和主角的不安形成反差",
+        "pressure_goal": "把局面从提醒一句推进到要不要拿证据扫兴",
+        "turning_goal": "逼出主角是保护对方体面 还是强行揭穿风险",
+        "settlement_goal": "形成一次关于判断力和善意是否被理解的印象"
+      }
+    },
+    {
+      "id": "evt_tpl_rel_public_1",
+      "type": "daily",
+      "title": "[TARGET]在公开场合护你或刺你",
+      "priority": 56,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 22
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 4,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "关系",
+          "关系-升温",
+          "关系-恶化",
+          "公开冲突"
+        ],
+        "potential_conflicts": [
+          "公开站队",
+          "面子与信任",
+          "关系定调"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角口碑高=>公开场合更在意形象管理",
+            "主角低SAN=>更容易把回应变成情绪对抗"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>更可能护短",
+            "低亲密角色=>更可能借机切割"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "在班级公开讨论里，有人点名质疑你。[TARGET]当场替你说话，也可能顺势补刀，所有人都在看你反应。",
+        "opening_goal": "先把公开场景压迫感和围观感做出来",
+        "pressure_goal": "推动对话从一句站队推进到立场是否坐实",
+        "turning_goal": "逼主角回应[TARGET]并重塑彼此关系",
+        "settlement_goal": "形成毕业前关系定调的一次关键回合"
+      }
+    },
+    {
+      "id": "evt_ch3_bf",
+      "type": "daily",
+      "title": "室友的恋爱脑",
+      "priority": 54,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 15
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 3,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "恋爱失衡",
+          "代沟通",
+          "边界疲劳"
+        ],
+        "potential_conflicts": [
+          "恋爱与集体生活的冲突",
+          "沟通责任"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角近期常调停=>更容易被全寝默认去出面",
+            "主角压力高=>沟通时更容易失掉耐心"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会愿意给主角面子稍作收敛",
+            "低亲密角色=>会把提醒听成嫉妒或针对"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "室友谈了恋爱后天天在寝室煲电话粥到凌晨，严重影响其他人休息。你作为寝室长被推出去沟通。",
+        "opening_goal": "先让被影响的人和恋爱脑室友的态度都落地",
+        "pressure_goal": "把提醒从音量问题推进到恋爱是否可以凌驾于集体规则",
+        "turning_goal": "逼出主角是温和沟通 立规矩 还是直接翻脸",
+        "settlement_goal": "形成寝室里谁最有资格说话的阶段性位置"
+      }
+    },
+    {
+      "id": "evt_ch3_family",
+      "type": "daily",
+      "title": "家人住院",
+      "priority": 54,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 15
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 3,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "求助越界",
+          "责任转移",
+          "同情绑架"
+        ],
+        "potential_conflicts": [
+          "同情与负担",
+          "边界被侵犯",
+          "道德困境"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角最近常心软=>更容易被拖入过量负担",
+            "主角边界变强=>更可能提出有限帮助"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会更真诚地暴露无助",
+            "低亲密角色=>求助会更像理所当然"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "室友家人突然住院，她需要立刻回家但期末作业还有两周截止。她想让你帮忙做完。",
+        "opening_goal": "先让室友的突发困境和主角的压力都成立",
+        "pressure_goal": "把局面从同情推进到帮到什么程度才算合理",
+        "turning_goal": "逼主角做出有限帮助 全盘接手 或明确拒绝的选择",
+        "settlement_goal": "留下谁在危机里尊重边界 谁最会道德绑架的印象"
+      }
+    },
+    {
+      "id": "evt_tpl_rel_date_1",
+      "type": "daily",
+      "title": "[TARGET]发来半公开邀约",
+      "priority": 54,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 15
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 3,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "约会",
+          "暧昧推进",
+          "关系-升温"
+        ],
+        "potential_conflicts": [
+          "邀约定义权",
+          "关系命名焦虑",
+          "风险评估"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角近期谨慎=>更可能拖延不正面回应",
+            "主角近期果断=>更可能直接给明确态度"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会期待主角给出清晰回应",
+            "低亲密角色=>会随时给自己留退路"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "晚上你收到[TARGET]消息：“周末要不要单独出去走走？”语气看似随意，但你知道这不是普通约饭。",
+        "opening_goal": "先把邀约的暧昧意味说清楚",
+        "pressure_goal": "推动局面从回复一句话升级到关系定位讨论",
+        "turning_goal": "逼主角在接受 推迟 拒绝三路中承担后果",
+        "settlement_goal": "形成约会前推进或关系降温的明确分叉"
+      }
+    },
+    {
+      "id": "evt_ch2_major",
+      "type": "daily",
+      "title": "转专业风波",
+      "priority": 52,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 8
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 2,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "前途选择",
+          "建议负担",
+          "好心越界"
+        ],
+        "potential_conflicts": [
+          "理想与现实",
+          "建议与干涉的边界"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角近期可靠=>更容易被认真追问意见",
+            "主角压力高=>更难承担建议失败的心理责任"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会把真实痛苦讲得更多",
+            "低亲密角色=>更容易把建议听成居高临下"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "有人想转专业，来征求你的意见。你觉得她现在专业前景更好，但她学得很痛苦。",
+        "opening_goal": "先让来征求意见的人把痛苦和期待说具体",
+        "pressure_goal": "把对话从求建议推进到谁来承担选择后果",
+        "turning_goal": "逼主角给出支持现实 支持理想 或回避判断的态度",
+        "settlement_goal": "形成一次关于信任建议和边界分寸的印象"
+      }
+    },
+    {
+      "id": "evt_ch2_midnight",
+      "type": "daily",
+      "title": "期末深夜崩溃",
+      "priority": 52,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 8
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 2,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "焦虑扩散",
+          "崩溃",
+          "共情边界"
+        ],
+        "potential_conflicts": [
+          "集体焦虑",
+          "情绪感染",
+          "安慰与边界"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角SAN低=>更容易被别人情绪一起拖下去",
+            "主角近期可靠=>更容易被默认去安抚"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会在崩溃时更信任主角的安慰",
+            "低亲密角色=>会把主角的安慰听成说教"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "期末周凌晨三点，有人在寝室突然崩溃大哭，说“复习不完了”“我要挂科了”。所有人都很焦虑，气氛压抑。",
+        "opening_goal": "先让崩溃者的状态和全寝室压抑感扩散开来",
+        "pressure_goal": "把局势从单人情绪崩溃推进到全员如何应对焦虑",
+        "turning_goal": "逼出主角是接住情绪 还是先保住自己的边界",
+        "settlement_goal": "形成谁会在高压下互相扶持 谁会先烦躁撤退的印象"
+      }
+    },
+    {
+      "id": "evt_tpl_rel_ambiguous_1",
+      "type": "daily",
+      "title": "和[TARGET]的微妙靠近",
+      "priority": 52,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 8
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 2,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "暧昧推进",
+          "关系-升温",
+          "关系"
+        ],
+        "potential_conflicts": [
+          "暧昧试探",
+          "边界不明",
+          "怕尴尬"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角压力高=>更容易在关键时刻打哈哈跳过",
+            "主角近期主动=>更可能顺势推进"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会更敢给出暧昧信号",
+            "低亲密角色=>会立刻把话题转安全区"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "你和[TARGET]在教学楼外并肩走了很久，话题从日常抱怨慢慢变成只有彼此懂的暗梗，气氛有点不对劲。",
+        "opening_goal": "先让双方都出现一点超出普通朋友的反应",
+        "pressure_goal": "推动对话从玩笑推进到半真半假的试探",
+        "turning_goal": "逼主角在继续暧昧 保持朋友 或主动切断之间做选择",
+        "settlement_goal": "留下一个可延续的情感线索而非一次性糖"
+      }
+    },
+    {
+      "id": "evt_tpl_rel_repair_1",
+      "type": "daily",
+      "title": "和[TARGET]尝试说开",
+      "priority": 52,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 8
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 2,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "关系-和解",
+          "关系-升温",
+          "尴尬"
+        ],
+        "potential_conflicts": [
+          "和解窗口",
+          "道歉成本",
+          "谁先低头"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角近期强硬=>更难先示弱道歉",
+            "主角近期稳重=>更容易给台阶"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会鼓励把话说完整",
+            "低亲密角色=>会怀疑这只是暂时停火"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "一次偶然独处中，[TARGET]提到“我们是不是一直误会彼此”。气氛不再剑拔弩张，但仍很别扭。",
+        "opening_goal": "先让双方承认至少一处误会来源",
+        "pressure_goal": "推动对话从试探推进到具体边界和期待",
+        "turning_goal": "逼出是否道歉 是否重建最低合作规则",
+        "settlement_goal": "形成一次可持续缓和或失败和解"
+      }
+    },
+    {
+      "id": "evt_ch1_aircon",
+      "type": "daily",
+      "title": "遥控器战争",
+      "priority": 50,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "争吵",
+          "资源分配",
+          "宿舍秩序"
+        ],
+        "potential_conflicts": [
+          "怕冷和怕热的室友激烈争吵",
+          "有人试图抢夺遥控器"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角近期常缓和=>更容易被当成裁判",
+            "主角压力高=>更容易被两边逼急"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>更愿意给主角台阶",
+            "低亲密角色=>会质疑主角偏心"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "典型的南北差异。有人开26度喊冷要盖棉被，有人开20度还喊热。遥控器现在在你手里。",
+        "opening_goal": "尽快明确“遥控器在主角手上”带来的压力中心",
+        "pressure_goal": "让不同立场的人把理由说得更具体而不是只复读冷热",
+        "turning_goal": "推动局势从口头争执升级到要求主角当场做决定",
+        "settlement_goal": "形成暂时规则或新的不满，让冲突留下后续余波"
+      }
+    },
+    {
+      "id": "evt_ch1_alarm",
+      "type": "daily",
+      "title": "早六的闹钟",
+      "priority": 50,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "作息冲突",
+          "价值观",
+          "积怨"
+        ],
+        "potential_conflicts": [
+          "起床气爆发",
+          "学习派与享受派的价值观冲突"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角近期偏观察=>更容易被卷进两派调停",
+            "主角低SAN=>被吵醒后更容易语气失控"
+          ],
+          "relationship_hooks": [
+            "高亲密学习派=>会希望主角理解努力的苦衷",
+            "高亲密晚睡派=>会期待主角替自己说话"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "室友的闹钟在早上6点准时响起。她迅速起床背单词，但是翻书声和台灯光线严重干扰了其他人的睡眠。",
+        "opening_goal": "先明确谁被吵醒最不爽 谁最理直气壮",
+        "pressure_goal": "让冲突从噪音问题上升到生活方式和努力观念",
+        "turning_goal": "逼主角或某人提出一条具体规则而不是继续抱怨",
+        "settlement_goal": "形成新宿舍规则或新的不服气对象"
+      }
+    },
+    {
+      "id": "evt_ch1_borrow",
+      "type": "daily",
+      "title": "借钱风波",
+      "priority": 50,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "借钱",
+          "试探",
+          "边界"
+        ],
+        "potential_conflicts": [
+          "金钱信任",
+          "人情压力",
+          "是否该拒绝"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角缺钱=>拒绝会更有现实压力",
+            "主角高SAN=>更可能冷静谈条件"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会打感情牌",
+            "低亲密角色=>拒绝后更容易翻脸"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "室友突然找你借钱，说急用。但她平时大手大脚，而且已经欠了别人钱。你手头也不宽裕。",
+        "opening_goal": "先让借钱理由和主角的犹豫都说清楚",
+        "pressure_goal": "把问题从借不借推进到信不信得过这个人",
+        "turning_goal": "推动到提出期限 条件 或明确拒绝",
+        "settlement_goal": "形成一次关于金钱边界的长期记忆"
+      }
+    },
+    {
+      "id": "evt_ch1_cold",
+      "type": "daily",
+      "title": "感冒传染期",
+      "priority": 50,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "照顾与嫌弃",
+          "健康焦虑",
+          "边界"
+        ],
+        "potential_conflicts": [
+          "健康权与面子",
+          "自我防护与伤感情"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角SAN低=>更容易把担心说成指责",
+            "主角近期常缓和=>可能先从关心切入"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会更容易接受劝说",
+            "低亲密角色=>会觉得主角嫌弃自己脏"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "室友重感冒但不戴口罩，也不去看医生。你免疫力差，特别担心被传染。",
+        "opening_goal": "先让病人状态和主角顾虑都被看见",
+        "pressure_goal": "推进到是否戴口罩 是否去看医生 或是否分开活动",
+        "turning_goal": "让关心和嫌弃之间的暧昧边界变清楚",
+        "settlement_goal": "形成谁懂得体谅 谁只会嘴硬的印象"
+      }
+    },
+    {
+      "id": "evt_ch1_fridge",
+      "type": "daily",
+      "title": "宿舍小冰箱",
+      "priority": 50,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "共同消费",
+          "精打细算",
+          "潜在旧账"
+        ],
+        "potential_conflicts": [
+          "集体消费矛盾",
+          "公平分配问题"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角最近常调停=>容易被推去提方案",
+            "主角缺钱=>对均摊问题更敏感"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>更愿意接受主角提出的规则",
+            "低亲密角色=>会先质疑主角是否偏袒某人"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "有人提议凑钱买个小冰箱放寝室。但电费怎么算、谁用得多、坏了谁修，全是潜在雷点。",
+        "opening_goal": "先让每个人对小冰箱的需求差异说出来",
+        "pressure_goal": "推进到费用 使用权和维护责任的具体分歧",
+        "turning_goal": "逼出一套规则或彻底否决的决定",
+        "settlement_goal": "形成一次关于公平感和占便宜印象的记账"
+      }
+    },
+    {
+      "id": "evt_ch1_groupwork",
+      "type": "daily",
+      "title": "小组作业的幽灵",
+      "priority": 50,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "搭便车",
+          "署名权",
+          "责任分配"
+        ],
+        "potential_conflicts": [],
+        "hooks": {
+          "state_hooks": [
+            "主角最近常缓和=>容易被要求出来说句公道话",
+            "主角低SAN=>更容易把怨气憋成阴阳怪气"
+          ],
+          "relationship_hooks": [
+            "高亲密干活角色=>会拉主角站边",
+            "低亲密摸鱼角色=>会反咬主角计较太多"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "选修课布置了小组作业，要求每组3-4人。你们寝室刚好凑一组。但有个人从头到尾不参与讨论、不干活，最后还想在报告上署名。",
+        "opening_goal": "先明确谁在干活 谁在躺平 谁在装无辜",
+        "pressure_goal": "让矛盾从抱怨偷懒推进到是否剥夺署名",
+        "turning_goal": "逼出一次公开对质或幕后拉票",
+        "settlement_goal": "让小组合作关系出现长期后遗症 比如以后再也不愿组队"
+      }
+    },
+    {
+      "id": "evt_ch1_laundry",
+      "type": "daily",
+      "title": "洗衣机风波",
+      "priority": 50,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "公共设施",
+          "出钱公平",
+          "生活摩擦"
+        ],
+        "potential_conflicts": [
+          "集体利益与个人成本",
+          "谁该出钱"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角缺钱=>更容易陷入支持修理但掏不出钱的尴尬",
+            "主角高SAN=>更可能推动务实方案"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>愿意和主角一起算账出方案",
+            "低亲密角色=>会怀疑主角借机站道德高地"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "洗衣机坏了，需要凑钱修。但有人觉得是小题大做，想凑合着用，或者干脆手洗。你觉得必须修好，否则生活会一团糟。",
+        "opening_goal": "先明确洗衣机坏掉对每个人造成的具体麻烦",
+        "pressure_goal": "让争论从修不修推进到怎么分摊以及谁最该负责",
+        "turning_goal": "逼出维修方案或拖延后果",
+        "settlement_goal": "形成关于公共支出和责任感的新印象"
+      }
+    },
+    {
+      "id": "evt_ch1_noise",
+      "type": "daily",
+      "title": "噪音污染",
+      "priority": 50,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "熬夜",
+          "边界感",
+          "怨气累积"
+        ],
+        "potential_conflicts": [
+          "睡眠权",
+          "忍耐与反抗的边界"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角压力高=>更容易把一句提醒说得很冲",
+            "宿舍已有旧账=>噪音只是借题发挥的入口"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会愿意压低声音或给主角台阶",
+            "低亲密角色=>会觉得主角管太宽"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "室友半夜开始打游戏，声音很大。你已经睡着了，被吵醒后非常烦躁。",
+        "opening_goal": "先让被吵醒的不适感和打游戏方的态度都落地",
+        "pressure_goal": "推动对话从提醒音量升级到翻生活习惯旧账",
+        "turning_goal": "逼出是立规矩还是彻底撕破脸的选择",
+        "settlement_goal": "留下谁尊重边界 谁记仇的清晰印象"
+      }
+    },
+    {
+      "id": "evt_ch1_takeout",
+      "type": "daily",
+      "title": "外卖被偷",
+      "priority": 50,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "委屈",
+          "追责",
+          "风险取舍"
+        ],
+        "potential_conflicts": [
+          "维护个人权益与怕麻烦的冲突",
+          "怀疑是隔壁寝室干的"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角口碑高=>别人更愿意听主角判断",
+            "主角缺钱=>会更在意损失本身"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会陪主角一起追查",
+            "低亲密角色=>会嫌主角小题大做"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "一楼的外卖架经常丢东西，今天轮到你们寝室了。有人提议去查监控，有人觉得几十块钱算了别惹事。",
+        "opening_goal": "先让失主情绪明确爆发并给出诉求",
+        "pressure_goal": "让寝室内部围绕查不查监控出现立场分裂",
+        "turning_goal": "推进到要不要怀疑具体对象或公开发群消息",
+        "settlement_goal": "形成一次关于边界和出头风险的共识或裂痕"
+      }
+    },
+    {
+      "id": "evt_ch1_visitor",
+      "type": "daily",
+      "title": "深夜访客",
+      "priority": 50,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "边界",
+          "安全感",
+          "站队"
+        ],
+        "potential_conflicts": [
+          "隐私边界",
+          "安全顾虑",
+          "集体生活的规则冲突"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角压力高=>更容易把担心说得尖锐",
+            "主角近期常缓和=>会先试图找折中方案"
+          ],
+          "relationship_hooks": [
+            "高亲密室友=>会私下征求主角意见",
+            "低亲密室友=>会觉得主角多管闲事"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "凌晨一点，有人敲门。是室友的异性朋友，说要借住一晚。室友没拒绝，但其他人明早都有早课。",
+        "opening_goal": "先让借住请求和其他人的不安同时落地",
+        "pressure_goal": "推动讨论从单纯礼貌问题升级到安全和规则边界",
+        "turning_goal": "逼出是否留宿以及谁来承担后果的决定",
+        "settlement_goal": "让大家记住谁重视边界 谁只顾自己方便"
+      }
+    },
+    {
+      "id": "evt_tpl_rel_coldwar_1",
+      "type": "daily",
+      "title": "[TARGET]对你爱答不理",
+      "priority": 50,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "关系-恶化",
+          "冷战",
+          "尴尬"
+        ],
+        "potential_conflicts": [
+          "冷暴力",
+          "误读与自证",
+          "面子僵局"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角SAN低=>更容易把沉默理解成敌意",
+            "主角近期边界强=>更可能直接摊牌"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>会劝双方先说开",
+            "低亲密角色=>会继续装作没事"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "这两天[TARGET]对你明显冷处理：消息不回 说话只嗯哦，公共事务也故意绕开你。",
+        "opening_goal": "先把冷处理带来的空气压迫感立起来",
+        "pressure_goal": "把局面从不舒服推进到要不要主动开口",
+        "turning_goal": "逼主角在摊牌 观察 让步之间做选择",
+        "settlement_goal": "形成冷战延续或一次有限和解"
+      }
+    },
+    {
+      "id": "evt_tpl_rel_conflict_1",
+      "type": "daily",
+      "title": "[TARGET]翻旧账开战",
+      "priority": 50,
+      "cooldown_days": 1,
+      "once": false,
+      "triggers": {
+        "day_min": 1
+      },
+      "options": [],
+      "meta": {
+        "source_csv": "02_通用随机池.csv",
+        "source_event_type": "通用随机池",
+        "chapter": 1,
+        "exclusive_char": "",
+        "trigger_conditions_raw": "",
+        "narrative_tags": [
+          "关系-恶化",
+          "公开冲突",
+          "争吵"
+        ],
+        "potential_conflicts": [
+          "旧账重提",
+          "情绪上头",
+          "谁先退让"
+        ],
+        "hooks": {
+          "state_hooks": [
+            "主角压力高=>更容易被激怒正面回击",
+            "主角近期回避=>更容易被指责装没事"
+          ],
+          "relationship_hooks": [
+            "高亲密角色=>可能尝试打圆场",
+            "低亲密角色=>会围观拱火"
+          ]
+        },
+        "migration_notes": [
+          "原事件无显式触发条件，已按 chapter/day_min 与事件类型做保守映射。"
+        ],
+        "legacy_scene": "你刚回寝室，[TARGET]突然提起上次没说开的矛盾，语气很冲，明显想当场把账算清。",
+        "opening_goal": "让[TARGET]先明确控诉点并占住气势",
+        "pressure_goal": "推动对话从互怼升级到要不要翻出更多旧账",
+        "turning_goal": "逼主角做出反击 解释 或短暂退让",
+        "settlement_goal": "形成一次关系明显恶化或短期停火"
+      }
+    }
+  ]
+}

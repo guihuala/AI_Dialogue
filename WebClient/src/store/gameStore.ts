@@ -24,6 +24,7 @@ interface GameState {
   systemState: Record<string, any>;
   systemDailyPlan: Record<string, any> | null;
   systemKeyResolution: Record<string, any> | null;
+  weeklySummary: Record<string, any> | null;
   
   // 故事与交互
   displayText: string;
@@ -44,6 +45,9 @@ interface GameState {
   turnDebug: {
     timings?: Record<string, number>;
     prompt_diagnostics?: any;
+    render_source?: string;
+    ai_usage?: any;
+    state_delta?: any;
   } | null;
 
   // actions
@@ -86,6 +90,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   systemState: {},
   systemDailyPlan: null,
   systemKeyResolution: null,
+  weeklySummary: null,
   displayText: '',
   nextOptions: [],
   isEnd: false,
@@ -137,6 +142,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         systemState: data.system_state || {},
         systemDailyPlan: data.system_daily_plan || null,
         systemKeyResolution: data.system_key_resolution || null,
+        weeklySummary: data.weekly_summary || null,
         displayText: data.display_text,
         nextOptions: data.next_options || [],
         isEnd: data.is_end || false,
@@ -149,10 +155,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         wechatNotifications: data.wechat_notifications || [],
         eventScript: data.event_script || null
         ,
-        turnDebug: (data.timings || data.prompt_diagnostics)
+        turnDebug: (data.timings || data.prompt_diagnostics || data.render_source || data.ai_usage || data.state_delta)
           ? {
               timings: data.timings || undefined,
               prompt_diagnostics: data.prompt_diagnostics || undefined,
+              render_source: data.render_source || undefined,
+              ai_usage: data.ai_usage || undefined,
+              state_delta: data.state_delta || undefined,
             }
           : null
       });
@@ -250,6 +259,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         systemState: data.system_state || prev.systemState || {},
         systemDailyPlan: data.system_daily_plan || prev.systemDailyPlan || null,
         systemKeyResolution: data.system_key_resolution || null,
+        weeklySummary: data.weekly_summary || null,
         displayText: data.display_text,
         nextOptions: data.next_options || [],
         isEnd: data.is_end || false,
@@ -262,10 +272,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         wechatNotifications: data.wechat_notifications || prev.wechatNotifications,
         eventScript: data.event_script || null
         ,
-        turnDebug: (data.timings || data.prompt_diagnostics)
+        turnDebug: (data.timings || data.prompt_diagnostics || data.render_source || data.ai_usage || data.state_delta)
           ? {
               timings: data.timings || undefined,
               prompt_diagnostics: data.prompt_diagnostics || undefined,
+              render_source: data.render_source || undefined,
+              ai_usage: data.ai_usage || undefined,
+              state_delta: data.state_delta || undefined,
             }
           : null
       }));
@@ -341,6 +354,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               systemState: gameState.system_state || {},
               systemDailyPlan: gameState.system_daily_plan || null,
               systemKeyResolution: gameState.system_key_resolution || null,
+              weeklySummary: null,
               // affinity, hygiene, etc should ideally be in save too
               displayText: "存档已成功加载，您可以继续之前的进度。",
               nextOptions: ["【进入下一幕】继续当前存档"],
@@ -403,6 +417,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               systemState: {},
               systemDailyPlan: null,
               systemKeyResolution: null,
+              weeklySummary: null,
               history: [],
               wechatNotifications: [],
               displayText: '',

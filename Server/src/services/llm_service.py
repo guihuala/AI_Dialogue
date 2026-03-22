@@ -14,6 +14,12 @@ class LLMService:
         self.client = OpenAI(base_url=self.base_url, api_key=self.api_key)
         self.async_client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
         self.typewriter_speed = 30
+        self.last_usage = {
+            "model": self.model,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+        }
 
     def update_config(self, api_key: str, base_url: str, model: str):
         if not api_key:
@@ -35,6 +41,12 @@ class LLMService:
                           max_tokens: int = 1000, presence_penalty: float = 0.0, 
                           frequency_penalty: float = 0.0) -> str:
         if not self.api_key or self.api_key == "dummy": return '{"error": "API Key not set"}'
+        self.last_usage = {
+            "model": self.model,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+        }
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Context:\n{context}\n\nUser: {user_input}"}
@@ -47,6 +59,13 @@ class LLMService:
                 max_tokens=max_tokens, presence_penalty=presence_penalty, frequency_penalty=frequency_penalty,
                 response_format={"type": "json_object"}
             )
+            usage = getattr(completion, "usage", None)
+            self.last_usage = {
+                "model": self.model,
+                "prompt_tokens": getattr(usage, "prompt_tokens", None) if usage is not None else None,
+                "completion_tokens": getattr(usage, "completion_tokens", None) if usage is not None else None,
+                "total_tokens": getattr(usage, "total_tokens", None) if usage is not None else None,
+            }
             return completion.choices[0].message.content
         except Exception as e:
             error_str = str(e).lower()
@@ -57,6 +76,13 @@ class LLMService:
                         model=self.model, messages=messages, temperature=temperature, top_p=top_p,
                         max_tokens=max_tokens, presence_penalty=presence_penalty, frequency_penalty=frequency_penalty
                     )
+                    usage = getattr(completion, "usage", None)
+                    self.last_usage = {
+                        "model": self.model,
+                        "prompt_tokens": getattr(usage, "prompt_tokens", None) if usage is not None else None,
+                        "completion_tokens": getattr(usage, "completion_tokens", None) if usage is not None else None,
+                        "total_tokens": getattr(usage, "total_tokens", None) if usage is not None else None,
+                    }
                     return completion.choices[0].message.content
                 except Exception as inner_e:
                     print(f"LLM 降级生成也失败: {inner_e}")

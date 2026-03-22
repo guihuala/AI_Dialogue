@@ -21,7 +21,7 @@ AI_Dialogue/
 ├── WebClient/           # React + Vite 前端
 ├── Server/              # FastAPI + 游戏引擎后端
 ├── docs/                # 项目文档
-│   └── project_guide/   # 本次整理的总说明目录
+│   └── project_guide/
 ├── README.md
 └── README_EN.md
 ```

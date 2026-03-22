@@ -42,8 +42,12 @@ export const EditorSidebar = ({
         files.csv.forEach(f => {
             const item = { type: 'csv' as const, name: f };
             result.all.push(item);
-            if (f === 'timeline.json') {
-                result.event.unshift(item); // Always put timeline at the top
+            if (f.includes('event_skeletons.generated.json')) {
+                result.event.unshift(item); // 优先显示迁移草稿
+            } else if (f.includes('event_skeletons.json')) {
+                result.event.unshift(item); // 其次显示正式骨架
+            } else if (f === 'timeline.json') {
+                result.event.unshift(item); // timeline 在骨架之后
             } else {
                 result.event.push(item);
             }
