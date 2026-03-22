@@ -64,6 +64,14 @@ export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew, canEdi
             icon: MessageSquare, 
             fileName: 'world/academic_npcs.md',
             color: 'bg-[var(--color-cyan-light)]'
+        },
+        {
+            id: 'scenes',
+            title: '场景与背景图谱',
+            description: '配置场景名称、关键词与背景图片映射（支持自定义 URL）。',
+            icon: Sparkles,
+            fileName: 'world/scenes.json',
+            color: 'bg-[var(--color-cyan-main)]'
         }
     ];
 

@@ -2,6 +2,7 @@ import os
 import csv
 import json
 import re
+from typing import Any, Dict
 
 from src.core.config import get_user_prompts_dir, DEFAULT_PROMPTS_DIR
 
@@ -376,6 +377,54 @@ class PromptManager:
     def get_main_system_prompt(self, context: dict) -> str:
         bundle = self.get_main_system_prompt_bundle(context)
         return bundle.get("final_prompt", "")
+
+    def get_mod_features(self) -> Dict[str, Any]:
+        """
+        从模组可编辑文件读取系统开关。
+        约定路径：prompts/system/mod_features.json
+        """
+        raw = self._read_md("system/mod_features.json")
+        if not raw:
+            return {}
+        try:
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def is_phone_system_enabled(self) -> bool:
+        features = self.get_mod_features()
+        value = features.get("phone_system_enabled", features.get("wechat_system_enabled", True))
+        return bool(value)
+
+    def get_expression_flavor_context(self, context: dict) -> str:
+        """
+        expression-only 模式下的轻量设定注入：
+        保留世界观/角色差异，同时控制长度避免显著增加延迟。
+        """
+        compact_ctx = dict(context or {})
+        compact_ctx["prompt_budget"] = "compact"
+
+        blocks = []
+        world_text = self._skill_academic_world(compact_ctx)
+        if world_text:
+            blocks.append(world_text.strip())
+
+        char_text = self._skill_character_roster(compact_ctx)
+        if char_text:
+            blocks.append(char_text.strip())
+
+        rel_text = self._skill_relationship_matrix(compact_ctx)
+        if rel_text:
+            blocks.append(rel_text.strip())
+
+        if not blocks:
+            return ""
+
+        merged = "\n\n".join(blocks).strip()
+        if len(merged) > 900:
+            merged = merged[:900].rstrip() + "…"
+        return merged
 
     def get_main_author_note(self, context: dict = None, compact: bool = False) -> str:
         context = context or {}

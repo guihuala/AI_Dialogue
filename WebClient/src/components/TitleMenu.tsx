@@ -19,49 +19,60 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
         };
     }, []);
 
-    const weekDays = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
-    const currentDay = weekDays[currentTime.getDay()];
-
     return (
         <div className="flex-1 flex flex-col items-center justify-center relative min-h-[500px] h-full w-full animate-fade-in group overflow-hidden rounded-[2.5rem] bg-[var(--color-cyan-light)]/30 border-2 border-[var(--color-cyan-main)]/20 shadow-[0_20px_50px_rgba(0,188,212,0.1)]">
 
             {/* Warm/Light Background Layer */}
             <div className="absolute inset-0 z-0">
-                <div
-                    className="absolute inset-0 bg-cover bg-center scale-105"
-                    style={{
-                        backgroundImage: "url('/assets/title_bg.png')",
-                        animation: 'soft-float 20s ease-in-out infinite'
-                    }}
-                />
+                {/* Scrolling texture (below protagonist cover) */}
+                <div className="absolute inset-0 opacity-[0.46] pointer-events-none">
+                    <div
+                        className="absolute inset-0 animate-texture-scroll"
+                        style={{
+                            backgroundImage: "repeating-linear-gradient(135deg, rgba(0,188,212,0.22) 0 6px, rgba(0,188,212,0) 6px 30px)",
+                            backgroundSize: "40px 40px",
+                        }}
+                    />
+                </div>
+                <div className="absolute inset-0 md:inset-0">
+                    <div
+                        className="absolute inset-0 bg-cover"
+                        style={{
+                            backgroundImage: "url('/assets/cover/cover_01.webp')",
+                            backgroundPosition: "62% center",
+                        }}
+                    />
+                </div>
                 {/* Light overlays */}
                 <div className="absolute inset-0 bg-gradient-to-t from-[var(--color-cyan-light)]/80 via-transparent to-white/40" />
                 <div className="absolute inset-0 backdrop-blur-[0.5px] bg-white/10 mix-blend-soft-light" />
-            </div>
 
-            {/* 2. Top Info Bar (Lifestyle focus - Cyan Palette) */}
-            <div className="absolute top-10 left-10 right-10 z-20 flex justify-end items-start pointer-events-none">
-                {/* Right: Date & Clock */}
-                <div className="flex flex-col items-end gap-3 pointer-events-auto">
-                    <div className="flex flex-col items-end px-5 py-3 glass-panel rounded-2xl border-white/60 shadow-sm">
-                        <div className="flex items-baseline gap-2">
-                            <span className="text-2xl font-black text-[var(--color-cyan-dark)] font-mono tracking-tighter">
-                                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                            <span className="text-xs font-black text-[var(--color-cyan-main)]/80">{currentDay}</span>
-                        </div>
-                        <span className="text-[9px] font-black text-[var(--color-cyan-main)]/60 uppercase tracking-[0.2em] mt-1">
-                            {currentTime.getFullYear()}年{currentTime.getMonth() + 1}月{currentTime.getDate()}日
-                        </span>
-                    </div>
+                {/* Floating roommate placeholders (6 cards) */}
+                <div className="absolute left-[48%] top-[12%] w-16 h-16 md:w-24 md:h-24 rounded-2xl overflow-hidden border-2 border-white/70 shadow-xl animate-float-card pointer-events-none">
+                    <img src="/assets/portraits/唐.webp" className="w-full h-full object-cover" />
+                </div>
+                <div className="absolute left-[42%] top-[27%] w-14 h-14 md:w-20 md:h-20 rounded-xl overflow-hidden border-2 border-white/65 shadow-lg animate-float-card-delayed pointer-events-none">
+                    <img src="/assets/portraits/李.webp" className="w-full h-full object-cover" />
+                </div>
+                <div className="absolute left-[48%] top-[46%] w-14 h-14 md:w-20 md:h-20 rounded-xl overflow-hidden border-2 border-white/65 shadow-lg animate-float-card-slow pointer-events-none">
+                    <img src="/assets/portraits/赵.webp" className="w-full h-full object-cover" />
+                </div>
+                <div className="absolute right-[14%] top-[15%] w-16 h-16 md:w-24 md:h-24 rounded-2xl overflow-hidden border-2 border-white/70 shadow-xl animate-float-card-slow pointer-events-none">
+                    <img src="/assets/portraits/林.webp" className="w-full h-full object-cover" />
+                </div>
+                <div className="absolute right-[8%] top-[34%] w-14 h-14 md:w-20 md:h-20 rounded-xl overflow-hidden border-2 border-white/65 shadow-lg animate-float-card pointer-events-none">
+                    <img src="/assets/portraits/陈.webp" className="w-full h-full object-cover" />
+                </div>
+                <div className="absolute right-[16%] top-[50%] w-14 h-14 md:w-20 md:h-20 rounded-xl overflow-hidden border-2 border-white/65 shadow-lg animate-float-card-delayed pointer-events-none">
+                    <img src="/assets/portraits/苏.webp" className="w-full h-full object-cover" />
                 </div>
             </div>
 
             {/* Center Logo & Actions (Cyan + Yellow) */}
-            <div className="relative z-10 flex flex-col items-center max-w-2xl w-full">
-                <div className="text-center mb-16 space-y-8">
-                    <div className="flex flex-col items-center">
-                        <h1 className="flex flex-col items-center gap-2">
+            <div className="relative z-10 flex flex-col items-start max-w-2xl w-full mr-auto ml-[6%] md:ml-[8%]">
+                <div className="text-left mb-16 space-y-8">
+                    <div className="flex flex-col items-start">
+                        <h1 className="flex flex-col items-start gap-2">
                             <span className="text-7xl md:text-8xl font-black text-[var(--color-cyan-dark)] tracking-tighter drop-shadow-sm">
                                 UNIVERSITY
                             </span>
@@ -81,7 +92,7 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
                         className="group relative px-6 py-10 bg-[var(--color-cyan-dark)] text-white rounded-[2.5rem] font-black tracking-[0.6em] uppercase transition-all shadow-2xl hover:-translate-y-2 active:translate-y-0 flex items-center justify-center text-2xl overflow-hidden hover:bg-[var(--color-cyan-main)]"
                     >
                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-shimmer" />
-                        开始宿舍生活
+                        开始游戏
                     </button>
 
                     <div className="grid grid-cols-2 gap-5">
@@ -90,18 +101,18 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
                             className="flex flex-col items-center justify-center py-7 glass-panel hover:bg-white text-[var(--color-cyan-dark)] rounded-[2rem] transition-all group hover:-translate-y-1 shadow-sm border-white/60"
                         >
                             <Cloud className="mb-2 text-[var(--color-cyan-main)] group-hover:scale-110 transition-transform" size={24} />
-                            <span className="text-[10px] font-black tracking-widest uppercase">编写模组</span>
+                            <span className="text-[10px] font-black tracking-widest uppercase">创意工坊</span>
                         </button>
                         <button
                             onClick={onEditor}
                             className="flex flex-col items-center justify-center py-7 glass-panel hover:bg-white text-[var(--color-cyan-dark)] rounded-[2rem] transition-all group hover:-translate-y-1 shadow-sm border-white/60"
                         >
                             <BookOpen className="mb-2 text-[var(--color-cyan-main)] group-hover:scale-110 transition-transform" size={24} />
-                            <span className="text-[10px] font-black tracking-widest uppercase">创意工坊</span>
+                            <span className="text-[10px] font-black tracking-widest uppercase">编写模组</span>
                         </button>
                     </div>
 
-                    <div className="self-center flex items-center gap-3">
+                    <div className="self-start flex items-center gap-3">
                         <button
                             onClick={onAnnouncement}
                             className="px-6 py-2.5 glass-panel text-[var(--color-yellow-main)]/90 hover:text-[var(--color-cyan-dark)] font-black text-[10px] tracking-[0.35em] uppercase transition-all flex items-center rounded-full hover:bg-white border-white/40 shadow-sm"
@@ -147,6 +158,35 @@ if (typeof document !== 'undefined' && !document.getElementById('title-menu-styl
         @keyframes shimmer {
             from { transform: translateX(-100%); }
             to { transform: translateX(100%); }
+        }
+        @keyframes float-card {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        @keyframes float-card-delayed {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-14px); }
+        }
+        @keyframes float-card-slow {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+        }
+        @keyframes texture-scroll {
+            0% { transform: translate3d(0, 0, 0); }
+            100% { transform: translate3d(-40px, -40px, 0); }
+        }
+        .animate-float-card {
+            animation: float-card 6s ease-in-out infinite;
+        }
+        .animate-float-card-delayed {
+            animation: float-card-delayed 7.5s ease-in-out infinite;
+        }
+        .animate-float-card-slow {
+            animation: float-card-slow 9s ease-in-out infinite;
+        }
+        .animate-texture-scroll {
+            animation: texture-scroll 8s linear infinite;
+            will-change: transform;
         }
     `;
     document.head.appendChild(style);

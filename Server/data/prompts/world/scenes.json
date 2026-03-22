@@ -1,0 +1,40 @@
+{
+  "default_image": "/assets/backgrounds/宿舍.jpg",
+  "scenes": [
+    {
+      "name": "宿舍",
+      "image": "/assets/backgrounds/宿舍.jpg",
+      "keywords": ["宿舍", "寝室"]
+    },
+    {
+      "name": "教室",
+      "image": "/assets/backgrounds/教室.jpg",
+      "keywords": ["教室"]
+    },
+    {
+      "name": "图书馆",
+      "image": "/assets/backgrounds/图书馆.jpg",
+      "keywords": ["图书馆"]
+    },
+    {
+      "name": "食堂",
+      "image": "/assets/backgrounds/食堂.jpg",
+      "keywords": ["食堂"]
+    },
+    {
+      "name": "商业街",
+      "image": "/assets/backgrounds/商业街.jpg",
+      "keywords": ["商业街"]
+    },
+    {
+      "name": "办公室",
+      "image": "/assets/backgrounds/办公室.jpg",
+      "keywords": ["办公室"]
+    },
+    {
+      "name": "未知",
+      "image": "/assets/backgrounds/未知.jpg",
+      "keywords": ["未知"]
+    }
+  ]
+}

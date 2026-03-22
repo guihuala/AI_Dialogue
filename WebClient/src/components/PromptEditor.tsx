@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Globe, Users, ScrollText, Terminal, Sparkles, GitGraph, Zap } from 'lucide-react';
+import { Globe, Users, ScrollText, Terminal, Sparkles, GitGraph, Zap, Image } from 'lucide-react';
 import { gameApi } from '../api/gameApi';
 
 import { EditorHeader } from './editor/EditorHeader';
@@ -7,6 +7,7 @@ import { EditorSidebar } from './editor/EditorSidebar';
 import { CharacterEditor } from './editor/CharacterEditor';
 import { EventEditor } from './editor/EventEditor';
 import { EventSkeletonEditor } from './editor/EventSkeletonEditor';
+import { SceneConfigEditor } from './editor/SceneConfigEditor';
 import { CodeWorkspace } from './editor/CodeWorkspace';
 import { TimelineView } from './editor/TimelineView';
 import { TopicExplorer } from './editor/TopicExplorer';
@@ -46,6 +47,8 @@ export const PromptEditor = () => {
     });
     const [skeletonAutoFixPreset, setSkeletonAutoFixPreset] = useState<AutoFixPresetId>('balanced');
     const [skeletonRules, setSkeletonRules] = useState<any>(null);
+    const [modFeatures, setModFeatures] = useState<any>({ phone_system_enabled: true });
+    const [isSavingFeatures, setIsSavingFeatures] = useState(false);
 
     const [message, setMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -100,9 +103,55 @@ export const PromptEditor = () => {
                         setShowExplorer(false);
                     }
                 }
+                await loadModFeatures(filesRes.md || []);
             }
         } catch (e) {
             setMessage('无法获取文件列表');
+        }
+    };
+
+    const loadModFeatures = async (mdFiles?: string[]) => {
+        const mdList = Array.isArray(mdFiles) ? mdFiles : files.md;
+        const target = mdList.find((f: string) => f === 'system/mod_features.json') || 'system/mod_features.json';
+        try {
+            const res = await gameApi.getAdminFile('md', target);
+            if (res?.status === 'success' && res.content) {
+                const parsed = JSON.parse(res.content);
+                if (parsed && typeof parsed === 'object') {
+                    setModFeatures({
+                        phone_system_enabled: parsed.phone_system_enabled !== false,
+                        ...parsed,
+                    });
+                    return;
+                }
+            }
+        } catch {
+            // fall through to default
+        }
+        setModFeatures({ phone_system_enabled: true });
+    };
+
+    const handleTogglePhoneSystem = async (enabled: boolean) => {
+        if (!canEditCurrentMod) {
+            setMessage('默认模组为只读，请先另存到本地模组库后再编辑');
+            setTimeout(() => setMessage(''), 3000);
+            return;
+        }
+        const next = {
+            ...(modFeatures || {}),
+            phone_system_enabled: enabled,
+            wechat_system_enabled: enabled,
+        };
+        setModFeatures(next);
+        setIsSavingFeatures(true);
+        try {
+            await gameApi.saveAdminFile('md', 'system/mod_features.json', JSON.stringify(next, null, 2));
+            setMessage('手机系统开关已更新');
+        } catch {
+            setMessage('手机系统开关保存失败');
+        } finally {
+            setIsSavingFeatures(false);
+            setTimeout(() => setMessage(''), 2500);
         }
     };
 
@@ -144,6 +193,13 @@ export const PromptEditor = () => {
                 } else if (skeletonDraft) {
                     setSelectedFile({ type: 'csv', name: skeletonDraft });
                 }
+            }
+        } else if (activeCategory === 'scene') {
+            const sceneFile = files.md.find((f) => f === 'world/scenes.json') || files.md.find((f) => f.includes('world/scenes.json'));
+            if (sceneFile) {
+                setSelectedFile({ type: 'md', name: sceneFile });
+                setShowExplorer(false);
+                setEditMode('visual');
             }
         } else if (activeCategory === 'world' || activeCategory === 'skills') {
             setShowExplorer(false);
@@ -247,6 +303,7 @@ export const PromptEditor = () => {
 
     const categories = [
         { id: 'world', name: '世界设定', icon: Globe },
+        { id: 'scene', name: '场景配置', icon: Image },
         { id: 'char', name: '角色管理', icon: Users },
         { id: 'relation', name: '人物关系', icon: GitGraph }, 
         { id: 'event', name: '剧情编排', icon: ScrollText },
@@ -260,6 +317,21 @@ export const PromptEditor = () => {
         }
         return stableRoster;
     }, [fileContent, selectedFile, stableRoster]);
+
+    const parsedScenes = useMemo(() => {
+        if (selectedFile?.name === 'world/scenes.json') {
+            try {
+                const parsed = JSON.parse(fileContent || '{}');
+                return {
+                    default_image: parsed?.default_image || '/assets/backgrounds/宿舍.jpg',
+                    scenes: Array.isArray(parsed?.scenes) ? parsed.scenes : [],
+                };
+            } catch {
+                return { default_image: '/assets/backgrounds/宿舍.jpg', scenes: [] };
+            }
+        }
+        return null;
+    }, [fileContent, selectedFile]);
 
     const updateRosterItem = (id: string, field: string, value: any) => {
         if (!parsedRoster) return;
@@ -879,6 +951,27 @@ ${data.content}`;
                 />
 
                 <div className="flex-1 flex flex-col bg-[var(--color-cyan-light)]/10 p-6 md:p-8 overflow-hidden relative">
+                    {activeCategory === 'skills' && (
+                        <div className="mb-4 rounded-2xl border border-[var(--color-cyan-main)]/15 bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div className="text-sm font-black text-[var(--color-cyan-dark)]">附加系统开关</div>
+                                <div className="text-[10px] font-bold text-slate-500 mt-1">
+                                    手机系统关闭后，游戏内不会再生成微信通知，右上角手机按钮会自动隐藏。
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => handleTogglePhoneSystem(!(modFeatures?.phone_system_enabled !== false))}
+                                disabled={isSavingFeatures}
+                                className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition-all ${
+                                    modFeatures?.phone_system_enabled !== false
+                                        ? 'bg-[var(--color-cyan-main)] text-white'
+                                        : 'bg-slate-100 text-slate-600'
+                                } ${isSavingFeatures ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            >
+                                {isSavingFeatures ? '保存中...' : (modFeatures?.phone_system_enabled !== false ? '手机系统：已开启' : '手机系统：已关闭')}
+                            </button>
+                        </div>
+                    )}
                     {activeCategory === 'event' && (
                         <div className="mb-4 rounded-2xl border border-[var(--color-cyan-main)]/15 bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
                             <div>
@@ -938,6 +1031,13 @@ ${data.content}`;
                                     onSelectTopic={handleSelectTopic}
                                     canEdit={canEditCurrentMod}
                                     onAddNew={activeCategory === 'skills' ? () => setNewItemModal({ type: 'skill', name: '', description: '' }) : undefined}
+                                />
+                            ) : activeCategory === 'scene' && selectedFile?.name === 'world/scenes.json' && editMode === 'visual' ? (
+                                <SceneConfigEditor
+                                    config={parsedScenes || { default_image: '/assets/backgrounds/宿舍.jpg', scenes: [] }}
+                                    onChange={(next) => setFileContent(JSON.stringify(next, null, 2))}
+                                    onSave={() => handleSave()}
+                                    canEdit={canEditCurrentMod}
                                 />
                             ) : activeCategory === 'char' && selectedFile?.name.endsWith('roster.json') && editMode === 'visual' ? (
                                 <CharacterEditor

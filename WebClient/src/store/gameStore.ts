@@ -32,6 +32,7 @@ interface GameState {
   isEnd: boolean;
   history: Array<{turn: number, text: string, rawJson?: string, narrativeState?: Record<string, any>}>;
   wechatNotifications: Array<{sender: string, message: string}>;
+  phoneSystemEnabled: boolean;
   isPhoneOpen: boolean;
   typewriterSpeed: number;
   audioVolume: number;
@@ -96,6 +97,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   isEnd: false,
   history: [],
   wechatNotifications: [],
+  phoneSystemEnabled: true,
   isPhoneOpen: false,
   typewriterSpeed: 30,
   audioVolume: 80,
@@ -153,6 +155,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           narrativeState: data.narrative_state || {}
         }],
         wechatNotifications: data.wechat_notifications || [],
+        phoneSystemEnabled: data.phone_system_enabled !== false,
         eventScript: data.event_script || null
         ,
         turnDebug: (data.timings || data.prompt_diagnostics || data.render_source || data.ai_usage || data.state_delta)
@@ -270,6 +273,8 @@ export const useGameStore = create<GameState>((set, get) => ({
           narrativeState: data.narrative_state || prev.narrativeState || {}
         }],
         wechatNotifications: data.wechat_notifications || prev.wechatNotifications,
+        phoneSystemEnabled: data.phone_system_enabled !== false,
+        isPhoneOpen: (data.phone_system_enabled === false) ? false : prev.isPhoneOpen,
         eventScript: data.event_script || null
         ,
         turnDebug: (data.timings || data.prompt_diagnostics || data.render_source || data.ai_usage || data.state_delta)
@@ -322,7 +327,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   togglePhone: (open?: boolean) => {
-      set((state) => ({ isPhoneOpen: open !== undefined ? open : !state.isPhoneOpen }));
+      set((state) => {
+        if (!state.phoneSystemEnabled) {
+          return { isPhoneOpen: false };
+        }
+        return { isPhoneOpen: open !== undefined ? open : !state.isPhoneOpen };
+      });
   },
 
   setTypewriterSpeed: (speed: number) => {
@@ -361,6 +371,8 @@ export const useGameStore = create<GameState>((set, get) => ({
               isEnd: false,
               history: gameState.history || [],
               wechatNotifications: []
+              ,
+              phoneSystemEnabled: true
               ,
               turnDebug: null
           });
@@ -420,6 +432,8 @@ export const useGameStore = create<GameState>((set, get) => ({
               weeklySummary: null,
               history: [],
               wechatNotifications: [],
+              phoneSystemEnabled: true,
+              isPhoneOpen: false,
               displayText: '',
               turnDebug: null
           });

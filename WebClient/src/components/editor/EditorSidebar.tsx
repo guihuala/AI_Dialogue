@@ -28,12 +28,13 @@ export const EditorSidebar = ({
 
     const categorizedFiles = useMemo(() => {
         const result: Record<Category, { type: 'md' | 'csv', name: string }[]> = {
-            world: [], char: [], relation: [], event: [], skills: [], all: []
+            world: [], scene: [], char: [], relation: [], event: [], skills: [], all: []
         };
         files.md.forEach(f => {
             const item = { type: 'md' as const, name: f };
             result.all.push(item);
-            if (f.startsWith('world/')) result.world.push(item);
+            if (f === 'world/scenes.json') result.scene.push(item);
+            else if (f.startsWith('world/')) result.world.push(item);
             else if (f.endsWith('relationship.csv')) result.relation.push(item);
             else if (f.startsWith('characters/') || f.endsWith('roster.json')) result.char.push(item);
             else if (f.startsWith('skills/') || f.startsWith('system/')) result.skills.push(item);

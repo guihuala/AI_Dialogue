@@ -654,7 +654,12 @@ class GameEngine:
             pass
         return fallback
 
-    def _build_expression_system_prompt(self, player_name: str) -> str:
+    def _build_expression_system_prompt(self, player_name: str, phone_system_enabled: bool = True) -> str:
+        phone_line = (
+            "- 可选：若本轮存在明显互动后果，可在 effects 添加 0-1 条 wechat:群聊名|发送者|消息内容\n"
+            if phone_system_enabled
+            else "- 手机系统已禁用：不要输出任何 wechat 相关效果\n"
+        )
         fallback = (
             "你是校园宿舍生活的叙事导演，仅负责文本表现，不负责规则结算。\n"
             f"玩家主角名：{player_name}\n"
@@ -663,7 +668,7 @@ class GameEngine:
             "- 场景一句话（scene_line）\n"
             "- 3-6句对话（dialogue_lines）\n"
             "- 3-4个可执行选项文案（options_copy）\n"
-            "- 可选：若本轮存在明显互动后果，可在 effects 添加 0-1 条 wechat:群聊名|发送者|消息内容\n"
+            f"{phone_line}"
             "- 不输出 mood 字段，不输出解释文本。\n"
             "风格：自然口语、具体动作，不要模板腔。"
         )
@@ -735,6 +740,19 @@ class GameEngine:
         week = int(((system_state or {}).get("time", {}) or {}).get("week", 1) or 1)
         mood = float((system_state or {}).get("dorm_mood", 50) or 50)
         plan_hint = self._build_system_plan_hint(system_daily_plan)
+        flavor_context = ""
+        try:
+            flavor_context = self.pm.get_expression_flavor_context(
+                {
+                    "event_name": str(getattr(next_evt, "name", "") or "").strip(),
+                    "event_description": str(getattr(next_evt, "description", "") or "").strip(),
+                    "active_chars": list(selected_chars or []),
+                    "player_name": str(self.player_name or "").strip(),
+                    "prompt_budget": "compact",
+                }
+            )
+        except Exception:
+            flavor_context = ""
         fallback = (
             f"【事件】{getattr(next_evt, 'name', '')}\n"
             f"【场景】{getattr(next_evt, 'description', '')}\n"
@@ -744,6 +762,7 @@ class GameEngine:
             f"【玩家动作】{action_text}\n"
             f"【系统结算（已生效）】{resolved_hint}\n"
             f"【系统事件线索】{plan_hint}\n"
+            f"【模组世界与角色基调】\n{flavor_context or '无'}\n"
             "【写作要求】直接给短表现，不要复述设定。"
         )
         try:
@@ -757,6 +776,7 @@ class GameEngine:
                 "player_action": str(action_text or "").strip(),
                 "resolved_hint": resolved_hint,
                 "plan_hint": plan_hint,
+                "flavor_context": flavor_context,
             }
             content = self.pm.render_prompt_file("system/expression_user_prompt.md", context)
             if isinstance(content, str) and content.strip():
@@ -1411,6 +1431,11 @@ class GameEngine:
         effective_dialogue_mode = self.dialogue_mode
         use_branch_tree = effective_dialogue_mode in ["tree_only", "hybrid"]
         expression_only_mode_active = bool(self.expression_only_mode)
+        phone_system_enabled = bool(
+            self.pm.is_phone_system_enabled()
+            if hasattr(self, "pm") and hasattr(self.pm, "is_phone_system_enabled")
+            else True
+        )
         if effective_dialogue_mode in ["tree_only", "hybrid"]:
             # 分支树模式依旧由单一 DM 兜底实时生成，只是额外启用剧本预生成/缓存能力。
             effective_dialogue_mode = "single_dm"
@@ -1740,7 +1765,7 @@ class GameEngine:
                     stat_wechat = stats_data.get("wechat_notifications", []) if isinstance(stats_data, dict) else []
                     if isinstance(stat_wechat, list):
                         cached_wechat_notifications.extend([w for w in stat_wechat if isinstance(w, dict)])
-                    if not cached_wechat_notifications:
+                    if (not cached_wechat_notifications) and phone_system_enabled:
                         cached_wechat_notifications = self._build_wechat_fallback_notifications(
                             selected_chars=selected_chars,
                             system_key_resolution=system_key_resolution,
@@ -1773,7 +1798,8 @@ class GameEngine:
                         "weekly_summary": weekly_summary,
                         "state_delta": state_delta,
                         "ai_usage": self._get_llm_usage_snapshot(),
-                        "wechat_notifications": cached_wechat_notifications,
+                        "wechat_notifications": cached_wechat_notifications if phone_system_enabled else [],
+                        "phone_system_enabled": phone_system_enabled,
                     })
             elif not is_prefetch:
                 prefetcher.mark_fallback()
@@ -1822,7 +1848,11 @@ class GameEngine:
                 lore_str = ""
         mark_timing("lore_search", lore_started_at)
 
-        wechat_summary = self._build_wechat_summary(wechat_data_dict, compact=(prompt_budget == "compact"))
+        wechat_summary = (
+            self._build_wechat_summary(wechat_data_dict, compact=(prompt_budget == "compact"))
+            if phone_system_enabled
+            else ""
+        )
 
         game_context = {
             "chapter": chapter,
@@ -1839,7 +1869,7 @@ class GameEngine:
         prompt_started_at = time.perf_counter()
         system_prompt_bundle = {"static_blocks": [], "repeated_blocks": [], "dynamic_blocks": [], "trimmable_blocks": [], "final_prompt": ""}
         if expression_only_mode_active:
-            sys_prm = self._build_expression_system_prompt(player_name)
+            sys_prm = self._build_expression_system_prompt(player_name, phone_system_enabled=phone_system_enabled)
         else:
             system_prompt_bundle = self.pm.get_main_system_prompt_bundle(game_context)
             sys_prm = system_prompt_bundle.get("final_prompt", "")
@@ -2377,17 +2407,17 @@ class GameEngine:
             mark_timing("memory_save", memory_save_started_at)
 
             valid_notifs = []
-            wechat_list = parsed.get("wechat_notifications", [])
+            wechat_list = parsed.get("wechat_notifications", []) if phone_system_enabled else []
             if isinstance(wechat_list, dict): wechat_list = [wechat_list]
             effect_wechat = effects_data.get("wechat_notifications", []) if isinstance(effects_data, dict) else []
             if isinstance(effect_wechat, list) and effect_wechat:
                 wechat_list = wechat_list + effect_wechat
-            if (not isinstance(wechat_list, list) or not wechat_list) and not is_prefetch:
+            if phone_system_enabled and (not isinstance(wechat_list, list) or not wechat_list) and not is_prefetch:
                 wechat_list = self._build_wechat_fallback_notifications(
                     selected_chars=selected_chars,
                     system_key_resolution=system_key_resolution,
                 )
-            if isinstance(wechat_list, list):
+            if phone_system_enabled and isinstance(wechat_list, list):
                 for w in wechat_list:
                     if not isinstance(w, dict): continue 
                     
@@ -2484,6 +2514,7 @@ class GameEngine:
                 "player_name": player_name,
                 "next_options": extracted_options, 
                 "wechat_notifications": valid_notifs,
+                "phone_system_enabled": phone_system_enabled,
                 "narrator_transition": parsed.get("narrator_transition", ""),
                 "dialogue_sequence": seq if isinstance(seq, list) else [],
                 "event_script": final_script, # 关键：即使当前回合是实时生成的，也要把后台生好的剧本传回前端

@@ -1,4 +1,4 @@
-export type Category = 'world' | 'char' | 'event' | 'skills' | 'relation' | 'all';
+export type Category = 'world' | 'scene' | 'char' | 'event' | 'skills' | 'relation' | 'all';
 
 export interface EditorFile {
     type: 'md' | 'csv';

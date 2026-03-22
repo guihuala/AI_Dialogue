@@ -6,4 +6,6 @@
 【玩家动作】[PLAYER_ACTION]
 【系统结算（已生效）】[RESOLVED_HINT]
 【系统事件线索】[PLAN_HINT]
+【模组世界与角色基调】
+[FLAVOR_CONTEXT]
 【写作要求】直接给短表现，不要复述设定。

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { useGameStore } from '../store/gameStore';
+import { gameApi } from '../api/gameApi';
 import { TitleMenu } from './TitleMenu';
 import { GameSetup } from './GameSetup';
 import { SaveSelection } from './SaveSelection';
@@ -31,6 +32,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         history,
         togglePhone,
         wechatNotifications,
+        phoneSystemEnabled,
         typewriterSpeed,
         saveGame,
         loadSave,
@@ -68,6 +70,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         relation: { x: 0, y: 220 },
     });
     const [draggingPanel, setDraggingPanel] = useState<'debug' | 'relation' | null>(null);
+    const [sceneCatalog, setSceneCatalog] = useState<any>({ default_image: '/assets/backgrounds/宿舍.jpg', scenes: [] });
     const dragMetaRef = useRef<{ panel: 'debug' | 'relation'; dx: number; dy: number } | null>(null);
     const prevEventIdRef = useRef<string>('');
 
@@ -219,6 +222,27 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
 
     useEffect(() => {
         if (isPlaying) setPhase('playing');
+    }, [isPlaying]);
+
+    useEffect(() => {
+        if (!isPlaying) return;
+        const loadScenes = async () => {
+            try {
+                const res = await gameApi.getAdminFile('md', 'world/scenes.json');
+                if (res?.status === 'success' && res.content) {
+                    const parsed = JSON.parse(res.content);
+                    if (parsed && typeof parsed === 'object') {
+                        setSceneCatalog({
+                            default_image: parsed.default_image || '/assets/backgrounds/宿舍.jpg',
+                            scenes: Array.isArray(parsed.scenes) ? parsed.scenes : []
+                        });
+                    }
+                }
+            } catch {
+                // ignore and keep fallback mapping
+            }
+        };
+        loadScenes();
     }, [isPlaying]);
 
     const PANEL_SAFE_TOP = 96;
@@ -392,6 +416,17 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
 
     const getSceneBackground = (scene?: string) => {
         const normalized = (scene || '').trim();
+        const configuredScenes = Array.isArray(sceneCatalog?.scenes) ? sceneCatalog.scenes : [];
+        for (const item of configuredScenes) {
+            const image = String(item?.image || '').trim();
+            if (!image) continue;
+            const name = String(item?.name || '').trim();
+            const keywords = Array.isArray(item?.keywords) ? item.keywords.map((k: any) => String(k || '').trim()).filter(Boolean) : [];
+            if ((name && normalized.includes(name)) || keywords.some((kw: string) => normalized.includes(kw))) {
+                return image;
+            }
+        }
+
         if (normalized.includes('宿舍') || normalized.includes('寝室')) return '/assets/backgrounds/宿舍.jpg';
         if (normalized.includes('教室')) return '/assets/backgrounds/教室.jpg';
         if (normalized.includes('图书馆')) return '/assets/backgrounds/图书馆.jpg';
@@ -399,7 +434,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         if (normalized.includes('商业街')) return '/assets/backgrounds/商业街.jpg';
         if (normalized.includes('办公室')) return '/assets/backgrounds/办公室.jpg';
         if (normalized.includes('未知')) return '/assets/backgrounds/未知.jpg';
-        return '/assets/backgrounds/宿舍.jpg';
+        return String(sceneCatalog?.default_image || '/assets/backgrounds/宿舍.jpg');
     };
 
     const relationItems = Object.entries((narrativeState as any)?.relationship_state || {})
@@ -697,6 +732,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                     setShowBackConfirm(true);
                 }}
                 wechatNotificationCount={wechatNotifications?.length || 0} 
+                phoneSystemEnabled={phoneSystemEnabled}
             />
 
             <div className="absolute inset-0 pointer-events-none flex flex-col justify-end z-20">
