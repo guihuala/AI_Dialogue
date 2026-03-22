@@ -601,9 +601,65 @@ def build_content_router(
         ws_data = normalize_workshop_record(_read_json(workshop_path))
         content = ws_data.get("content", {})
         manifest = ws_data.get("manifest", {})
-        validate_mod_content(content, manifest if isinstance(manifest, dict) else None)
+        manifest_for_use = manifest if isinstance(manifest, dict) else None
+        try:
+            validate_mod_content(content, manifest_for_use)
+        except Exception:
+            # 兼容历史/手工编辑导致的 manifest 漂移：优先信任内容本体并即时修复 manifest。
+            validate_mod_content(content, None)
+            ws_data["manifest"] = build_manifest(
+                mod_id=str(ws_data.get("id", item_id) or item_id),
+                name=str(ws_data.get("name", item_id) or item_id),
+                author=str(ws_data.get("author", "") or ""),
+                source="workshop",
+                content=content,
+            )
+            try:
+                _write_json(workshop_path, ws_data)
+            except Exception:
+                pass
 
         with with_user_write_lock(user_id):
+            # 若本地已存在同源下载副本，直接覆盖同步，避免“下载后仍用旧事件池”。
+            lib_dir = get_user_library_dir(user_id)
+            source_mod_id = str(ws_data.get("id", "") or "")
+            existing_download_id = ""
+            if os.path.exists(lib_dir):
+                for file_name in os.listdir(lib_dir):
+                    if not file_name.endswith(".json"):
+                        continue
+                    file_path = os.path.join(lib_dir, file_name)
+                    try:
+                        row = normalize_library_record(_read_json(file_path), user_id)
+                    except Exception:
+                        continue
+                    if str(row.get("source_type", "")) != "downloaded":
+                        continue
+                    if str(row.get("source_mod_id", "") or "").strip() != source_mod_id:
+                        continue
+                    existing_download_id = str(row.get("id", file_name.replace(".json", "")) or file_name.replace(".json", ""))
+                    break
+            if existing_download_id:
+                target_path = _library_file_path(user_id, existing_download_id)
+                old_row = normalize_library_record(_read_json(target_path), user_id)
+                synced_row = _build_library_record(
+                    item_id=existing_download_id,
+                    user_id=user_id,
+                    name=str(ws_data.get("name", existing_download_id) or existing_download_id),
+                    description=str(ws_data.get("description", "") or ""),
+                    content=ws_data.get("content", {}),
+                    linked_workshop_id=str(old_row.get("linked_workshop_id", "") or ""),
+                    origin_workshop_id=str(old_row.get("origin_workshop_id", source_mod_id) or source_mod_id),
+                    visibility=str(old_row.get("visibility", "private") or "private"),
+                    version=int(max(int(old_row.get("version", 1) or 1), int(ws_data.get("version", 1) or 1))),
+                    source_type="downloaded",
+                    source_mod_id=source_mod_id,
+                    parent_workshop_id=str(old_row.get("parent_workshop_id", source_mod_id) or source_mod_id),
+                    published_at=str(old_row.get("published_at", "") or ""),
+                )
+                _write_json(target_path, synced_row)
+                return existing_download_id
+
             def _library_exists(candidate_id: str) -> bool:
                 return os.path.exists(_library_file_path(user_id, candidate_id))
 
@@ -676,6 +732,15 @@ def build_content_router(
                 data["author"] = req.author
             if req.description is not None:
                 data["description"] = req.description
+
+            if isinstance(data.get("content"), dict):
+                data["manifest"] = build_manifest(
+                    mod_id=str(data.get("id", item_id) or item_id),
+                    name=str(data.get("name", item_id) or item_id),
+                    author=str(data.get("author", "") or ""),
+                    source="workshop",
+                    content=data.get("content", {}),
+                )
 
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)

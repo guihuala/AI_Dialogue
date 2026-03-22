@@ -19,7 +19,17 @@ import { AUTO_FIX_PRESETS, AutoFixPresetId } from '../config/eventSkeletonAutoFi
 
 import { Category } from './editor/types';
 
-export const PromptEditor = () => {
+interface PromptEditorProps {
+    adminPresetMode?: boolean;
+    adminPresetTarget?: 'default' | 'preset';
+    adminPresetModId?: string;
+}
+
+export const PromptEditor = ({
+    adminPresetMode = false,
+    adminPresetTarget = 'default',
+    adminPresetModId = '',
+}: PromptEditorProps) => {
     const [eventWorkbench, setEventWorkbench] = useState<'story' | 'skeleton'>('story');
     const [activeCategory, setActiveCategory] = useState<Category>('char');
     const [files, setFiles] = useState<{ md: string[], csv: string[] }>({ md: [], csv: [] });
@@ -81,15 +91,48 @@ export const PromptEditor = () => {
         content: string
     } | null>(null);
 
+    const readFileContent = async (type: 'md' | 'csv', name: string) => {
+        if (adminPresetMode) {
+            return gameApi.getAdminPresetFile({
+                target: adminPresetTarget,
+                modId: adminPresetModId,
+                type,
+                name,
+            });
+        }
+        return gameApi.getAdminFile(type, name);
+    };
+
+    const saveFileContent = async (type: 'md' | 'csv', name: string, content: string) => {
+        if (adminPresetMode) {
+            return gameApi.saveAdminPresetFile({
+                target: adminPresetTarget,
+                modId: adminPresetModId,
+                type,
+                name,
+                content,
+            });
+        }
+        return gameApi.saveAdminFile(type, name, content);
+    };
+
     const fetchFiles = async () => {
         try {
-            const [filesRes, stateRes, libraryRes, workshopRes, accountRes] = await Promise.all([
-                gameApi.getAdminFiles(),
-                gameApi.getUserState(),
-                gameApi.getLibraryList(),
-                gameApi.getWorkshopList(),
-                gameApi.getAccountMe()
-            ]);
+            const [filesRes, stateRes, libraryRes, workshopRes, accountRes] = adminPresetMode
+                ? await Promise.all([
+                    gameApi.getAdminPresetFiles(adminPresetTarget, adminPresetModId),
+                    Promise.resolve({ data: null }),
+                    Promise.resolve({ data: [] }),
+                    Promise.resolve({ data: [] }),
+                    Promise.resolve({ data: null }),
+                ])
+                : await Promise.all([
+                    gameApi.getAdminFiles(),
+                    gameApi.getUserState(),
+                    gameApi.getLibraryList(),
+                    gameApi.getWorkshopList(),
+                    gameApi.getAccountMe()
+                ]);
             if (filesRes.status === 'success') {
                 setFiles({ md: filesRes.md || [], csv: filesRes.csv || [] });
                 setUserState(stateRes?.data || null);
@@ -114,7 +157,7 @@ export const PromptEditor = () => {
         const mdList = Array.isArray(mdFiles) ? mdFiles : files.md;
         const target = mdList.find((f: string) => f === 'system/mod_features.json') || 'system/mod_features.json';
         try {
-            const res = await gameApi.getAdminFile('md', target);
+            const res = await readFileContent('md', target);
             if (res?.status === 'success' && res.content) {
                 const parsed = JSON.parse(res.content);
                 if (parsed && typeof parsed === 'object') {
@@ -145,7 +188,7 @@ export const PromptEditor = () => {
         setModFeatures(next);
         setIsSavingFeatures(true);
         try {
-            await gameApi.saveAdminFile('md', 'system/mod_features.json', JSON.stringify(next, null, 2));
+            await saveFileContent('md', 'system/mod_features.json', JSON.stringify(next, null, 2));
             setMessage('手机系统开关已更新');
         } catch {
             setMessage('手机系统开关保存失败');
@@ -220,14 +263,14 @@ export const PromptEditor = () => {
 
     useEffect(() => {
         fetchFiles();
-    }, []);
+    }, [adminPresetMode, adminPresetTarget, adminPresetModId]);
 
     useEffect(() => {
         if (files.md.length > 0 && !stableRoster) {
                 const rosterFile = files.md.find(f => f.includes('roster.json'));
                 if (rosterFile) {
                     console.log('[PromptEditor] Fetching roster from:', rosterFile);
-                gameApi.getAdminFile('md', rosterFile).then((res) => {
+                readFileContent('md', rosterFile).then((res) => {
                     try {
                         if (res?.status === 'success') {
                             setStableRoster(JSON.parse(res.content || '{}'));
@@ -246,7 +289,7 @@ export const PromptEditor = () => {
             setIsLoading(true);
             setFileContent('Loading...');
             try {
-                const res = await gameApi.getAdminFile(selectedFile.type, selectedFile.name);
+                const res = await readFileContent(selectedFile.type, selectedFile.name);
                 if (res.status === 'success') {
                     setFileContent(res.content || '');
                 }
@@ -287,7 +330,7 @@ export const PromptEditor = () => {
         }
         setIsSaving(true);
         try {
-            await gameApi.saveAdminFile(selectedFile.type, selectedFile.name, contentToSave);
+            await saveFileContent(selectedFile.type, selectedFile.name, contentToSave);
             setMessage('同步成功');
             setFileContent(contentToSave);
             if (selectedFile.name.endsWith('roster.json')) {
@@ -372,7 +415,7 @@ export const PromptEditor = () => {
         const fileName = `characters/${id}.md`;
         setIsLoading(true);
         try {
-            await gameApi.saveAdminFile('md', fileName, `# ${data.name}\n\n## 身份标签\n${data.archetype}\n\n## 背景设定\n${data.description}\n\n## 性格特征\n请输入性格特征...\n\n## 行为准则\n请输入行为准则...`);
+            await saveFileContent('md', fileName, `# ${data.name}\n\n## 身份标签\n${data.archetype}\n\n## 背景设定\n${data.description}\n\n## 性格特征\n请输入性格特征...\n\n## 行为准则\n请输入行为准则...`);
             const newRoster = {
                 ...parsedRoster,
                 [id]: {
@@ -503,6 +546,11 @@ export const PromptEditor = () => {
 
     const runSkeletonValidation = async () => {
         if (!selectedFile?.name?.includes('event_skeletons')) return;
+        if (adminPresetMode) {
+            setMessage('预设编辑模式暂不走发布校验流程，可直接保存骨架文件');
+            setTimeout(() => setMessage(''), 2200);
+            return;
+        }
         setIsValidatingSkeleton(true);
         try {
             const res = await gameApi.validateEventSkeletons({
@@ -603,6 +651,11 @@ export const PromptEditor = () => {
 
     const runSkeletonPromote = async () => {
         if (!selectedFile?.name?.includes('event_skeletons')) return;
+        if (adminPresetMode) {
+            setMessage('预设编辑模式无需发布流程，直接保存 event_skeletons.json 即可');
+            setTimeout(() => setMessage(''), 2200);
+            return;
+        }
         setIsPromotingSkeleton(true);
         try {
             const latestValidationRes = await gameApi.validateEventSkeletons({
@@ -689,7 +742,7 @@ created_at: ${new Date().toISOString()}
 ---
 
 ${data.content}`;
-            await gameApi.saveAdminFile('md', fileName, fullContent);
+            await saveFileContent('md', fileName, fullContent);
             fetchFiles();
             setNewItemModal(null);
             setMessage('自定义 Skill 已成功装载');
@@ -729,7 +782,7 @@ ${data.content}`;
         const fileName = char.file.startsWith('characters/') ? char.file : `characters/${char.file}`;
         setIsLoading(true);
         try {
-            const res = await gameApi.getAdminFile('md', fileName);
+            const res = await readFileContent('md', fileName);
             if (res.status === 'success') {
                 // Find ID (the key in the roster object)
                 const id = Object.keys(parsedRoster).find(key => parsedRoster[key] === char) || 
@@ -754,12 +807,12 @@ ${data.content}`;
         try {
             // 1. Update Roster
             const newRoster = { ...parsedRoster, [id]: { ...parsedRoster[id], ...updates } };
-            await gameApi.saveAdminFile('md', selectedFile.name, JSON.stringify(newRoster, null, 4));
+            await saveFileContent('md', selectedFile.name, JSON.stringify(newRoster, null, 4));
             
             // 2. Update MD file
             const char = parsedRoster[id];
             const fileName = char.file.startsWith('characters/') ? char.file : `characters/${char.file}`;
-            await gameApi.saveAdminFile('md', fileName, mdContent);
+            await saveFileContent('md', fileName, mdContent);
             
             // 3. Refresh local state
             setFileContent(JSON.stringify(newRoster, null, 4));
@@ -831,31 +884,43 @@ ${data.content}`;
     };
 
     const activeSourceLabel = useMemo(() => {
+        if (adminPresetMode) {
+            return adminPresetTarget === 'preset' ? '官方预设模组' : '默认模板';
+        }
         const source = String(userState?.editor_source || 'default');
         if (source === 'library') return '个人模组库';
         if (source === 'workshop') return '创意工坊';
         return '默认内容';
-    }, [userState]);
+    }, [adminPresetMode, adminPresetTarget, userState]);
 
     const activeModLabel = useMemo(() => {
+        if (adminPresetMode) {
+            return adminPresetTarget === 'preset' ? (adminPresetModId || '未选择预设') : 'default';
+        }
         const source = String(userState?.editor_source || 'default');
         const modId = String(userState?.editor_mod_id || 'default');
         if (!modId || modId === 'default') return '默认内容';
         const pool = source === 'workshop' ? workshopMods : libraryMods;
         const matched = pool.find((item: any) => String(item.id) === modId);
         return matched?.name || modId;
-    }, [userState, libraryMods, workshopMods]);
+    }, [adminPresetMode, adminPresetTarget, adminPresetModId, userState, libraryMods, workshopMods]);
 
     const contextHint = useMemo(() => {
+        if (adminPresetMode) {
+            return adminPresetTarget === 'preset'
+                ? '当前正在后台直接编辑官方预设模组内容，保存后会立即写入预设包。'
+                : '当前正在后台直接编辑默认模板内容，保存后会影响默认模板加载结果。';
+        }
         if (String(userState?.editor_source || 'default') !== 'library') {
             return '当前正在查看默认模组。默认模组为只读，若想微调，请先在模组中心另存为本地模组后再进入编辑。';
         }
         return '当前正在编辑本地模组。公开后的模组仍保留在你的本地库中，再次发布会同步更新工坊版本。';
-    }, [userState]);
+    }, [adminPresetMode, adminPresetTarget, userState]);
 
     const canEditCurrentMod = useMemo(() => {
+        if (adminPresetMode) return true;
         return String(userState?.editor_source || 'default') === 'library';
-    }, [userState]);
+    }, [adminPresetMode, userState]);
 
     const isLoggedInAccount = useMemo(() => {
         return String(accountInfo?.auth_mode || 'visitor') === 'account';
@@ -895,6 +960,7 @@ ${data.content}`;
     const editorStatusTone = currentEditingMod?.has_update ? 'warning' : 'info';
 
     const openPublishModal = () => {
+        if (adminPresetMode) return;
         if (!canEditCurrentMod) return;
         setPublishMetadata({
             name: currentEditingMod?.name || '我的自定义模组',
@@ -905,6 +971,7 @@ ${data.content}`;
     };
 
     const jumpToModLibrary = () => {
+        if (adminPresetMode) return;
         window.dispatchEvent(new CustomEvent('changeTab', { detail: 'mods' }));
     };
 
@@ -930,7 +997,7 @@ ${data.content}`;
                 setEditMode={setEditMode}
                 isSaving={isSaving}
                 canEdit={canEditCurrentMod}
-                canPublish={canEditCurrentMod}
+                canPublish={!adminPresetMode && canEditCurrentMod}
                 saveLabel={canEditCurrentMod ? '提交修改' : '前往模组库另存为'}
                 onSave={() => (canEditCurrentMod ? handleSave() : jumpToModLibrary())}
                 onPublish={openPublishModal}

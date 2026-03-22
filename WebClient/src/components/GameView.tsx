@@ -532,6 +532,24 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                                         </div>
                                     </div>
                                 )}
+                                {turnDebug?.prompt_payload && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">Prompt Payload</div>
+                                        <div className="text-[10px] text-slate-600">
+                                            truncated {turnDebug.prompt_payload?.truncated ? 'yes' : 'no'}
+                                            {" · "}
+                                            chars s/u {turnDebug.prompt_payload?.system_chars ?? 0} / {turnDebug.prompt_payload?.user_chars ?? 0}
+                                        </div>
+                                        <div className="mt-1 text-[10px] text-slate-500">system prompt</div>
+                                        <pre className="mt-0.5 max-h-28 overflow-auto rounded-lg border border-[var(--color-cyan-main)]/10 bg-slate-50 p-2 text-[10px] leading-relaxed text-slate-700 whitespace-pre-wrap break-words">
+{String(turnDebug.prompt_payload?.system_prompt || '')}
+                                        </pre>
+                                        <div className="mt-1 text-[10px] text-slate-500">user prompt</div>
+                                        <pre className="mt-0.5 max-h-28 overflow-auto rounded-lg border border-[var(--color-cyan-main)]/10 bg-slate-50 p-2 text-[10px] leading-relaxed text-slate-700 whitespace-pre-wrap break-words">
+{String(turnDebug.prompt_payload?.user_prompt || '')}
+                                        </pre>
+                                    </div>
+                                )}
                                 {turnDebug?.render_source && (
                                     <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
                                         <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">Render Source</div>

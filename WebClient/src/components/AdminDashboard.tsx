@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { gameApi } from '../api/gameApi';
-import { Shield, RefreshCw, LogOut, Database, History, FileClock } from 'lucide-react';
+import { Shield, RefreshCw, LogOut, Database, History, FileClock, PanelLeft, X } from 'lucide-react';
 import { ConfirmDialog } from './common/ConfirmDialog';
 import { AdminLoginPanel } from './admin/AdminLoginPanel';
 import { AdminWorkshopTab } from './admin/AdminWorkshopTab';
 import { AdminStorageTab } from './admin/AdminStorageTab';
 import { AdminUsersTab } from './admin/AdminUsersTab';
 import { AdminAuditTab } from './admin/AdminAuditTab';
+import { AdminPresetEditorTab } from './admin/AdminPresetEditorTab';
 
 export const AdminDashboard = () => {
-    const [activeTab, setActiveTab] = useState<'workshop' | 'storage' | 'users' | 'audit'>('workshop');
+    const [activeTab, setActiveTab] = useState<'workshop' | 'preset' | 'storage' | 'users' | 'audit'>('workshop');
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [password, setPassword] = useState('');
     const [authError, setAuthError] = useState<string | null>(null);
@@ -26,6 +27,7 @@ export const AdminDashboard = () => {
     const [adminUserQuery, setAdminUserQuery] = useState('');
     const [adminUserPage, setAdminUserPage] = useState(1);
     const [adminUserPagination, setAdminUserPagination] = useState<any>(null);
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [confirmDialog, setConfirmDialog] = useState<{
         open: boolean;
         title: string;
@@ -214,176 +216,221 @@ export const AdminDashboard = () => {
         );
     }
 
+    const tabItems: Array<{ id: 'workshop' | 'preset' | 'storage' | 'audit' | 'users'; label: string; desc: string }> = [
+        { id: 'workshop', label: '工坊内容', desc: '公开模组管理' },
+        { id: 'preset', label: '模板编辑', desc: '默认/预设编辑器' },
+        { id: 'storage', label: '存储与状态', desc: '配额与快照清理' },
+        { id: 'audit', label: '操作审计', desc: '最近管理操作' },
+        { id: 'users', label: '用户管理', desc: '账号与会话概览' },
+    ];
+
+    const renderActiveTab = () => {
+        if (activeTab === 'workshop') {
+            return (
+                <AdminWorkshopTab
+                    items={items}
+                    loading={loading}
+                    editingId={editingId}
+                    editForm={editForm}
+                    setEditForm={setEditForm}
+                    onStartEdit={startEdit}
+                    onUpdate={handleUpdate}
+                    onCancelEdit={() => setEditingId(null)}
+                    onDelete={handleDelete}
+                />
+            );
+        }
+        if (activeTab === 'storage') {
+            return (
+                <AdminStorageTab
+                    userState={userState}
+                    quota={quota}
+                    cleaning={cleaning}
+                    onCleanup={handleCleanup}
+                />
+            );
+        }
+        if (activeTab === 'preset') {
+            return <AdminPresetEditorTab />;
+        }
+        if (activeTab === 'users') {
+            return (
+                <AdminUsersTab
+                    adminUserQuery={adminUserQuery}
+                    setAdminUserQuery={setAdminUserQuery}
+                    adminUsers={adminUsers}
+                    adminUserStats={adminUserStats}
+                    adminUserPagination={adminUserPagination}
+                    setAdminUserPage={setAdminUserPage}
+                    onRefresh={() => loadAdminUsers()}
+                />
+            );
+        }
+        return <AdminAuditTab auditRows={auditRows} />;
+    };
+
     return (
-        <div className="flex-1 flex flex-col h-full bg-white/80 backdrop-blur-md rounded-[2.5rem] border-2 border-[var(--color-cyan-main)]/20 shadow-2xl overflow-hidden p-8 animate-fade-in-up">
-            <div className="flex justify-between items-center mb-8 shrink-0">
-                <div className="flex items-center">
-                    <div className="w-12 h-12 bg-[var(--color-cyan-main)] text-white rounded-xl flex items-center justify-center mr-4 shadow-lg shadow-cyan-500/20">
-                        <Shield size={24} />
-                    </div>
-                    <div>
-                        <h2 className="text-2xl font-black text-[var(--color-cyan-dark)] tracking-tight">后台资源管理中心</h2>
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                            <p className="text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.3em]">Authorized Session Active</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => handleCleanup(true)}
-                        disabled={cleaning}
-                        className="px-3 py-2 bg-white border border-[var(--color-cyan-main)]/20 text-[var(--color-cyan-main)] rounded-xl hover:bg-[var(--color-cyan-light)] transition-all disabled:opacity-50 text-xs font-black"
-                        title="预览清理结果"
-                    >
-                        预览清理
-                    </button>
-                    <button
-                        onClick={() => handleCleanup(false)}
-                        disabled={cleaning}
-                        className="px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl hover:bg-amber-100 transition-all disabled:opacity-50 text-xs font-black"
-                        title="执行智能清理"
-                    >
-                        执行清理
-                    </button>
-                    <button
-                        onClick={loadItems}
-                        disabled={loading}
-                        className="p-3 bg-[var(--color-cyan-light)] text-[var(--color-cyan-main)] rounded-xl hover:bg-[var(--color-cyan-main)] hover:text-white transition-all disabled:opacity-50"
-                        title="刷新列表"
-                    >
-                        <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-                    </button>
-                    <button
-                        onClick={async () => {
-                            try {
-                                await gameApi.adminLogout();
-                            } catch {}
-                            localStorage.removeItem('admin_token');
-                            setIsAuthenticated(false);
-                        }}
-                        className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"
-                        title="退出管理模式"
-                    >
-                        <LogOut size={20} />
-                    </button>
-                </div>
-            </div>
-
-            <div className="flex-1 overflow-hidden bg-[var(--color-cyan-light)]/10 rounded-3xl border border-[var(--color-cyan-main)]/5 flex flex-col">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 border-b border-[var(--color-cyan-main)]/10 bg-white/60">
-                    <div className="rounded-2xl border border-[var(--color-cyan-main)]/10 bg-white p-4">
-                        <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] flex items-center gap-2">
-                            <Database size={12} />
-                            当前激活
-                        </div>
-                        <div className="mt-2 text-sm font-black text-[var(--color-cyan-dark)]">
-                            {userState?.active_source || 'default'} / {userState?.active_mod_id || 'default'}
-                        </div>
-                    </div>
-                    <div className="rounded-2xl border border-[var(--color-cyan-main)]/10 bg-white p-4">
-                        <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] flex items-center gap-2">
-                            <History size={12} />
-                            快照留存
-                        </div>
-                        <div className="mt-2 text-sm font-black text-[var(--color-cyan-dark)]">
-                            last: {userState?.last_good_snapshot_id || '-'}
-                        </div>
-                    </div>
-                    <div className="rounded-2xl border border-[var(--color-cyan-main)]/10 bg-white p-4">
-                        <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] flex items-center gap-2">
-                            <FileClock size={12} />
-                            存储配额
-                        </div>
-                        <div className="mt-2 text-sm font-black text-[var(--color-cyan-dark)]">
-                            {quota?.usage?.library_items || 0}/{quota?.limits?.library_items || 0} 模组
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-bold">
-                            {(quota?.usage?.library_bytes || 0) / (1024 * 1024) > 0 ? `${((quota?.usage?.library_bytes || 0) / (1024 * 1024)).toFixed(1)} MB` : '0 MB'}
-                        </div>
-                        {Array.isArray(quota?.warnings) && quota.warnings.length > 0 && (
-                            <div className="text-[10px] text-amber-600 font-black mt-1">
-                                {quota.warnings.join('；')}
+        <div className="flex-1 h-full min-h-0 bg-white/80 backdrop-blur-md rounded-[2.5rem] border-2 border-[var(--color-cyan-main)]/20 shadow-2xl overflow-hidden animate-fade-in-up">
+            <div className="h-full min-h-0 flex flex-col">
+                <div className="shrink-0 px-6 py-4 border-b border-[var(--color-cyan-main)]/10 bg-white/70">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-11 h-11 bg-[var(--color-cyan-main)] text-white rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                                <Shield size={22} />
                             </div>
-                        )}
+                            <div className="min-w-0">
+                                <h2 className="text-xl font-black text-[var(--color-cyan-dark)] tracking-tight truncate">后台资源管理中心</h2>
+                                <div className="flex items-center gap-2">
+                                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                    <p className="text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.25em]">Authorized Session Active</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <button
+                                onClick={() => setMobileNavOpen(true)}
+                                className="lg:hidden p-3 bg-white border border-[var(--color-cyan-main)]/20 text-[var(--color-cyan-main)] rounded-xl hover:bg-[var(--color-cyan-light)] transition-all"
+                                title="打开导航"
+                            >
+                                <PanelLeft size={18} />
+                            </button>
+                            <button
+                                onClick={() => handleCleanup(true)}
+                                disabled={cleaning}
+                                className="hidden sm:inline-flex px-3 py-2 bg-white border border-[var(--color-cyan-main)]/20 text-[var(--color-cyan-main)] rounded-xl hover:bg-[var(--color-cyan-light)] transition-all disabled:opacity-50 text-xs font-black"
+                                title="预览清理结果"
+                            >
+                                预览清理
+                            </button>
+                            <button
+                                onClick={() => handleCleanup(false)}
+                                disabled={cleaning}
+                                className="hidden sm:inline-flex px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl hover:bg-amber-100 transition-all disabled:opacity-50 text-xs font-black"
+                                title="执行智能清理"
+                            >
+                                执行清理
+                            </button>
+                            <button
+                                onClick={loadItems}
+                                disabled={loading}
+                                className="p-3 bg-[var(--color-cyan-light)] text-[var(--color-cyan-main)] rounded-xl hover:bg-[var(--color-cyan-main)] hover:text-white transition-all disabled:opacity-50"
+                                title="刷新列表"
+                            >
+                                <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        await gameApi.adminLogout();
+                                    } catch {}
+                                    localStorage.removeItem('admin_token');
+                                    setIsAuthenticated(false);
+                                }}
+                                className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"
+                                title="退出管理模式"
+                            >
+                                <LogOut size={18} />
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <div className="px-4 pt-4 border-b border-[var(--color-cyan-main)]/10 bg-white/40">
-                    <div className="inline-flex rounded-2xl bg-[var(--color-cyan-light)]/40 p-1 border border-[var(--color-cyan-main)]/10">
-                        <button
-                            onClick={() => setActiveTab('workshop')}
-                            className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'workshop' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-main)] hover:bg-white'}`}
-                        >
-                            工坊内容
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('storage')}
-                            className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'storage' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-main)] hover:bg-white'}`}
-                        >
-                            存储与状态
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('audit')}
-                            className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'audit' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-main)] hover:bg-white'}`}
-                        >
-                            操作审计
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('users')}
-                            className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'users' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-main)] hover:bg-white'}`}
-                        >
-                            用户管理
-                        </button>
-                    </div>
-                </div>
+                <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)] gap-0">
+                    <aside className="hidden lg:block border-r border-[var(--color-cyan-main)]/10 bg-[var(--color-cyan-light)]/15 p-4 min-h-0 overflow-auto custom-scrollbar">
+                        <div className="space-y-2">
+                            {tabItems.map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => {
+                                        setActiveTab(tab.id);
+                                        setMobileNavOpen(false);
+                                    }}
+                                    className={`w-full text-left rounded-xl border px-3 py-2.5 transition-all ${
+                                        activeTab === tab.id
+                                            ? 'border-[var(--color-cyan-main)] bg-[var(--color-cyan-main)]/10'
+                                            : 'border-[var(--color-cyan-main)]/10 bg-white hover:bg-[var(--color-cyan-light)]/40'
+                                    }`}
+                                >
+                                    <div className="text-sm font-black text-[var(--color-cyan-dark)]">{tab.label}</div>
+                                    <div className="text-[10px] font-bold text-slate-500 mt-0.5">{tab.desc}</div>
+                                </button>
+                            ))}
+                        </div>
 
-                <div className="flex-1 overflow-auto custom-scrollbar bg-white/50">
-                    {activeTab === 'workshop' && (
-                        <AdminWorkshopTab
-                            items={items}
-                            loading={loading}
-                            editingId={editingId}
-                            editForm={editForm}
-                            setEditForm={setEditForm}
-                            onStartEdit={startEdit}
-                            onUpdate={handleUpdate}
-                            onCancelEdit={() => setEditingId(null)}
-                            onDelete={handleDelete}
-                        />
-                    )}
+                        <div className="mt-4 space-y-2">
+                            <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-3">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] flex items-center gap-1">
+                                    <Database size={11} />
+                                    当前激活
+                                </div>
+                                <div className="mt-1.5 text-xs font-black text-[var(--color-cyan-dark)] break-all">
+                                    {userState?.active_source || 'default'} / {userState?.active_mod_id || 'default'}
+                                </div>
+                            </div>
+                            <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-3">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] flex items-center gap-1">
+                                    <History size={11} />
+                                    快照留存
+                                </div>
+                                <div className="mt-1.5 text-xs font-black text-[var(--color-cyan-dark)] break-all">
+                                    {userState?.last_good_snapshot_id || '-'}
+                                </div>
+                            </div>
+                            <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-3">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] flex items-center gap-1">
+                                    <FileClock size={11} />
+                                    存储配额
+                                </div>
+                                <div className="mt-1.5 text-xs font-black text-[var(--color-cyan-dark)]">
+                                    {quota?.usage?.library_items || 0}/{quota?.limits?.library_items || 0} 模组
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
 
-                    {activeTab === 'storage' && (
-                        <AdminStorageTab
-                            userState={userState}
-                            quota={quota}
-                            cleaning={cleaning}
-                            onCleanup={handleCleanup}
-                        />
-                    )}
-
-                    {activeTab === 'users' && (
-                        <AdminUsersTab
-                            adminUserQuery={adminUserQuery}
-                            setAdminUserQuery={setAdminUserQuery}
-                            adminUsers={adminUsers}
-                            adminUserStats={adminUserStats}
-                            adminUserPagination={adminUserPagination}
-                            setAdminUserPage={setAdminUserPage}
-                            onRefresh={() => loadAdminUsers()}
-                        />
-                    )}
-
-                    {activeTab === 'audit' && (
-                        <AdminAuditTab auditRows={auditRows} />
-                    )}
-                </div>
-
-                <div className="mt-auto p-4 bg-[var(--color-cyan-main)]/5 border-t border-[var(--color-cyan-main)]/10 text-[9px] font-black text-[var(--color-cyan-main)]/40 uppercase tracking-[0.4em] text-center">
-                    Mokukeki Admin Interface v2.0.0
+                    <main className="min-h-0 bg-white/45">
+                        <div className={`h-full min-h-0 ${activeTab === 'preset' ? 'overflow-hidden' : 'overflow-auto custom-scrollbar'}`}>
+                            {renderActiveTab()}
+                        </div>
+                    </main>
                 </div>
             </div>
+
+            {mobileNavOpen && (
+                <div className="lg:hidden fixed inset-0 z-50">
+                    <div className="absolute inset-0 bg-slate-900/35" onClick={() => setMobileNavOpen(false)} />
+                    <div className="absolute inset-y-0 left-0 w-[300px] max-w-[85vw] bg-white border-r border-[var(--color-cyan-main)]/15 shadow-2xl p-4 overflow-auto custom-scrollbar">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="text-sm font-black text-[var(--color-cyan-dark)]">后台导航</div>
+                            <button
+                                onClick={() => setMobileNavOpen(false)}
+                                className="p-2 rounded-lg text-slate-500 hover:bg-slate-100"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <div className="space-y-2">
+                            {tabItems.map((tab) => (
+                                <button
+                                    key={`mobile-${tab.id}`}
+                                    onClick={() => {
+                                        setActiveTab(tab.id);
+                                        setMobileNavOpen(false);
+                                    }}
+                                    className={`w-full text-left rounded-xl border px-3 py-2.5 transition-all ${
+                                        activeTab === tab.id
+                                            ? 'border-[var(--color-cyan-main)] bg-[var(--color-cyan-main)]/10'
+                                            : 'border-[var(--color-cyan-main)]/10 bg-white hover:bg-[var(--color-cyan-light)]/40'
+                                    }`}
+                                >
+                                    <div className="text-sm font-black text-[var(--color-cyan-dark)]">{tab.label}</div>
+                                    <div className="text-[10px] font-bold text-slate-500 mt-0.5">{tab.desc}</div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <ConfirmDialog
                 open={confirmDialog.open}

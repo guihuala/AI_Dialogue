@@ -34,13 +34,12 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
                         }}
                     />
                 </div>
-                <div className="absolute inset-0 md:inset-0">
-                    <div
-                        className="absolute inset-0 bg-cover"
-                        style={{
-                            backgroundImage: "url('/assets/cover/cover_01.webp')",
-                            backgroundPosition: "62% center",
-                        }}
+                <div className="absolute inset-0 md:inset-10">
+                    <img
+                        src="/assets/cover/cover_01.webp"
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-contain"
+                        style={{ objectPosition: "92% bottom" }}
                     />
                 </div>
                 {/* Light overlays */}
@@ -48,24 +47,7 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
                 <div className="absolute inset-0 backdrop-blur-[0.5px] bg-white/10 mix-blend-soft-light" />
 
                 {/* Floating roommate placeholders (6 cards) */}
-                <div className="absolute left-[48%] top-[12%] w-16 h-16 md:w-24 md:h-24 rounded-2xl overflow-hidden border-2 border-white/70 shadow-xl animate-float-card pointer-events-none">
-                    <img src="/assets/portraits/唐.webp" className="w-full h-full object-cover" />
-                </div>
-                <div className="absolute left-[42%] top-[27%] w-14 h-14 md:w-20 md:h-20 rounded-xl overflow-hidden border-2 border-white/65 shadow-lg animate-float-card-delayed pointer-events-none">
-                    <img src="/assets/portraits/李.webp" className="w-full h-full object-cover" />
-                </div>
-                <div className="absolute left-[48%] top-[46%] w-14 h-14 md:w-20 md:h-20 rounded-xl overflow-hidden border-2 border-white/65 shadow-lg animate-float-card-slow pointer-events-none">
-                    <img src="/assets/portraits/赵.webp" className="w-full h-full object-cover" />
-                </div>
-                <div className="absolute right-[14%] top-[15%] w-16 h-16 md:w-24 md:h-24 rounded-2xl overflow-hidden border-2 border-white/70 shadow-xl animate-float-card-slow pointer-events-none">
-                    <img src="/assets/portraits/林.webp" className="w-full h-full object-cover" />
-                </div>
-                <div className="absolute right-[8%] top-[34%] w-14 h-14 md:w-20 md:h-20 rounded-xl overflow-hidden border-2 border-white/65 shadow-lg animate-float-card pointer-events-none">
-                    <img src="/assets/portraits/陈.webp" className="w-full h-full object-cover" />
-                </div>
-                <div className="absolute right-[16%] top-[50%] w-14 h-14 md:w-20 md:h-20 rounded-xl overflow-hidden border-2 border-white/65 shadow-lg animate-float-card-delayed pointer-events-none">
-                    <img src="/assets/portraits/苏.webp" className="w-full h-full object-cover" />
-                </div>
+                
             </div>
 
             {/* Center Logo & Actions (Cyan + Yellow) */}

@@ -14,6 +14,13 @@ class AdminFileSaveReq(BaseModel):
     name: str
     content: str
 
+class AdminPresetFileSaveReq(BaseModel):
+    target: str = "default"
+    mod_id: str = ""
+    type: str
+    name: str
+    content: str
+
 
 class GenerateSkillPromptReq(BaseModel):
     concept: str
@@ -79,6 +86,16 @@ def build_admin_router(
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def _safe_join(base_dir: str, rel_path: str) -> str:
+        normalized = os.path.normpath(str(rel_path or "")).replace("\\", "/")
+        if normalized.startswith("../") or normalized == ".." or os.path.isabs(normalized):
+            raise HTTPException(status_code=400, detail="非法文件路径")
+        full_path = os.path.abspath(os.path.join(base_dir, normalized))
+        base_abs = os.path.abspath(base_dir)
+        if not full_path.startswith(base_abs):
+            raise HTTPException(status_code=400, detail="非法文件路径")
+        return full_path
 
     def _editor_target(user_id: str) -> Dict[str, str]:
         st = read_user_state(user_id)
@@ -489,6 +506,159 @@ def build_admin_router(
         csv_files = list(csv_files_set)
 
         return {"status": "success", "md": sorted(md_files), "csv": sorted(csv_files)}
+
+    @router.get("/api/admin/preset/mods")
+    def list_admin_preset_mods(admin_session: Dict[str, Any] = require_admin):
+        _ = admin_session
+        rows: List[Dict[str, Any]] = []
+        if not os.path.exists(workshop_dir):
+            return {"status": "success", "data": rows}
+        for file_name in sorted(os.listdir(workshop_dir)):
+            if not file_name.endswith(".json"):
+                continue
+            file_path = os.path.join(workshop_dir, file_name)
+            try:
+                data = _read_json(file_path)
+            except Exception:
+                continue
+            source_type = str(data.get("source_type", "") or "")
+            if source_type not in {"original", "official"}:
+                continue
+            rows.append(
+                {
+                    "id": str(data.get("id", file_name.replace(".json", "")) or file_name.replace(".json", "")),
+                    "name": str(data.get("name", "") or ""),
+                    "description": str(data.get("description", "") or ""),
+                    "source_type": source_type,
+                    "updated_at": str(data.get("updated_at", "") or ""),
+                }
+            )
+        return {"status": "success", "data": rows}
+
+    @router.get("/api/admin/preset/files")
+    def get_admin_preset_files(
+        target: str = "default",
+        mod_id: str = "",
+        admin_session: Dict[str, Any] = require_admin,
+    ):
+        _ = admin_session
+        safe_target = str(target or "default").strip().lower()
+        if safe_target == "default":
+            md_files_set = set()
+            if os.path.exists(default_prompts_dir):
+                for root, _, files in os.walk(default_prompts_dir):
+                    for file in files:
+                        if file.endswith((".md", ".json", ".csv")):
+                            rel_path = os.path.relpath(os.path.join(root, file), default_prompts_dir).replace("\\", "/")
+                            md_files_set.add(rel_path)
+            csv_files_set = set()
+            if os.path.exists(default_events_dir):
+                for root, _, files in os.walk(default_events_dir):
+                    for file in files:
+                        if file.endswith((".csv", ".json")):
+                            rel_path = os.path.relpath(os.path.join(root, file), default_events_dir).replace("\\", "/")
+                            csv_files_set.add(rel_path)
+            return {"status": "success", "md": sorted(list(md_files_set)), "csv": sorted(list(csv_files_set))}
+        if safe_target != "preset":
+            raise HTTPException(status_code=400, detail="target 必须是 default 或 preset")
+        safe_mod_id = str(mod_id or "").strip()
+        if not safe_mod_id:
+            raise HTTPException(status_code=400, detail="缺少 mod_id")
+        preset_path = _workshop_file_path(safe_mod_id)
+        if not os.path.exists(preset_path):
+            raise HTTPException(status_code=404, detail="预设模组不存在")
+        preset_data = _read_json(preset_path)
+        content = preset_data.get("content", {})
+        md_files = sorted(list((content.get("md", {}) or {}).keys()))
+        csv_files = sorted(list((content.get("csv", {}) or {}).keys()))
+        return {"status": "success", "md": md_files, "csv": csv_files}
+
+    @router.get("/api/admin/preset/file")
+    def read_admin_preset_file(
+        target: str = "default",
+        mod_id: str = "",
+        type: str = "md",
+        name: str = "",
+        admin_session: Dict[str, Any] = require_admin,
+    ):
+        _ = admin_session
+        safe_type = "md" if str(type or "md").strip().lower() == "md" else "csv"
+        safe_name = str(name or "").strip()
+        if not safe_name:
+            raise HTTPException(status_code=400, detail="缺少 name")
+        safe_target = str(target or "default").strip().lower()
+        if safe_target == "default":
+            base = default_prompts_dir if safe_type == "md" else default_events_dir
+            file_path = _safe_join(base, safe_name)
+            if not os.path.exists(file_path):
+                raise HTTPException(status_code=404, detail="File not found")
+            with open(file_path, "r", encoding="utf-8") as f:
+                return {"status": "success", "content": f.read()}
+        if safe_target != "preset":
+            raise HTTPException(status_code=400, detail="target 必须是 default 或 preset")
+        safe_mod_id = str(mod_id or "").strip()
+        if not safe_mod_id:
+            raise HTTPException(status_code=400, detail="缺少 mod_id")
+        preset_path = _workshop_file_path(safe_mod_id)
+        if not os.path.exists(preset_path):
+            raise HTTPException(status_code=404, detail="预设模组不存在")
+        preset_data = _read_json(preset_path)
+        content = preset_data.get("content", {})
+        bucket = content.get("md", {}) if safe_type == "md" else content.get("csv", {})
+        if safe_name not in bucket:
+            raise HTTPException(status_code=404, detail="File not found")
+        return {"status": "success", "content": str(bucket.get(safe_name) or "")}
+
+    @router.post("/api/admin/preset/file")
+    def save_admin_preset_file(
+        req: AdminPresetFileSaveReq,
+        admin_session: Dict[str, Any] = require_admin,
+    ):
+        _ = admin_session
+        safe_target = str(req.target or "default").strip().lower()
+        safe_type = "md" if str(req.type or "md").strip().lower() == "md" else "csv"
+        safe_name = str(req.name or "").strip()
+        if not safe_name:
+            raise HTTPException(status_code=400, detail="缺少 name")
+        content_to_write = req.content
+        if safe_type == "md" and safe_name.endswith("roster.json"):
+            parsed = json.loads(req.content)
+            parsed = normalize_roster_single_player(parsed)
+            content_to_write = json.dumps(parsed, ensure_ascii=False, indent=4)
+        if safe_target == "default":
+            base = default_prompts_dir if safe_type == "md" else default_events_dir
+            file_path = _safe_join(base, safe_name)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(content_to_write)
+            return {"status": "success", "message": f"default:{safe_name} 保存成功"}
+        if safe_target != "preset":
+            raise HTTPException(status_code=400, detail="target 必须是 default 或 preset")
+        safe_mod_id = str(req.mod_id or "").strip()
+        if not safe_mod_id:
+            raise HTTPException(status_code=400, detail="缺少 mod_id")
+        preset_path = _workshop_file_path(safe_mod_id)
+        if not os.path.exists(preset_path):
+            raise HTTPException(status_code=404, detail="预设模组不存在")
+        preset_data = _read_json(preset_path)
+        mod_content = preset_data.get("content", {})
+        md_files = dict(mod_content.get("md", {}) or {})
+        csv_files = dict(mod_content.get("csv", {}) or {})
+        if safe_type == "md":
+            md_files[safe_name] = content_to_write
+        else:
+            csv_files[safe_name] = content_to_write
+        preset_data["content"] = {"md": md_files, "csv": csv_files}
+        preset_data["manifest"] = build_manifest(
+            mod_id=safe_mod_id,
+            name=str(preset_data.get("name", safe_mod_id)),
+            author=str(preset_data.get("author", "official")),
+            source="workshop",
+            content=preset_data["content"],
+        )
+        preset_data["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        _write_json(preset_path, preset_data)
+        return {"status": "success", "message": f"preset:{safe_mod_id}:{safe_name} 保存成功"}
 
     @router.get("/api/admin/file")
     def read_admin_file(type: str, name: str, user_id: str = get_user_id):

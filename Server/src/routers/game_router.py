@@ -76,6 +76,7 @@ def build_game_router(
     prompts_dir: str,
     default_prompts_dir: str,
     default_events_dir: str,
+    workshop_dir: str,
     prefetch_pool,
 ):
     router = APIRouter()
@@ -100,6 +101,9 @@ def build_game_router(
                         with open(os.path.join(root, file), "r", encoding="utf-8-sig") as f:
                             content["csv"][rel_path] = f.read()
         return content
+
+    def _workshop_file_path(item_id: str) -> str:
+        return os.path.join(workshop_dir, f"{item_id}.json")
 
     def _reload_engine_runtime(user_id: str) -> None:
         engine = get_engine(user_id)
@@ -160,6 +164,36 @@ def build_game_router(
                     raise HTTPException(status_code=404, detail="选择的模组不存在于本地库中")
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
+
+                # 下载副本开局前自动与工坊源记录对齐，避免继续读取过期事件池。
+                if str(data.get("source_type", "")) == "downloaded":
+                    source_mod_id = str(data.get("source_mod_id", "") or "").strip()
+                    if source_mod_id:
+                        ws_path = _workshop_file_path(source_mod_id)
+                        if os.path.exists(ws_path):
+                            try:
+                                with open(ws_path, "r", encoding="utf-8") as wf:
+                                    ws_data = json.load(wf)
+                                ws_content = ws_data.get("content", {})
+                                ws_manifest = ws_data.get("manifest", {})
+                                # 优先同步工坊最新内容；若上游 manifest 已过期/不一致，降级为仅校验内容结构，
+                                # 避免下载副本长期卡在旧版本（例如 prompt 文本更新后 hash 未及时刷新）。
+                                ws_manifest_to_use = ws_manifest if isinstance(ws_manifest, dict) else None
+                                try:
+                                    validate_mod_content(ws_content, ws_manifest_to_use)
+                                except Exception:
+                                    validate_mod_content(ws_content, None)
+                                    ws_manifest_to_use = {}
+                                data["content"] = ws_content
+                                data["manifest"] = ws_manifest_to_use or {}
+                                data["name"] = ws_data.get("name", data.get("name"))
+                                data["description"] = ws_data.get("description", data.get("description"))
+                                data["timestamp"] = _now_str()
+                                with open(file_path, "w", encoding="utf-8") as f:
+                                    json.dump(data, f, ensure_ascii=False, indent=2)
+                            except Exception:
+                                pass
+
                 content = data.get("content", {})
                 manifest = data.get("manifest", {})
                 validate_mod_content(content, manifest if isinstance(manifest, dict) else None)

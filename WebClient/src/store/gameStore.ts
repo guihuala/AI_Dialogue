@@ -46,6 +46,7 @@ interface GameState {
   turnDebug: {
     timings?: Record<string, number>;
     prompt_diagnostics?: any;
+    prompt_payload?: any;
     render_source?: string;
     ai_usage?: any;
     state_delta?: any;
@@ -158,10 +159,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         phoneSystemEnabled: data.phone_system_enabled !== false,
         eventScript: data.event_script || null
         ,
-        turnDebug: (data.timings || data.prompt_diagnostics || data.render_source || data.ai_usage || data.state_delta)
+        turnDebug: (data.timings || data.prompt_diagnostics || data.prompt_payload || data.render_source || data.ai_usage || data.state_delta)
           ? {
               timings: data.timings || undefined,
               prompt_diagnostics: data.prompt_diagnostics || undefined,
+              prompt_payload: data.prompt_payload || undefined,
               render_source: data.render_source || undefined,
               ai_usage: data.ai_usage || undefined,
               state_delta: data.state_delta || undefined,
@@ -277,10 +279,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         isPhoneOpen: (data.phone_system_enabled === false) ? false : prev.isPhoneOpen,
         eventScript: data.event_script || null
         ,
-        turnDebug: (data.timings || data.prompt_diagnostics || data.render_source || data.ai_usage || data.state_delta)
+        turnDebug: (data.timings || data.prompt_diagnostics || data.prompt_payload || data.render_source || data.ai_usage || data.state_delta)
           ? {
               timings: data.timings || undefined,
               prompt_diagnostics: data.prompt_diagnostics || undefined,
+              prompt_payload: data.prompt_payload || undefined,
               render_source: data.render_source || undefined,
               ai_usage: data.ai_usage || undefined,
               state_delta: data.state_delta || undefined,

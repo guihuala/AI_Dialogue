@@ -48,7 +48,9 @@ class EventSkeletonEngine:
 
     def _load_definitions(self, definitions: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
         if isinstance(definitions, list):
-            return self._ensure_baseline_events(self._normalize_definitions(definitions))
+            normalized = self._normalize_definitions(definitions)
+            # 显式传入定义时，视为上层已完整控制事件池，不再自动注入默认基线事件。
+            return normalized
 
         for path in [self.skeleton_path, self.default_skeleton_path]:
             if not os.path.exists(path):
@@ -61,7 +63,10 @@ class EventSkeletonEngine:
                 else:
                     items = data
                 if isinstance(items, list) and items:
-                    return self._ensure_baseline_events(self._normalize_definitions(items))
+                    normalized = self._normalize_definitions(items)
+                    # 当用户/模组已提供 event_skeletons.json 时，保持“所见即所得”，
+                    # 避免默认大学宿舍基线事件串入其它世界观（如幼儿园）。
+                    return normalized
             except Exception:
                 continue
         return self._ensure_baseline_events(self._normalize_definitions(self._default_definitions()))

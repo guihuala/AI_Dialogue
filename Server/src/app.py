@@ -173,6 +173,7 @@ app.include_router(
         prompts_dir=PROMPTS_DIR,
         default_prompts_dir=DEFAULT_PROMPTS_DIR,
         default_events_dir=DEFAULT_EVENTS_DIR,
+        workshop_dir=WORKSHOP_DIR,
         prefetch_pool=PREFETCH_POOL,
     )
 )

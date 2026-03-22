@@ -1206,6 +1206,22 @@ class GameEngine:
         key_options = self._build_system_key_options(daily_plan)
         if not key_options:
             return options[:4]
+        clean_options = [str(opt or "").strip() for opt in options if str(opt or "").strip()]
+        # 若模型已给出完整选项（3-4 条），优先保留模型文案，只把关键事件内部前缀绑定进去。
+        # 这样前端展示仍是自然语言选项，但点击后仍可解析为关键事件选择。
+        has_key_prefix_in_model = any(re.match(r"^【关键事件:[^:：\]】]+:[^】\]]+】", t) for t in clean_options)
+        if len(clean_options) >= 3 and not has_key_prefix_in_model:
+            bound = []
+            for idx, text in enumerate(clean_options):
+                if idx < len(key_options):
+                    m = re.match(r"^(【关键事件:[^:：\]】]+:[^】\]]+】)", str(key_options[idx] or "").strip())
+                    if m:
+                        bound.append(f"{m.group(1)} {text}")
+                    else:
+                        bound.append(text)
+                else:
+                    bound.append(text)
+            return bound[:4]
         merged = []
         seen = set()
         for opt in key_options + options:
@@ -1986,6 +2002,7 @@ class GameEngine:
             recent_opt_hint = "\n【上一轮选项（避免复读）】" + " | ".join(recent_opts[-1])
 
         user_prm = ""
+        user_prompt_sections = {"static_blocks": [], "repeated_blocks": [], "dynamic_blocks": [], "trimmable_blocks": [], "final_prompt": ""}
         if expression_only_mode_active:
             user_prm = self._build_expression_user_prompt(
                 next_evt=next_evt,
@@ -2530,13 +2547,20 @@ class GameEngine:
             }
             result = self._apply_global_turn_cap(result)
             timings["total"] = round(time.perf_counter() - turn_started_at, 4)
+            prompt_diagnostics = self._build_prompt_diagnostics(
+                system_prompt_bundle,
+                user_prompt_sections,
+                sys_prm,
+                user_prm,
+            )
+            result["prompt_payload"] = {
+                "system_prompt": str(sys_prm or "")[:12000],
+                "user_prompt": str(user_prm or "")[:12000],
+                "system_chars": len(str(sys_prm or "")),
+                "user_chars": len(str(user_prm or "")),
+                "truncated": len(str(sys_prm or "")) > 12000 or len(str(user_prm or "")) > 12000,
+            }
             if self.profile_turns:
-                prompt_diagnostics = self._build_prompt_diagnostics(
-                    system_prompt_bundle,
-                    user_prompt_sections,
-                    sys_prm,
-                    user_prm,
-                )
                 result["prompt_diagnostics"] = prompt_diagnostics
                 result["timings"] = timings
                 print(

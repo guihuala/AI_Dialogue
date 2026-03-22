@@ -159,6 +159,41 @@ export const gameApi = {
     return res.data;
   },
 
+  getAdminPresetMods: async () => {
+    const res = await apiClient.get(`/admin/preset/mods`);
+    return res.data;
+  },
+
+  getAdminPresetFiles: async (target: 'default' | 'preset', modId?: string) => {
+    const res = await apiClient.get(`/admin/preset/files`, {
+      params: { target, mod_id: modId || '' }
+    });
+    return res.data;
+  },
+
+  getAdminPresetFile: async (payload: { target: 'default' | 'preset'; modId?: string; type: 'md' | 'csv'; name: string }) => {
+    const res = await apiClient.get(`/admin/preset/file`, {
+      params: {
+        target: payload.target,
+        mod_id: payload.modId || '',
+        type: payload.type,
+        name: payload.name
+      }
+    });
+    return res.data;
+  },
+
+  saveAdminPresetFile: async (payload: { target: 'default' | 'preset'; modId?: string; type: 'md' | 'csv'; name: string; content: string }) => {
+    const res = await apiClient.post(`/admin/preset/file`, {
+      target: payload.target,
+      mod_id: payload.modId || '',
+      type: payload.type,
+      name: payload.name,
+      content: payload.content
+    });
+    return res.data;
+  },
+
   // Library Management
   getLibraryList: async (params?: {
     q?: string;
