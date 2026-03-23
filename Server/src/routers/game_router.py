@@ -11,6 +11,7 @@ from pydantic import BaseModel
 class StartGameRequest(BaseModel):
     roommates: List[str] = []
     mod_id: Optional[str] = "default"
+    max_turns: Optional[int] = None
     custom_prompts: Optional[Dict[str, str]] = None
     is_prefetch: bool = False
     save_id: str = "slot_0"
@@ -263,6 +264,11 @@ def build_game_router(
 
             if engine and hasattr(engine, "mm"):
                 engine.mm.current_save_id = req.save_id
+            if req.max_turns is not None and hasattr(engine, "max_game_turns"):
+                try:
+                    engine.max_game_turns = int(clamp(int(req.max_turns), 15, 30))
+                except Exception:
+                    engine.max_game_turns = int(clamp(int(getattr(engine, "max_game_turns", 20)), 15, 30))
             runtime_tmp = clamp(float(getattr(engine.llm, "temperature", 0.7)), temp_min, temp_max)
             runtime_max_t = int(clamp(int(getattr(engine.llm, "max_tokens", 800)), tokens_min, tokens_max))
 

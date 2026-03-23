@@ -73,10 +73,17 @@ export const gameApi = {
     return res.data;
   },
 
-  startGame: async (roommates: string[] = [], modId: string = "default", customPrompts?: Record<string, string>, saveId: string = "slot_0") => {
+  startGame: async (
+    roommates: string[] = [],
+    modId: string = "default",
+    customPrompts?: Record<string, string>,
+    saveId: string = "slot_0",
+    maxTurns?: number
+  ) => {
     const res = await apiClient.post(`/game/start`, { 
         roommates,
         mod_id: modId,
+        max_turns: maxTurns,
         custom_prompts: customPrompts,
         save_id: saveId
     });

@@ -176,3 +176,58 @@ textarea {
 .animate-shimmer {
   animation: shimmer 2s infinite;
 }
+
+.setup-range {
+  --progress: 33%;
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-cyan-main) 0%,
+    var(--color-cyan-main) var(--progress),
+    rgba(2, 132, 199, 0.15) var(--progress),
+    rgba(2, 132, 199, 0.15) 100%
+  );
+}
+
+.setup-range::-webkit-slider-runnable-track {
+  height: 14px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.setup-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: #12b6d3;
+  border: 4px solid #e7fbff;
+  box-shadow: 0 6px 14px rgba(18, 182, 211, 0.28);
+  margin-top: -8px;
+}
+
+.setup-range::-moz-range-track {
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(2, 132, 199, 0.15);
+}
+
+.setup-range::-moz-range-progress {
+  height: 14px;
+  border-radius: 999px;
+  background: var(--color-cyan-main);
+}
+
+.setup-range::-moz-range-thumb {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: #12b6d3;
+  border: 4px solid #e7fbff;
+  box-shadow: 0 6px 14px rgba(18, 182, 211, 0.28);
+}

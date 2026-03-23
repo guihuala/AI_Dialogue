@@ -9,7 +9,7 @@ import { StartGameButton } from './game/setup/StartGameButton';
 
 interface GameSetupProps {
     onBack: () => void;
-    onStartGame: (roommates: string[], modId?: string) => void;
+    onStartGame: (roommates: string[], modId?: string, maxTurns?: number) => void;
     onTabChange: (tab: any) => void;
 }
 
@@ -17,6 +17,7 @@ export const GameSetup = ({ onBack, onStartGame, onTabChange }: GameSetupProps) 
     const [candidates, setCandidates] = useState<any[]>([]);
     const [selectedRoommates, setSelectedRoommates] = useState<string[]>([]);
     const [selectedMod, setSelectedMod] = useState<string>('default');
+    const [maxTurns, setMaxTurns] = useState<number>(20);
     const [isLoading, setIsLoading] = useState(true);
     const isGameLoading = useGameStore(state => state.isLoading);
 
@@ -84,20 +85,44 @@ export const GameSetup = ({ onBack, onStartGame, onTabChange }: GameSetupProps) 
                         onToggleRoommate={toggleRoommate}
                     />
 
-                    <div className="p-8 bg-white/50 backdrop-blur-sm border-t border-[var(--color-cyan-main)]/10 flex flex-col md:flex-row items-center justify-between gap-6">
-                        <button
-                            onClick={randomizeRoommates}
-                            className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-4 bg-white hover:bg-[var(--color-cyan-main)]/5 text-[var(--color-cyan-main)] text-xs font-black uppercase tracking-[0.2em] rounded-2xl border-2 border-[var(--color-cyan-main)]/20 transition-all active:scale-95 group shadow-lg"
-                        >
-                            <Dices size={20} className="group-hover:rotate-180 transition-transform duration-700" />
-                            随机
-                        </button>
-                        
-                        <StartGameButton 
-                            disabled={selectedRoommates.length !== 3} 
-                            isLoading={isGameLoading} 
-                            onClick={() => onStartGame(selectedRoommates, selectedMod)} 
-                        />
+                    <div className="p-8 bg-white/50 backdrop-blur-sm border-t border-[var(--color-cyan-main)]/10 flex flex-col gap-5">
+                        <div className="w-full rounded-3xl border border-[var(--color-cyan-main)]/15 bg-white/80 px-5 py-4">
+                            <div className="flex items-start justify-between gap-4 mb-2">
+                                <div>
+                                    <p className="text-lg font-black text-[var(--color-cyan-dark)] tracking-tight">最大回合数</p>
+                                    <p className="text-xs font-black text-[var(--color-cyan-main)]/35">推荐 18-24（节奏更好）</p>
+                                </div>
+                                <div className="px-4 py-1 rounded-2xl bg-[var(--color-cyan-dark)] text-[var(--color-yellow-main)] text-2xl font-black leading-none shadow-md tabular-nums min-w-[74px] text-center">
+                                    {maxTurns}
+                                </div>
+                            </div>
+                            <input
+                                type="range"
+                                min={15}
+                                max={30}
+                                step={1}
+                                value={maxTurns}
+                                onChange={(e) => setMaxTurns(Math.max(15, Math.min(30, Number(e.target.value) || 20)))}
+                                className="setup-range"
+                                style={{ ['--progress' as any]: `${((maxTurns - 15) / 15) * 100}%` }}
+                            />
+                        </div>
+
+                        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                            <button
+                                onClick={randomizeRoommates}
+                                className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-4 bg-white hover:bg-[var(--color-cyan-main)]/5 text-[var(--color-cyan-main)] text-xs font-black uppercase tracking-[0.2em] rounded-2xl border-2 border-[var(--color-cyan-main)]/20 transition-all active:scale-95 group shadow-lg"
+                            >
+                                <Dices size={20} className="group-hover:rotate-180 transition-transform duration-700" />
+                                随机
+                            </button>
+
+                            <StartGameButton
+                                disabled={selectedRoommates.length !== 3}
+                                isLoading={isGameLoading}
+                                onClick={() => onStartGame(selectedRoommates, selectedMod, maxTurns)}
+                            />
+                        </div>
                     </div>
                 </div>
             </div>

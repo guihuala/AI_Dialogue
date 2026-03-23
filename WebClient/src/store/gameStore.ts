@@ -53,7 +53,7 @@ interface GameState {
   } | null;
 
   // actions
-  startGame: (roommates?: string[], modId?: string) => Promise<void>;
+  startGame: (roommates?: string[], modId?: string, maxTurns?: number) => Promise<void>;
   performTurn: (choice: string) => Promise<void>;
   saveGame: (slotId: number) => Promise<void>;
   loadSave: (slotId: number) => Promise<void>;
@@ -120,10 +120,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setEventScript: (script: any) => set({ eventScript: script }),
 
-  startGame: async (roommates = [], modId?: string) => {
+  startGame: async (roommates = [], modId?: string, maxTurns?: number) => {
     set({ isLoading: true, pendingChoice: null });
     try {
-      const data = await gameApi.startGame(roommates, modId || 'default', undefined, 'slot_0');
+      const data = await gameApi.startGame(roommates, modId || 'default', undefined, 'slot_0', maxTurns);
       set({
         currentSaveId: 'slot_0',
         isPlaying: true,

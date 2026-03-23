@@ -457,24 +457,6 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
 
             <AttributeNotifications notifications={notifications} />
 
-            <div className="absolute top-5 left-5 z-30 pointer-events-none">
-                <div className="rounded-full border border-[var(--color-cyan-main)]/25 bg-white/80 backdrop-blur-md px-3 py-2 shadow-lg max-w-[52vw]">
-                    <div className="flex flex-wrap gap-1.5 items-center">
-                        <span className="text-[10px] font-black tracking-widest text-[var(--color-cyan-dark)]/55 uppercase pr-1">
-                            室友
-                        </span>
-                        {(active_roommates || []).map((name) => (
-                            <span
-                                key={name}
-                                className="px-2 py-0.5 rounded-full bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] text-[11px] font-black border border-[var(--color-cyan-main)]/20"
-                            >
-                                {name}
-                            </span>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
             {!!turnDebug && (
                 <div
                     ref={debugPanelRef}
@@ -578,16 +560,21 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                                         <div className="text-[10px] text-slate-600">
                                             dorm mood Δ {turnDebug.state_delta?.dorm_mood_delta ?? 0}
                                         </div>
-                                        {Array.isArray(turnDebug.state_delta?.relation_deltas) && turnDebug.state_delta.relation_deltas.length > 0 && (
-                                            <div className="mt-1 text-[10px] text-slate-500 space-y-0.5">
-                                                {turnDebug.state_delta.relation_deltas.slice(0, 3).map((item: any, idx: number) => (
-                                                    <div key={idx}>
-                                                        {item?.name}: t{item?.trust_delta ?? 0} / z{item?.tension_delta ?? 0}
-                                                        {item?.stage_from !== item?.stage_to ? ` (${item?.stage_from}→${item?.stage_to})` : ''}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
+                                    </div>
+                                )}
+                                {Array.isArray(active_roommates) && active_roommates.length > 0 && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">Roommates</div>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {active_roommates.map((name) => (
+                                                <span
+                                                    key={name}
+                                                    className="px-2 py-0.5 rounded-full bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] text-[10px] font-black border border-[var(--color-cyan-main)]/20"
+                                                >
+                                                    {name}
+                                                </span>
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
                                 {(systemState?.time || systemDailyPlan || systemKeyResolution) && (
