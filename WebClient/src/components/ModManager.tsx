@@ -893,6 +893,23 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                             <div className="mt-3 text-[10px] text-gray-400 font-black">
                                 共包含 {(selectedWorkshopMod.summary?.md_files ?? 0) + (selectedWorkshopMod.summary?.csv_files ?? 0)} 个内容文件
                             </div>
+                            {Array.isArray(selectedWorkshopMod.enabled_skills) && selectedWorkshopMod.enabled_skills.length > 0 && (
+                                <div className="mt-4">
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]/70 mb-2">
+                                        启用技能
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedWorkshopMod.enabled_skills.map((skill: string) => (
+                                            <span
+                                                key={skill}
+                                                className="text-[10px] bg-white text-[var(--color-cyan-dark)] px-3 py-1 rounded-full font-black tracking-widest uppercase border border-[var(--color-cyan-main)]/15"
+                                            >
+                                                {skill}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {selectedWorkshopLibraryState && (

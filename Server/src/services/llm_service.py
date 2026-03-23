@@ -1,7 +1,8 @@
 from openai import OpenAI, AsyncOpenAI
 import os
-from typing import Optional
+from typing import Optional, Any, Dict, List
 from dotenv import load_dotenv
+import json
 
 load_dotenv()
 
@@ -89,6 +90,102 @@ class LLMService:
                     return '{"error": "AI大模型生成失败，请检查 API Key 或网络环境: ' + str(inner_e).replace('"', "'").replace("\n", " ") + '"}'
             print(f"LLM API Error: {e}")
             return '{"error": "AI大模型请求异常: ' + str(e).replace('"', "'").replace("\n", " ") + '"}'
+
+    def generate_response_with_tools(
+        self,
+        system_prompt: str,
+        user_input: str,
+        context: str = "",
+        temperature: float = 0.7,
+        top_p: float = 1.0,
+        max_tokens: int = 1000,
+        presence_penalty: float = 0.0,
+        frequency_penalty: float = 0.0,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Any] = "auto",
+    ) -> Dict[str, Any]:
+        """
+        OpenAI-compatible tool calling wrapper.
+        返回结构：
+        {
+          "content": str,
+          "tool_calls": [{"name": str, "args": dict}],
+          "raw": Any
+        }
+        """
+        if not tools:
+            return {
+                "content": self.generate_response(
+                    system_prompt=system_prompt,
+                    user_input=user_input,
+                    context=context,
+                    temperature=temperature,
+                    top_p=top_p,
+                    max_tokens=max_tokens,
+                    presence_penalty=presence_penalty,
+                    frequency_penalty=frequency_penalty,
+                ),
+                "tool_calls": [],
+                "raw": None,
+            }
+        if not self.api_key or self.api_key == "dummy":
+            return {"content": '{"error":"API Key not set"}', "tool_calls": [], "raw": None}
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Context:\n{context}\n\nUser: {user_input}"}
+        ]
+        try:
+            completion = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                top_p=top_p,
+                max_tokens=max_tokens,
+                presence_penalty=presence_penalty,
+                frequency_penalty=frequency_penalty,
+                response_format={"type": "json_object"},
+                tools=tools,
+                tool_choice=tool_choice,
+            )
+            usage = getattr(completion, "usage", None)
+            self.last_usage = {
+                "model": self.model,
+                "prompt_tokens": getattr(usage, "prompt_tokens", None) if usage is not None else None,
+                "completion_tokens": getattr(usage, "completion_tokens", None) if usage is not None else None,
+                "total_tokens": getattr(usage, "total_tokens", None) if usage is not None else None,
+            }
+            msg = completion.choices[0].message
+            content = getattr(msg, "content", "") or ""
+            out_calls: List[Dict[str, Any]] = []
+            raw_calls = getattr(msg, "tool_calls", None) or []
+            for tc in raw_calls:
+                try:
+                    fn = getattr(tc, "function", None)
+                    name = str(getattr(fn, "name", "") or "").strip()
+                    arg_text = getattr(fn, "arguments", "{}") or "{}"
+                    args = json.loads(arg_text) if isinstance(arg_text, str) else (arg_text if isinstance(arg_text, dict) else {})
+                    if name:
+                        out_calls.append({"name": name, "args": args if isinstance(args, dict) else {}})
+                except Exception:
+                    continue
+            return {"content": content, "tool_calls": out_calls, "raw": completion}
+        except Exception:
+            # 模型不支持工具调用时自动降级为纯文本模式
+            return {
+                "content": self.generate_response(
+                    system_prompt=system_prompt,
+                    user_input=user_input,
+                    context=context,
+                    temperature=temperature,
+                    top_p=top_p,
+                    max_tokens=max_tokens,
+                    presence_penalty=presence_penalty,
+                    frequency_penalty=frequency_penalty,
+                ),
+                "tool_calls": [],
+                "raw": None,
+            }
 
     # 在 llm_service.py 的 LLMService 类中新增：
 

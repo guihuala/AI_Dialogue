@@ -42,6 +42,8 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         current_scene,
         resetGame,
         active_roommates,
+        phoneSourceStats,
+        stateToolStats,
         narrativeState,
         turnDebug,
         systemState,
@@ -487,7 +489,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                             </button>
                         </div>
                         {showDebugPanel && (
-                            <div className="p-3 space-y-2 text-[11px] text-[var(--color-cyan-dark)]">
+                            <div className="p-2.5 space-y-2 text-[11px] text-[var(--color-cyan-dark)] max-h-[min(68vh,680px)] overflow-y-auto custom-scrollbar">
                                 {turnDebug.timings && (
                                     <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
                                         <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">Timings (s)</div>
@@ -523,11 +525,11 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                                             chars s/u {turnDebug.prompt_payload?.system_chars ?? 0} / {turnDebug.prompt_payload?.user_chars ?? 0}
                                         </div>
                                         <div className="mt-1 text-[10px] text-slate-500">system prompt</div>
-                                        <pre className="mt-0.5 max-h-28 overflow-auto rounded-lg border border-[var(--color-cyan-main)]/10 bg-slate-50 p-2 text-[10px] leading-relaxed text-slate-700 whitespace-pre-wrap break-words">
+                                        <pre className="mt-0.5 max-h-20 overflow-auto rounded-lg border border-[var(--color-cyan-main)]/10 bg-slate-50 p-2 text-[10px] leading-relaxed text-slate-700 whitespace-pre-wrap break-words">
 {String(turnDebug.prompt_payload?.system_prompt || '')}
                                         </pre>
                                         <div className="mt-1 text-[10px] text-slate-500">user prompt</div>
-                                        <pre className="mt-0.5 max-h-28 overflow-auto rounded-lg border border-[var(--color-cyan-main)]/10 bg-slate-50 p-2 text-[10px] leading-relaxed text-slate-700 whitespace-pre-wrap break-words">
+                                        <pre className="mt-0.5 max-h-20 overflow-auto rounded-lg border border-[var(--color-cyan-main)]/10 bg-slate-50 p-2 text-[10px] leading-relaxed text-slate-700 whitespace-pre-wrap break-words">
 {String(turnDebug.prompt_payload?.user_prompt || '')}
                                         </pre>
                                     </div>
@@ -536,6 +538,111 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                                     <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
                                         <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">Render Source</div>
                                         <div className="text-[10px] text-slate-600">{turnDebug.render_source}</div>
+                                    </div>
+                                )}
+                                {Array.isArray(turnDebug?.enabled_skills) && turnDebug.enabled_skills.length > 0 && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">Enabled Skills</div>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {turnDebug.enabled_skills.map((skill: string) => (
+                                                <span
+                                                    key={skill}
+                                                    className="px-2 py-0.5 rounded-full bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] text-[10px] font-black border border-[var(--color-cyan-main)]/20"
+                                                >
+                                                    {skill}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {Array.isArray(turnDebug?.tool_calls_summary) && turnDebug.tool_calls_summary.length > 0 && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">Tool Calls</div>
+                                        <div className="space-y-1">
+                                            {turnDebug.tool_calls_summary.slice(0, 6).map((call: any, idx: number) => (
+                                                <div key={`${call?.name || 'tool'}-${idx}`} className="rounded-lg border border-[var(--color-cyan-main)]/10 bg-slate-50 px-2 py-1">
+                                                    <div className="text-[10px] font-black text-slate-700">
+                                                        {call?.name || 'unknown_tool'}
+                                                        <span className={`ml-1 ${call?.ok === false ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                            {call?.ok === false ? 'fail' : 'ok'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-500 break-all">
+                                                        {JSON.stringify(call?.args || {})}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {Array.isArray(turnDebug?.state_tool_audit) && turnDebug.state_tool_audit.length > 0 && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">State Tool Audit</div>
+                                        {turnDebug?.state_tool_stats && (
+                                            <div className="mb-1 text-[10px] text-slate-600">
+                                                turn {Number(turnDebug.state_tool_stats?.accepted || 0)} ok / {Number(turnDebug.state_tool_stats?.rejected || 0)} reject
+                                            </div>
+                                        )}
+                                        <div className="space-y-1">
+                                            {turnDebug.state_tool_audit.slice(0, 6).map((item: any, idx: number) => (
+                                                <div key={`state-audit-${idx}`} className="rounded-lg border border-[var(--color-cyan-main)]/10 bg-slate-50 px-2 py-1">
+                                                    <div className="text-[10px] font-black text-slate-700">
+                                                        {String(item?.tool || item?.kind || 'state_tool')}
+                                                        <span className={`ml-1 ${item?.accepted ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                            {item?.accepted ? 'accepted' : 'rejected'}
+                                                        </span>
+                                                    </div>
+                                                    {!item?.accepted && item?.reason && (
+                                                        <div className="text-[10px] text-rose-600">{String(item.reason)}</div>
+                                                    )}
+                                                    {item?.target && (
+                                                        <div className="text-[10px] text-slate-500">target {String(item.target)}</div>
+                                                    )}
+                                                    {item?.tag && (
+                                                        <div className="text-[10px] text-slate-500 break-all">tag {String(item.tag)}</div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {!!stateToolStats && Number(stateToolStats.total || 0) > 0 && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">State Tool Dist</div>
+                                        <div className="text-[10px] text-slate-600">
+                                            total {Number(stateToolStats.total || 0)} · accepted {Number(stateToolStats.accepted || 0)} · rejected {Number(stateToolStats.rejected || 0)}
+                                        </div>
+                                    </div>
+                                )}
+                                {(turnDebug?.legacy_wechat_used || (turnDebug?.legacy_wechat_count ?? 0) > 0) && (
+                                    <div className="rounded-xl border border-amber-300/40 bg-amber-50 p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-amber-700 mb-1">Legacy Wechat Path</div>
+                                        <div className="text-[10px] text-amber-800">
+                                            effects.wechat / wechat_notifications used: {turnDebug?.legacy_wechat_count ?? 0}
+                                        </div>
+                                    </div>
+                                )}
+                                {!!turnDebug?.phone_message_source && turnDebug.phone_message_source !== 'none' && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">Phone Message Source</div>
+                                        <div className="text-[10px] text-slate-600">
+                                            {turnDebug.phone_message_source}
+                                        </div>
+                                    </div>
+                                )}
+                                {phoneSourceStats && Object.keys(phoneSourceStats).length > 0 && (
+                                    <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2">
+                                        <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">Phone Source Dist</div>
+                                        <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                                            {Object.entries(phoneSourceStats)
+                                                .sort((a, b) => Number(b[1]) - Number(a[1]))
+                                                .map(([k, v]) => (
+                                                    <div key={k} className="flex items-center justify-between gap-2">
+                                                        <span className="font-bold text-slate-500">{k}</span>
+                                                        <span className="font-black tabular-nums">{Number(v)}</span>
+                                                    </div>
+                                                ))}
+                                        </div>
                                     </div>
                                 )}
                                 {turnDebug?.ai_usage && (

@@ -1,4 +1,5 @@
 import hashlib
+import json
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
 
@@ -17,6 +18,7 @@ def build_manifest(
     content: Dict[str, Dict[str, str]],
     base_version: str = "default-v1",
     schema_version: int = 1,
+    enabled_skills: List[str] = None,
 ) -> Dict[str, Any]:
     md_files = content.get("md", {}) if isinstance(content, dict) else {}
     csv_files = content.get("csv", {}) if isinstance(content, dict) else {}
@@ -56,7 +58,21 @@ def build_manifest(
     except Exception:
         player_id = None
 
-    return {
+    derived_enabled_skills: List[str] = []
+    if isinstance(enabled_skills, list) and enabled_skills:
+        derived_enabled_skills = [str(s).strip() for s in enabled_skills if str(s).strip()]
+    else:
+        try:
+            features_text = md_files.get("system/mod_features.json", "")
+            if features_text:
+                features = json.loads(features_text)
+                raw = features.get("enabled_skills") if isinstance(features, dict) else None
+                if isinstance(raw, list):
+                    derived_enabled_skills = [str(s).strip() for s in raw if str(s).strip()]
+        except Exception:
+            derived_enabled_skills = []
+
+    manifest = {
         "schema_version": schema_version,
         "mod_id": mod_id,
         "name": name,
@@ -67,6 +83,9 @@ def build_manifest(
         "entry": {"player_id": player_id},
         "files": files,
     }
+    if derived_enabled_skills:
+        manifest["enabled_skills"] = derived_enabled_skills
+    return manifest
 
 
 def validate_manifest(manifest: Dict[str, Any], content: Dict[str, Dict[str, str]]) -> Tuple[bool, str]:
@@ -79,6 +98,8 @@ def validate_manifest(manifest: Dict[str, Any], content: Dict[str, Dict[str, str
     files = manifest.get("files", [])
     if not isinstance(files, list):
         return False, "manifest.files must be list"
+    if "enabled_skills" in manifest and not isinstance(manifest.get("enabled_skills"), list):
+        return False, "manifest.enabled_skills must be list when provided"
 
     md_files = content.get("md", {}) if isinstance(content, dict) else {}
     csv_files = content.get("csv", {}) if isinstance(content, dict) else {}

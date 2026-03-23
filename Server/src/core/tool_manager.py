@@ -71,3 +71,50 @@ class ToolManager:
             "money_delta": -300,
             "san_delta": -10
         }
+
+    def phone_enqueue_message(self, args: dict) -> dict:
+        """工具：向手机系统投递一条消息（结构化，不直接改主文案）"""
+        chat_name = str(args.get("chat_name", "") or "").strip()
+        sender = str(args.get("sender", "") or "").strip()
+        content = str(args.get("content", "") or "").strip()
+        if not chat_name or not sender or not content:
+            return {}
+        return {
+            "wechat_notifications": [
+                {
+                    "chat_name": chat_name[:24],
+                    "sender": sender[:16],
+                    "message": content[:180],
+                }
+            ]
+        }
+
+    def memory_add_tag(self, args: dict) -> dict:
+        """工具提议：写入记忆标签（不直接落库，由系统裁决）"""
+        tag = str(args.get("tag", "") or "").strip()
+        target = str(args.get("target", "") or "").strip()
+        ttl = args.get("ttl", None)
+        return {
+            "proposal": {
+                "kind": "memory_add_tag",
+                "tag": tag,
+                "target": target,
+                "ttl": ttl,
+            }
+        }
+
+    def relationship_apply_delta(self, args: dict) -> dict:
+        """工具提议：关系状态增量（不直接结算，由系统裁决）"""
+        target = str(args.get("target", "") or "").strip()
+        trust = args.get("trust", 0)
+        tension = args.get("tension", 0)
+        intimacy = args.get("intimacy", 0)
+        return {
+            "proposal": {
+                "kind": "relationship_apply_delta",
+                "target": target,
+                "trust": trust,
+                "tension": tension,
+                "intimacy": intimacy,
+            }
+        }

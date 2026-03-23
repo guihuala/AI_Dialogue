@@ -11,6 +11,7 @@ import {
     Sparkles
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
+import type { ReactNode } from 'react';
 
 interface Topic {
     id: string;
@@ -27,9 +28,10 @@ interface TopicExplorerProps {
     onSelectTopic: (fileName: string) => void;
     onAddNew?: () => void;
     canEdit?: boolean;
+    headerAddon?: ReactNode;
 }
 
-export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew, canEdit = true }: TopicExplorerProps) => {
+export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew, canEdit = true, headerAddon }: TopicExplorerProps) => {
     const [searchTerm, setSearchTerm] = useState('');
 
     const worldTopics: Topic[] = [
@@ -103,7 +105,7 @@ export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew, canEdi
         { 
             id: 'wechat', 
             title: '社交网络协议', 
-            description: '微信通知系统、朋友圈动态以及线上交互的生成模版。', 
+            description: '手机社交文案与风格模板（消息触发已优先走 phone_enqueue_message 工具）。', 
             icon: Smartphone, 
             fileName: 'skills/wechat_monitor.md',
             color: 'bg-[var(--color-cyan-main)]'
@@ -193,6 +195,11 @@ export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew, canEdi
                     </div>
                 </div>
             </div>
+            {headerAddon && (
+                <div className="px-12 py-4 bg-white border-b border-[var(--color-soft-border)]">
+                    {headerAddon}
+                </div>
+            )}
 
             {/* Grid */}
             <div className="flex-1 overflow-y-auto custom-scrollbar p-12">

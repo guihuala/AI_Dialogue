@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Globe, Users, ScrollText, Terminal, Sparkles, GitGraph, Zap, Image } from 'lucide-react';
+import { Globe, Users, ScrollText, Terminal, Sparkles, GitGraph, Zap, Image, Settings2 } from 'lucide-react';
 import { gameApi } from '../api/gameApi';
 
 import { EditorHeader } from './editor/EditorHeader';
@@ -19,6 +19,16 @@ import { AUTO_FIX_PRESETS, AutoFixPresetId } from '../config/eventSkeletonAutoFi
 
 import { Category } from './editor/types';
 
+const SKILL_TOGGLE_OPTIONS: Array<{ key: string; label: string; desc: string }> = [
+    { key: 'slang_dict', label: '阶段语气包', desc: '按章节注入语气与表达倾向' },
+    { key: 'academic_world', label: '世界观补充', desc: '注入场景/配角世界设定' },
+    { key: 'character_roster', label: '角色速览', desc: '注入在场角色设定摘要' },
+    { key: 'relationship_matrix', label: '关系矩阵', desc: '注入角色间关系与态度' },
+    { key: 'secret_note', label: '秘密纸条', desc: '关系波动时生成短纸条余波' },
+    { key: 'relationship_milestone', label: '关系里程碑', desc: '阶段变化时输出可见瞬间特写' },
+    { key: 'user_skills', label: '自定义技能', desc: '加载 skills/ 下自定义扩展文件' },
+];
+
 interface PromptEditorProps {
     adminPresetMode?: boolean;
     adminPresetTarget?: 'default' | 'preset';
@@ -30,6 +40,7 @@ export const PromptEditor = ({
     adminPresetTarget = 'default',
     adminPresetModId = '',
 }: PromptEditorProps) => {
+    const defaultEnabledSkills = useMemo(() => SKILL_TOGGLE_OPTIONS.map((item) => item.key), []);
     const [eventWorkbench, setEventWorkbench] = useState<'story' | 'skeleton'>('story');
     const [activeCategory, setActiveCategory] = useState<Category>('char');
     const [files, setFiles] = useState<{ md: string[], csv: string[] }>({ md: [], csv: [] });
@@ -57,8 +68,12 @@ export const PromptEditor = ({
     });
     const [skeletonAutoFixPreset, setSkeletonAutoFixPreset] = useState<AutoFixPresetId>('balanced');
     const [skeletonRules, setSkeletonRules] = useState<any>(null);
-    const [modFeatures, setModFeatures] = useState<any>({ phone_system_enabled: true });
+    const [modFeatures, setModFeatures] = useState<any>({
+        phone_system_enabled: true,
+        enabled_skills: ['slang_dict', 'academic_world', 'character_roster', 'relationship_matrix', 'secret_note', 'relationship_milestone', 'user_skills'],
+    });
     const [isSavingFeatures, setIsSavingFeatures] = useState(false);
+    const [showSkillToolbar, setShowSkillToolbar] = useState(false);
 
     const [message, setMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -163,6 +178,9 @@ export const PromptEditor = ({
                 if (parsed && typeof parsed === 'object') {
                     setModFeatures({
                         phone_system_enabled: parsed.phone_system_enabled !== false,
+                        enabled_skills: Array.isArray(parsed.enabled_skills) && parsed.enabled_skills.length > 0
+                            ? parsed.enabled_skills
+                            : defaultEnabledSkills,
                         ...parsed,
                     });
                     return;
@@ -171,7 +189,24 @@ export const PromptEditor = ({
         } catch {
             // fall through to default
         }
-        setModFeatures({ phone_system_enabled: true });
+        setModFeatures({
+            phone_system_enabled: true,
+            enabled_skills: defaultEnabledSkills,
+        });
+    };
+
+    const persistModFeatures = async (next: any, successMsg: string, failMsg: string) => {
+        setModFeatures(next);
+        setIsSavingFeatures(true);
+        try {
+            await saveFileContent('md', 'system/mod_features.json', JSON.stringify(next, null, 2));
+            setMessage(successMsg);
+        } catch {
+            setMessage(failMsg);
+        } finally {
+            setIsSavingFeatures(false);
+            setTimeout(() => setMessage(''), 2500);
+        }
     };
 
     const handleTogglePhoneSystem = async (enabled: boolean) => {
@@ -185,17 +220,26 @@ export const PromptEditor = ({
             phone_system_enabled: enabled,
             wechat_system_enabled: enabled,
         };
-        setModFeatures(next);
-        setIsSavingFeatures(true);
-        try {
-            await saveFileContent('md', 'system/mod_features.json', JSON.stringify(next, null, 2));
-            setMessage('手机系统开关已更新');
-        } catch {
-            setMessage('手机系统开关保存失败');
-        } finally {
-            setIsSavingFeatures(false);
-            setTimeout(() => setMessage(''), 2500);
+        await persistModFeatures(next, '手机系统开关已更新', '手机系统开关保存失败');
+    };
+
+    const handleToggleSkill = async (skillKey: string) => {
+        if (!canEditCurrentMod) {
+            setMessage('默认模组为只读，请先另存到本地模组库后再编辑');
+            setTimeout(() => setMessage(''), 3000);
+            return;
         }
+        const current = Array.isArray(modFeatures?.enabled_skills) ? modFeatures.enabled_skills : defaultEnabledSkills;
+        const has = current.includes(skillKey);
+        const nextSkills = has
+            ? current.filter((s: string) => s !== skillKey)
+            : [...current, skillKey];
+        const normalized = nextSkills.filter((s: string) => SKILL_TOGGLE_OPTIONS.some((item) => item.key === s));
+        const next = {
+            ...(modFeatures || {}),
+            enabled_skills: normalized,
+        };
+        await persistModFeatures(next, '技能开关已更新', '技能开关保存失败');
     };
 
     useEffect(() => {
@@ -1018,27 +1062,6 @@ ${data.content}`;
                 />
 
                 <div className="flex-1 flex flex-col bg-[var(--color-cyan-light)]/10 p-6 md:p-8 overflow-hidden relative">
-                    {activeCategory === 'skills' && (
-                        <div className="mb-4 rounded-2xl border border-[var(--color-cyan-main)]/15 bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                                <div className="text-sm font-black text-[var(--color-cyan-dark)]">附加系统开关</div>
-                                <div className="text-[10px] font-bold text-slate-500 mt-1">
-                                    手机系统关闭后，游戏内不会再生成微信通知，右上角手机按钮会自动隐藏。
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => handleTogglePhoneSystem(!(modFeatures?.phone_system_enabled !== false))}
-                                disabled={isSavingFeatures}
-                                className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition-all ${
-                                    modFeatures?.phone_system_enabled !== false
-                                        ? 'bg-[var(--color-cyan-main)] text-white'
-                                        : 'bg-slate-100 text-slate-600'
-                                } ${isSavingFeatures ? 'opacity-60 cursor-not-allowed' : ''}`}
-                            >
-                                {isSavingFeatures ? '保存中...' : (modFeatures?.phone_system_enabled !== false ? '手机系统：已开启' : '手机系统：已关闭')}
-                            </button>
-                        </div>
-                    )}
                     {activeCategory === 'event' && (
                         <div className="mb-4 rounded-2xl border border-[var(--color-cyan-main)]/15 bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
                             <div>
@@ -1098,6 +1121,65 @@ ${data.content}`;
                                     onSelectTopic={handleSelectTopic}
                                     canEdit={canEditCurrentMod}
                                     onAddNew={activeCategory === 'skills' ? () => setNewItemModal({ type: 'skill', name: '', description: '' }) : undefined}
+                                    headerAddon={activeCategory === 'skills' ? (
+                                        <div className="space-y-1.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowSkillToolbar((v) => !v)}
+                                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[var(--color-cyan-main)]/18 bg-white text-[10px] font-black text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-light)]/30 transition-all"
+                                            >
+                                                <Settings2 size={13} />
+                                                技能开关 {showSkillToolbar ? '▲' : '▼'}
+                                            </button>
+
+                                            {showSkillToolbar && (
+                                                <div className="rounded-xl border border-[var(--color-cyan-main)]/12 bg-[var(--color-cyan-light)]/8 px-2.5 py-2">
+                                                    <div className="mb-2 text-[10px] font-bold text-[var(--color-cyan-dark)]/70">
+                                                        手机消息默认走 <span className="font-black">phone_enqueue_message</span>；<span className="font-black">effects.wechat</span> 仅兼容旧模组。
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide whitespace-nowrap">
+                                                        <button
+                                                            onClick={() => handleTogglePhoneSystem(!(modFeatures?.phone_system_enabled !== false))}
+                                                            disabled={isSavingFeatures}
+                                                            className={`px-2.5 py-1 rounded-md text-[10px] font-black transition-all shrink-0 ${
+                                                                modFeatures?.phone_system_enabled !== false
+                                                                    ? 'bg-[var(--color-cyan-main)] text-white'
+                                                                    : 'bg-white text-slate-600 border border-[var(--color-cyan-main)]/12'
+                                                            } ${isSavingFeatures ? 'opacity-60 cursor-not-allowed' : 'hover:opacity-90'}`}
+                                                        >
+                                                            {isSavingFeatures ? '保存中' : (modFeatures?.phone_system_enabled !== false ? '手机 ON' : '手机 OFF')}
+                                                        </button>
+                                                        {SKILL_TOGGLE_OPTIONS.map((item) => {
+                                                            const enabled = (Array.isArray(modFeatures?.enabled_skills) ? modFeatures.enabled_skills : defaultEnabledSkills).includes(item.key);
+                                                            return (
+                                                                <button
+                                                                    key={item.key}
+                                                                    type="button"
+                                                                    onClick={() => handleToggleSkill(item.key)}
+                                                                    disabled={isSavingFeatures}
+                                                                    title={item.desc}
+                                                                    className={`px-2.5 py-1 rounded-md text-[10px] font-black transition-all shrink-0 ${
+                                                                        enabled
+                                                                            ? 'bg-[var(--color-cyan-main)]/14 text-[var(--color-cyan-dark)] border border-[var(--color-cyan-main)]/30'
+                                                                            : 'bg-white text-slate-500 border border-[var(--color-cyan-main)]/12'
+                                                                    } ${isSavingFeatures ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white'}`}
+                                                                >
+                                                                    {item.label
+                                                                        .replace('阶段语气包', '语气')
+                                                                        .replace('世界观补充', '世界')
+                                                                        .replace('角色速览', '角色')
+                                                                        .replace('关系矩阵', '关系')
+                                                                        .replace('秘密纸条', '纸条')
+                                                                        .replace('关系里程碑', '里程碑')
+                                                                        .replace('自定义技能', '自定义')} {enabled ? 'ON' : 'OFF'}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : undefined}
                                 />
                             ) : activeCategory === 'scene' && selectedFile?.name === 'world/scenes.json' && editMode === 'visual' ? (
                                 <SceneConfigEditor

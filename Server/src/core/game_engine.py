@@ -346,12 +346,12 @@ class GameEngine:
 
             rescued_options = _extract_options_from_raw(raw_text)
             return {
-                "narrator_transition": "（系统受到干扰，尝试理清思绪...）",
-                "current_scene": "未知",
-                "dialogue_sequence": [{"speaker": "系统提示", "content": "（由于未知干扰，当前对话解析失败，请检查参数面板中的“原始输出”查明原因。）"}],
+                "narrator_transition": "你们的对话短暂卡住了半拍，气氛仍在继续流动。",
+                "current_scene": "当前场景",
+                "dialogue_sequence": [{"speaker": "旁白", "content": "大家都在等你下一句，话题并没有结束。"}],
                 "npc_background_actions": [],
                 "wechat_notifications": [],
-                "next_options": rescued_options if rescued_options else ["【深呼吸】", "【重试】", "【继续观察】"],
+                "next_options": rescued_options if rescued_options else ["先把刚才的话说清楚", "换个角度继续聊", "先稳住气氛再推进"],
                 "stat_changes": {},
                 "is_end": False
             }
@@ -643,7 +643,8 @@ class GameEngine:
             "2. 只允许这些字段：scene_line, current_scene, dialogue_lines, options_copy, is_end, effects。\n"
             "3. scene_line 必须是一句场景叙述；dialogue_lines 必须是 3-6 条字符串。\n"
             "4. options_copy 必须是 3-4 个具体动作选项，不要输出“继续剧情”。\n"
-            "5. effects 必须是字符串数组命令，可为空数组；允许命令：san/money/arg/affinity/wechat；禁止输出 stat_changes/tool_calls。\n"
+            "5. effects 必须是字符串数组命令，可为空数组；允许命令：san/money/arg/affinity；禁止输出 stat_changes/tool_calls。\n"
+            "5.1 手机消息优先走函数调用，不要再用 effects.wechat 作为主通路（仅兼容老模组）。\n"
             "6. 不要输出 mood 字段，不要输出多余嵌套结构。\n"
         )
         try:
@@ -656,7 +657,7 @@ class GameEngine:
 
     def _build_expression_system_prompt(self, player_name: str, phone_system_enabled: bool = True) -> str:
         phone_line = (
-            "- 可选：若本轮存在明显互动后果，可在 effects 添加 0-1 条 wechat:群聊名|发送者|消息内容\n"
+            "- 若本轮存在明显互动后果，优先使用 phone_enqueue_message 函数投递手机消息；不要依赖 effects.wechat\n"
             if phone_system_enabled
             else "- 手机系统已禁用：不要输出任何 wechat 相关效果\n"
         )
@@ -682,6 +683,144 @@ class GameEngine:
         except Exception:
             pass
         return fallback
+
+    def _build_expression_tools(self, phone_system_enabled: bool = True):
+        tools = []
+        if phone_system_enabled:
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "phone_enqueue_message",
+                        "description": "向手机系统投递一条消息通知（仅在本轮有明确触发后果时调用）。",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "chat_name": {"type": "string", "description": "聊天对象或群名"},
+                                "sender": {"type": "string", "description": "发送者名称"},
+                                "content": {"type": "string", "description": "消息内容，尽量短"},
+                            },
+                            "required": ["chat_name", "sender", "content"],
+                            "additionalProperties": False,
+                        },
+                    },
+                }
+            )
+        tools.extend(
+            [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "memory_add_tag",
+                        "description": "提议写入一条剧情记忆标签（系统会校验并决定是否落库）。",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "tag": {"type": "string", "description": "记忆标签，例如 chain:conflict:spark"},
+                                "target": {"type": "string", "description": "可选，关联角色名"},
+                                "ttl": {"type": "integer", "description": "可选，生效天数"},
+                            },
+                            "required": ["tag"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "relationship_apply_delta",
+                        "description": "提议对角色关系三维做小幅增量（系统会裁决并限幅）。",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "target": {"type": "string", "description": "目标角色名"},
+                                "trust": {"type": "number", "description": "信任变化，建议-3~+3"},
+                                "tension": {"type": "number", "description": "紧张变化，建议-3~+3"},
+                                "intimacy": {"type": "number", "description": "亲密变化，建议-3~+3"},
+                            },
+                            "required": ["target"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+            ]
+        )
+        return tools
+
+    def _apply_state_tool_proposal(self, proposal: dict, *, selected_chars, player_name: str):
+        if not isinstance(proposal, dict):
+            return {"accepted": False, "reason": "invalid_proposal"}
+        kind = str(proposal.get("kind", "") or "").strip()
+        if not kind:
+            return {"accepted": False, "reason": "missing_kind"}
+
+        if kind == "memory_add_tag":
+            tag = str(proposal.get("tag", "") or "").strip()
+            if not tag:
+                return {"accepted": False, "reason": "empty_tag", "kind": kind}
+            if len(tag) > 64:
+                return {"accepted": False, "reason": "tag_too_long", "kind": kind, "tag": tag[:64]}
+            if not re.match(r"^[a-zA-Z0-9:_-]{2,64}$", tag):
+                return {"accepted": False, "reason": "invalid_tag_pattern", "kind": kind, "tag": tag[:64]}
+            target = str(proposal.get("target", "") or "").strip()
+            ttl = proposal.get("ttl", None)
+            ttl_days = None
+            if ttl is not None:
+                try:
+                    ttl_days = max(1, min(30, int(ttl)))
+                except Exception:
+                    ttl_days = None
+            memory_tag = tag if not target else f"{tag}:char:{target}"
+            if ttl_days is not None:
+                memory_tag = f"{memory_tag}:ttl:{ttl_days}"
+            if hasattr(self, "system_state_mgr"):
+                self.system_state_mgr.apply_external_effects(
+                    {"memory_tags": [memory_tag]},
+                    note=f"tool:{kind}"
+                )
+            return {"accepted": True, "kind": kind, "tag": memory_tag}
+
+        if kind == "relationship_apply_delta":
+            target = str(proposal.get("target", "") or "").strip()
+            if not target or target == player_name:
+                return {"accepted": False, "reason": "invalid_target", "kind": kind, "target": target}
+            allowed_targets = set([str(x).strip() for x in (selected_chars or []) if str(x).strip()])
+            if target not in allowed_targets:
+                return {"accepted": False, "reason": "target_not_active", "kind": kind, "target": target}
+
+            def _cap(v):
+                try:
+                    return max(-6.0, min(6.0, float(v or 0)))
+                except Exception:
+                    return 0.0
+
+            trust = _cap(proposal.get("trust", 0))
+            tension = _cap(proposal.get("tension", 0))
+            intimacy = _cap(proposal.get("intimacy", 0))
+            if abs(trust) + abs(tension) + abs(intimacy) <= 0.01:
+                return {"accepted": False, "reason": "zero_delta", "kind": kind, "target": target}
+            if hasattr(self, "system_state_mgr"):
+                self.system_state_mgr.apply_external_effects(
+                    {
+                        "relation_delta": {
+                            target: {
+                                "trust": trust,
+                                "tension": tension,
+                                "intimacy": intimacy,
+                            }
+                        }
+                    },
+                    note=f"tool:{kind}"
+                )
+            return {
+                "accepted": True,
+                "kind": kind,
+                "target": target,
+                "trust": trust,
+                "tension": tension,
+                "intimacy": intimacy,
+            }
+        return {"accepted": False, "reason": "unsupported_kind", "kind": kind}
 
     def _build_wechat_fallback_notifications(self, *, selected_chars, system_key_resolution):
         if not isinstance(system_key_resolution, dict) or not bool(system_key_resolution.get("ok", False)):
@@ -718,6 +857,109 @@ class GameEngine:
                 "message": msg,
             }
         ]
+
+    def _build_wechat_soft_fallback_notifications(self, *, selected_chars, dialogue_sequence, player_name: str):
+        """
+        轻量兜底：当本轮未触发任何手机消息时，从对话中提取一个自然的“回合余波”消息。
+        目标是提升手机系统体感，不参与核心结算。
+        """
+        seq = dialogue_sequence if isinstance(dialogue_sequence, list) else []
+        sender = ""
+        for item in reversed(seq):
+            if not isinstance(item, dict):
+                continue
+            spk = str(item.get("speaker", "") or "").strip()
+            if not spk or spk == player_name or spk in {"系统提示", "system"}:
+                continue
+            sender = spk
+            break
+        if not sender:
+            sender = str((selected_chars or ["室友"])[0] or "室友").strip() or "室友"
+
+        content = ""
+        for item in reversed(seq):
+            if not isinstance(item, dict):
+                continue
+            txt = str(item.get("content", "") or "").strip()
+            if txt:
+                content = txt
+                break
+        if not content:
+            content = "刚刚那段我记住了，晚点我们再聊。"
+        else:
+            content = content.replace("**", "").replace("\n", " ").strip()
+            if len(content) > 36:
+                content = content[:36].rstrip("，,。.!！？?…") + "…"
+            content = f"刚刚那段我记住了：{content}"
+
+        return [
+            {
+                "chat_name": sender,
+                "sender": sender,
+                "message": content,
+            }
+        ]
+
+    def _build_secret_note_notification(self, *, selected_chars, relations_state: dict, turn: int):
+        """
+        secret_note 技能：在关系波动明显时，生成一条轻量“匿名纸条”消息。
+        """
+        rel = relations_state if isinstance(relations_state, dict) else {}
+        if not rel:
+            return []
+        best_name = ""
+        best_score = 0.0
+        for name in [str(x).strip() for x in (selected_chars or []) if str(x).strip()]:
+            item = rel.get(name, {})
+            if not isinstance(item, dict):
+                continue
+            try:
+                tension = float(item.get("tension", 50) or 50)
+            except Exception:
+                tension = 50.0
+            try:
+                intimacy = float(item.get("intimacy", 30) or 30)
+            except Exception:
+                intimacy = 30.0
+            score = max(tension - 66.0, intimacy - 70.0)
+            if score > best_score:
+                best_score = score
+                best_name = name
+
+        if not best_name:
+            return []
+        # 稳定且可预期：每三回合最多一次
+        if int(turn or 0) % 3 != 0:
+            return []
+
+        item = rel.get(best_name, {}) if isinstance(rel.get(best_name, {}), dict) else {}
+        try:
+            tension = float(item.get("tension", 50) or 50)
+        except Exception:
+            tension = 50.0
+        try:
+            intimacy = float(item.get("intimacy", 30) or 30)
+        except Exception:
+            intimacy = 30.0
+        if tension >= intimacy:
+            msg = "匿名纸条：你刚刚那句，我听见了。"
+        else:
+            msg = "匿名纸条：今天想和你坐近一点。"
+
+        return [{
+            "chat_name": "匿名纸条",
+            "sender": "匿名",
+            "message": msg,
+        }]
+
+    def _format_relationship_milestones(self, milestones: list[str]) -> str:
+        if not isinstance(milestones, list):
+            return ""
+        lines = [str(x).strip() for x in milestones if str(x).strip()]
+        if not lines:
+            return ""
+        top = lines[:2]
+        return "【关系里程碑】" + "；".join(top)
 
     def _build_expression_user_prompt(
         self,
@@ -910,6 +1152,22 @@ class GameEngine:
     def _normalize_expression_payload(self, parsed, next_evt=None, player_name: str = ""):
         if not isinstance(parsed, dict):
             parsed = {}
+        error_markers = [
+            "解析失败",
+            "原始输出",
+            "参数面板",
+            "未知干扰",
+            "系统受到干扰",
+            "system error",
+            "parse failed",
+        ]
+
+        def _looks_like_tech_error(text: str) -> bool:
+            t = str(text or "").strip().lower()
+            if not t:
+                return False
+            return any(m.lower() in t for m in error_markers)
+
         def _clean_speaker(raw_speaker: str) -> str:
             spk = str(raw_speaker or "").strip()
             if not spk:
@@ -947,7 +1205,7 @@ class GameEngine:
             else:
                 spk = player_name or "旁白"
                 cont = text
-            if cont:
+            if cont and (not _looks_like_tech_error(cont)):
                 dialogue_sequence.append({"speaker": spk, "content": cont})
 
         # 兼容旧 schema：若模型仍返回 dialogue_sequence，直接复用其有效内容。
@@ -960,7 +1218,7 @@ class GameEngine:
                         continue
                     spk = _clean_speaker(str(item.get("speaker", "") or "").strip())
                     cont = str(item.get("content", "") or "").strip()
-                    if cont:
+                    if cont and (not _looks_like_tech_error(cont)):
                         dialogue_sequence.append({"speaker": spk, "content": cont})
 
         if not dialogue_sequence:
@@ -972,13 +1230,26 @@ class GameEngine:
             ]
 
         options = parsed.get("options_copy", parsed.get("next_options", []))
+        clean_options = []
+        if isinstance(options, list):
+            for opt in options:
+                s = str(opt or "").strip()
+                if s and (not _looks_like_tech_error(s)):
+                    clean_options.append(s)
+        else:
+            clean_options = options
+
+        if _looks_like_tech_error(scene_line):
+            evt_desc = str(getattr(next_evt, "description", "") or "").strip()
+            scene_line = evt_desc[:48] if evt_desc else "对话短暂停顿了半拍，大家都在等你继续。"
+
         normalized = {
             "narrator_transition": scene_line,
             "current_scene": current_scene,
             "dialogue_sequence": dialogue_sequence,
             "npc_background_actions": [],
             "wechat_notifications": [],
-            "next_options": self._normalize_options(options, next_evt),
+            "next_options": self._normalize_options(clean_options, next_evt),
             "stat_changes": {},
             "effects": parsed.get("effects", []),
             "is_end": bool(parsed.get("is_end", False)),
@@ -1007,10 +1278,17 @@ class GameEngine:
         if len(action_hint) > 22:
             action_hint = action_hint[:22] + "…"
 
+        # 避免 fallback 文案出现“系统说明体”，尽量保持自然口语。
+        plan_line = ""
+        if plan_hint and plan_hint != "无明显系统事件":
+            plan_line = f"那就先按这个方向试一轮：{plan_hint[:22]}{'…' if len(plan_hint) > 22 else ''}"
+        else:
+            plan_line = "我们先把眼前这步做完，再看下一步怎么接。"
+
         dialogue_sequence = [
-            {"speaker": player_name or "我", "content": f"围绕「{evt_name}」，我先把注意力放回眼前。"},
-            {"speaker": lead_npc, "content": f"你刚才提到“{action_hint}”，那你是想现在就推进吗？"},
-            {"speaker": player_name or "我", "content": f"先按眼下线索走一步：{plan_hint or '把分歧摊开说清楚'}。"},
+            {"speaker": lead_npc, "content": f"先从「{evt_name}」这件事开始吧，别让场面卡住。"},
+            {"speaker": player_name or "我", "content": f"我倾向先做这一步：{action_hint}。"},
+            {"speaker": lead_npc, "content": plan_line},
         ]
 
         raw_evt_options = getattr(next_evt, "options", {}) if next_evt is not None else {}
@@ -1031,7 +1309,7 @@ class GameEngine:
 
         return {
             "narrator_transition": scene_line,
-            "current_scene": str(getattr(next_evt, "description", "") or "宿舍").strip() or "宿舍",
+            "current_scene": str(getattr(next_evt, "name", "") or "当前场景").strip() or "当前场景",
             "dialogue_sequence": dialogue_sequence,
             "npc_background_actions": [],
             "wechat_notifications": [],
@@ -1047,6 +1325,7 @@ class GameEngine:
             return False
         if parsed.get("error"):
             return False
+        expression_mode = bool(getattr(self, "expression_only_mode", False))
 
         seq = parsed.get("dialogue_sequence", [])
         if isinstance(seq, dict):
@@ -1061,17 +1340,55 @@ class GameEngine:
             content = str(item.get("content", "") or "").strip()
             if content:
                 valid_lines += 1
-                if "解析失败" in content:
+                # expression-only 模式下，偶发把“解析失败”当成普通台词片段返回；
+                # 只要整体结构可用，不应因此整包否决。
+                if (not expression_mode) and "解析失败" in content:
                     has_parse_error_line = True
         if has_parse_error_line:
             return False
 
         options = self._normalize_options(parsed.get("next_options", []), next_evt)
-        if len(options) < 3:
+        # expression-only 模式下，模型在关键事件结算后偶发只给 1-2 个选项；
+        # 后续还有系统注入步骤可补齐，不应在此过早判定为 unusable。
+        min_options = 1 if expression_mode else 3
+        if len(options) < min_options:
             return False
 
-        min_dialogue = 3 if self.stability_mode == "stable" else 2
+        # expression-only 的目标是“短输出可推进”，不应沿用旧管线的严格条数阈值。
+        min_dialogue = 1 if expression_mode else (3 if self.stability_mode == "stable" else 2)
         return valid_lines >= min_dialogue
+
+    def _get_payload_reject_reason(self, parsed, next_evt=None) -> str:
+        if not isinstance(parsed, dict):
+            return "not_dict"
+        if parsed.get("error"):
+            return "has_error_field"
+        expression_mode = bool(getattr(self, "expression_only_mode", False))
+
+        seq = parsed.get("dialogue_sequence", [])
+        if isinstance(seq, dict):
+            seq = [seq]
+        if not isinstance(seq, list):
+            return "dialogue_not_list"
+        valid_lines = 0
+        for item in seq:
+            if not isinstance(item, dict):
+                continue
+            content = str(item.get("content", "") or "").strip()
+            if content:
+                valid_lines += 1
+                if (not expression_mode) and "解析失败" in content:
+                    return "parse_error_marker"
+
+        options = self._normalize_options(parsed.get("next_options", []), next_evt)
+        min_options = 1 if expression_mode else 3
+        if len(options) < min_options:
+            return f"options_lt_{min_options}"
+
+        min_dialogue = 1 if expression_mode else (3 if self.stability_mode == "stable" else 2)
+        if valid_lines < min_dialogue:
+            return f"dialogue_lt_{min_dialogue}"
+        return ""
 
     def _parse_effect_commands(self, effects):
         """
@@ -1452,6 +1769,11 @@ class GameEngine:
             if hasattr(self, "pm") and hasattr(self.pm, "is_phone_system_enabled")
             else True
         )
+        enabled_skills = set(
+            self.pm.get_enabled_skills()
+            if hasattr(self, "pm") and hasattr(self.pm, "get_enabled_skills")
+            else []
+        )
         if effective_dialogue_mode in ["tree_only", "hybrid"]:
             # 分支树模式依旧由单一 DM 兜底实时生成，只是额外启用剧本预生成/缓存能力。
             effective_dialogue_mode = "single_dm"
@@ -1510,9 +1832,6 @@ class GameEngine:
                     self.system_state_mgr.set_flag("last_key_choice_id", settled.get("choice_id"))
                     self.system_state_mgr.set_flag("last_key_day", day)
                 system_key_resolution = settled
-                att = str(settled.get("attitude", "")).strip()
-                settlement_msg += f"【系统关键事件】你选择了「{att or settled.get('choice_id', '默认')}」，系统已先完成状态结算。\n\n"
-                action_text = f"我对关键事件采取了{att or '既定'}态度，并准备承受后果。"
                 system_daily_plan = self._build_system_daily_plan(selected_chars)
 
         is_new_event_entry = bool(is_transition or current_evt_id == "")
@@ -2105,10 +2424,11 @@ class GameEngine:
                     parsed = None
                     res_text = ""
                     attempts = (
-                        2
+                        1
                         if expression_only_mode_active
                         else (2 if (self.stability_mode == "stable" and self.latency_mode != "fast") else 1)
                     )
+                    expression_tools = self._build_expression_tools(phone_system_enabled=phone_system_enabled) if expression_only_mode_active else []
                     last_error = None
                     json_contract = self._build_expression_json_contract() if expression_only_mode_active else self._build_json_contract()
                     expression_user_prompt = ""
@@ -2121,6 +2441,9 @@ class GameEngine:
                             attempt_pres = gen_pres
                             attempt_freq = gen_freq
                             attempt_sys = sys_prm + json_contract
+                            if expression_only_mode_active and expression_tools:
+                                attempt_sys += "\n\n【工具调用约束】若需要触发手机消息，请优先调用函数 phone_enqueue_message，不要只写在文本备注里。"
+                                attempt_sys += "\n【状态工具约束】仅当本轮出现明确、可验证的关系变化时，才可调用 memory_add_tag 或 relationship_apply_delta；每次增量务必小幅。"
                             attempt_user = expression_user_prompt if expression_only_mode_active else user_prm
 
                             if attempt_idx == 1:
@@ -2133,7 +2456,10 @@ class GameEngine:
                                 else:
                                     attempt_user = user_prm + "\n\n【重试要求】上一版 JSON 结构不稳定。请严格按协议返回完整 JSON。"
 
-                            res_text = self.llm.generate_response(
+                            # 不再强制 function 调用，避免模型只返回 tool_calls 而不返回正文 JSON。
+                            turn_tool_choice = "auto"
+
+                            llm_out = self.llm.generate_response_with_tools(
                                 system_prompt=attempt_sys,
                                 user_input=attempt_user,
                                 context="",
@@ -2141,20 +2467,61 @@ class GameEngine:
                                 top_p=top_p,
                                 max_tokens=attempt_tokens,
                                 presence_penalty=attempt_pres,
-                                frequency_penalty=attempt_freq
+                                frequency_penalty=attempt_freq,
+                                tools=expression_tools if expression_only_mode_active else None,
+                                tool_choice=turn_tool_choice,
                             )
+                            res_text = str((llm_out or {}).get("content", "") or "")
+                            external_tool_calls = (llm_out or {}).get("tool_calls", []) if isinstance(llm_out, dict) else []
+                            # 某些模型在 tools 模式下可能只回 tool_calls，不回正文。
+                            # 这时补一次纯正文请求，保证主对话仍由 AI 连续演出。
+                            if expression_only_mode_active and not res_text.strip():
+                                res_text = str(self.llm.generate_response(
+                                    system_prompt=attempt_sys,
+                                    user_input=attempt_user,
+                                    context="",
+                                    temperature=attempt_tmp,
+                                    top_p=top_p,
+                                    max_tokens=attempt_tokens,
+                                    presence_penalty=attempt_pres,
+                                    frequency_penalty=attempt_freq,
+                                ) or "")
                             parsed_candidate = self.parse_and_repair_json(res_text)
                             if expression_only_mode_active:
                                 parsed_candidate = self._normalize_expression_payload(parsed_candidate, next_evt=next_evt, player_name=player_name)
                             else:
                                 parsed_candidate = self._normalize_parsed_payload(parsed_candidate)
+                            if isinstance(external_tool_calls, list) and external_tool_calls:
+                                merged_calls = []
+                                current_calls = parsed_candidate.get("tool_calls", [])
+                                if isinstance(current_calls, dict):
+                                    current_calls = [current_calls]
+                                if isinstance(current_calls, list):
+                                    merged_calls.extend([x for x in current_calls if isinstance(x, dict)])
+                                merged_calls.extend([x for x in external_tool_calls if isinstance(x, dict)])
+                                parsed_candidate["tool_calls"] = merged_calls
                             if self._is_payload_usable(parsed_candidate, next_evt):
                                 parsed = parsed_candidate
                                 break
                             parsed = parsed_candidate
-                            last_error = "payload unusable"
-                            print(f"⚠️ [Stability] DM 第{attempt_idx + 1}次输出结构不稳，准备重试...", flush=True)
-
+                            reject_reason = self._get_payload_reject_reason(parsed_candidate, next_evt)
+                            last_error = f"payload unusable:{reject_reason or 'unknown'}"
+                            try:
+                                dbg_seq = parsed_candidate.get("dialogue_sequence", [])
+                                if isinstance(dbg_seq, dict):
+                                    dbg_seq = [dbg_seq]
+                                dbg_valid_lines = 0
+                                if isinstance(dbg_seq, list):
+                                    for it in dbg_seq:
+                                        if isinstance(it, dict) and str(it.get("content", "") or "").strip():
+                                            dbg_valid_lines += 1
+                                dbg_opts = self._normalize_options(parsed_candidate.get("next_options", []), next_evt)
+                                print(
+                                    f"⚠️ [Stability] DM 第{attempt_idx + 1}次输出结构不稳（reason={reject_reason or 'unknown'}, valid_lines={dbg_valid_lines}, options={len(dbg_opts)}），准备重试...",
+                                    flush=True,
+                                )
+                            except Exception:
+                                print(f"⚠️ [Stability] DM 第{attempt_idx + 1}次输出结构不稳，准备重试...", flush=True)
                         print(
                             f"🛑 [耗时监控] DM 主大脑生成 JSON 耗时: {time.time() - t2:.2f} 秒 | "
                             f"max_tokens={gen_tokens} | stability={self.stability_mode}"
@@ -2313,6 +2680,10 @@ class GameEngine:
             # ========================================================
             # 真实工具调用执行层
             # ========================================================
+            tool_wechat_notifications = []
+            executed_tool_calls = []
+            state_tool_audit = []
+            phone_tool_call_count = 0
             tool_calls = parsed.get("tool_calls", [])
             if isinstance(tool_calls, dict): tool_calls = [tool_calls]
             if isinstance(tool_calls, list):
@@ -2320,13 +2691,55 @@ class GameEngine:
                     if not isinstance(tool, dict): continue
                     func_name = tool.get("name", "")
                     args = tool.get("args", {})
+                    if not isinstance(args, dict):
+                        args = {}
+                    safe_args = {}
+                    for k, v in args.items():
+                        key = str(k)[:48]
+                        if isinstance(v, (str, int, float, bool)) or v is None:
+                            safe_args[key] = v if not isinstance(v, str) else v[:120]
+                        else:
+                            safe_args[key] = str(v)[:120]
                     
+                    if func_name == "phone_enqueue_message":
+                        phone_tool_call_count += 1
+                        if phone_tool_call_count > 1:
+                            executed_tool_calls.append({
+                                "name": str(func_name or ""),
+                                "args": safe_args,
+                                "ok": False,
+                                "reason": "phone_tool_call_limit_exceeded",
+                            })
+                            continue
+
                     tool_res = self.tm.execute(func_name, args)
+                    executed_tool_calls.append({
+                        "name": str(func_name or ""),
+                        "args": safe_args,
+                        "ok": bool(tool_res.get("ok", True)) if isinstance(tool_res, dict) else True,
+                    })
+                    if func_name in {"memory_add_tag", "relationship_apply_delta"}:
+                        proposal = tool_res.get("proposal", {}) if isinstance(tool_res, dict) else {}
+                        audit_item = self._apply_state_tool_proposal(
+                            proposal,
+                            selected_chars=selected_chars,
+                            player_name=player_name,
+                        )
+                        audit_item["tool"] = func_name
+                        state_tool_audit.append(audit_item)
                     
                     if "display_text" in tool_res: display_text += tool_res["display_text"]
                     if "san_delta" in tool_res: san = max(0, min(100, san + tool_res["san_delta"]))
                     if "gpa_delta" in tool_res: gpa = max(0.0, min(4.0, gpa + tool_res["gpa_delta"]))
                     if "money_delta" in tool_res: money += tool_res["money_delta"]
+                    if isinstance(tool_res.get("wechat_notifications", []), list):
+                        tool_wechat_notifications.extend([x for x in tool_res.get("wechat_notifications", []) if isinstance(x, dict)])
+
+            state_tool_stats = {
+                "total": len(state_tool_audit),
+                "accepted": sum(1 for x in state_tool_audit if isinstance(x, dict) and bool(x.get("accepted"))),
+                "rejected": sum(1 for x in state_tool_audit if isinstance(x, dict) and not bool(x.get("accepted"))),
+            }
             
             # 防止事件过早结束：按事件定义控制收尾窗口。
             min_turn_for_end = max(2, min(12, int(getattr(next_evt, "min_turn_for_end", 5) or 5)))
@@ -2356,6 +2769,7 @@ class GameEngine:
 
             narrative_update_started_at = time.perf_counter()
             before_system_state = self._get_system_state_snapshot()
+            relationship_milestones = []
             if hasattr(self, "narrative_state_mgr"):
                 self.narrative_state_mgr.update_after_turn(
                     player_name=player_name,
@@ -2377,6 +2791,7 @@ class GameEngine:
                     try:
                         new_milestones = self.narrative_state_mgr.consume_new_milestones()
                         if new_milestones:
+                            relationship_milestones = list(new_milestones)
                             self.mm.save_narrative_milestones(
                                 new_milestones,
                                 event_name=next_evt.name,
@@ -2416,6 +2831,10 @@ class GameEngine:
                 banner = self._format_weekly_summary_banner(weekly_summary)
                 if banner:
                     display_text = banner + "\n\n" + display_text
+            if "relationship_milestone" in enabled_skills:
+                ms_line = self._format_relationship_milestones(relationship_milestones)
+                if ms_line:
+                    display_text = ms_line + "\n\n" + display_text
             mark_timing("narrative_update", narrative_update_started_at)
 
             memory_save_started_at = time.perf_counter()
@@ -2424,17 +2843,73 @@ class GameEngine:
             mark_timing("memory_save", memory_save_started_at)
 
             valid_notifs = []
-            wechat_list = parsed.get("wechat_notifications", []) if phone_system_enabled else []
-            if isinstance(wechat_list, dict): wechat_list = [wechat_list]
-            effect_wechat = effects_data.get("wechat_notifications", []) if isinstance(effects_data, dict) else []
-            if isinstance(effect_wechat, list) and effect_wechat:
-                wechat_list = wechat_list + effect_wechat
+
+            parsed_wechat_raw = parsed.get("wechat_notifications", []) if phone_system_enabled else []
+            if isinstance(parsed_wechat_raw, dict):
+                parsed_wechat_raw = [parsed_wechat_raw]
+            if not isinstance(parsed_wechat_raw, list):
+                parsed_wechat_raw = []
+            parsed_wechat_list = [x for x in parsed_wechat_raw if isinstance(x, dict)]
+
+            effect_wechat_raw = effects_data.get("wechat_notifications", []) if isinstance(effects_data, dict) else []
+            if not isinstance(effect_wechat_raw, list):
+                effect_wechat_raw = []
+            effect_wechat_list = [x for x in effect_wechat_raw if isinstance(x, dict)]
+
+            legacy_wechat_count = len(parsed_wechat_list) + len(effect_wechat_list)
+            legacy_wechat_used = legacy_wechat_count > 0
+            phone_message_source = "none"
+
+            # 手机消息优先级：tool_calls > fallback。legacy 仅统计，不再作为主通路（expression 模式）。
+            if isinstance(tool_wechat_notifications, list) and tool_wechat_notifications:
+                wechat_list = tool_wechat_notifications
+                phone_message_source = "tool"
+            else:
+                if expression_only_mode_active:
+                    wechat_list = []
+                else:
+                    wechat_list = parsed_wechat_list + effect_wechat_list
+                    if wechat_list:
+                        phone_message_source = "legacy"
+
             if phone_system_enabled and (not isinstance(wechat_list, list) or not wechat_list) and not is_prefetch:
                 wechat_list = self._build_wechat_fallback_notifications(
                     selected_chars=selected_chars,
                     system_key_resolution=system_key_resolution,
                 )
+                if isinstance(wechat_list, list) and wechat_list:
+                    phone_message_source = "key_fallback"
+            if (
+                phone_system_enabled
+                and (not isinstance(wechat_list, list) or not wechat_list)
+                and not is_prefetch
+                and not getattr(next_evt, 'is_cg', False)
+                and int(turn or 0) % 2 == 0
+            ):
+                wechat_list = self._build_wechat_soft_fallback_notifications(
+                    selected_chars=selected_chars,
+                    dialogue_sequence=seq if isinstance(seq, list) else [],
+                    player_name=player_name,
+                )
+                if isinstance(wechat_list, list) and wechat_list:
+                    phone_message_source = "soft_fallback"
+            if (
+                "secret_note" in enabled_skills
+                and phone_system_enabled
+                and (not isinstance(wechat_list, list) or not wechat_list)
+                and not is_prefetch
+                and not getattr(next_evt, 'is_cg', False)
+            ):
+                relations_snapshot = (after_system_state.get("relations", {}) if isinstance(after_system_state, dict) else {}) or {}
+                wechat_list = self._build_secret_note_notification(
+                    selected_chars=selected_chars,
+                    relations_state=relations_snapshot,
+                    turn=int(turn or 0),
+                )
+                if isinstance(wechat_list, list) and wechat_list:
+                    phone_message_source = "secret_note"
             if phone_system_enabled and isinstance(wechat_list, list):
+                seen_notifs = set()
                 for w in wechat_list:
                     if not isinstance(w, dict): continue 
                     
@@ -2460,6 +2935,12 @@ class GameEngine:
                             wechat_data_dict[c_name] = []
                     
                     w["chat_name"] = c_name 
+                    sender = str(w.get("sender", "") or "").strip()
+                    msg = str(w.get("message", "") or "").strip()
+                    dedup_key = (c_name, sender, msg)
+                    if dedup_key in seen_notifs:
+                        continue
+                    seen_notifs.add(dedup_key)
                     valid_notifs.append(w)
 
             extracted_options = self._normalize_options(parsed.get("next_options", []), next_evt)
@@ -2543,6 +3024,13 @@ class GameEngine:
                 "weekly_summary": weekly_summary,
                 "state_delta": state_delta,
                 "ai_usage": self._get_llm_usage_snapshot(),
+                "enabled_skills": sorted(list(enabled_skills)),
+                "tool_calls_summary": executed_tool_calls,
+                "state_tool_audit": state_tool_audit,
+                "state_tool_stats": state_tool_stats,
+                "legacy_wechat_used": legacy_wechat_used,
+                "legacy_wechat_count": legacy_wechat_count,
+                "phone_message_source": phone_message_source,
                 "render_source": render_source if "render_source" in locals() else "",
             }
             result = self._apply_global_turn_cap(result)

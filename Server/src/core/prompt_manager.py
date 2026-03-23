@@ -29,8 +29,11 @@ class PromptManager:
             "academic_world": self._skill_academic_world,
             "character_roster": self._skill_character_roster, 
             "relationship_matrix": self._skill_relationship_matrix,
+            "secret_note": self._skill_secret_note,
+            "relationship_milestone": self._skill_relationship_milestone,
             "user_skills": self._skill_user_defined_loader 
         }
+        self.default_enabled_skills = list(self.skills.keys())
 
         # 动态角色文件映射
         self.roster_data = self._load_roster_data()
@@ -334,11 +337,20 @@ class PromptManager:
                 return "【在场关系速览】\n" + "\n".join(relations[:8])
             return "【人物社交网络】（请根据以下关系，精准把控在场角色的语言温度、暗场动作及阴阳怪气程度）：\n" + "\n".join(relations)
         return ""
+
+    def _skill_secret_note(self, context: dict) -> str:
+        return self._read_md("skills/secret_note.md")
+
+    def _skill_relationship_milestone(self, context: dict) -> str:
+        return self._read_md("skills/relationship_milestone.md")
         
     def get_main_system_prompt_bundle(self, context: dict) -> dict:
         base_prompt = self.render_prompt_file("main_system.md", context)
         active_skills = []
+        enabled = set(self.get_enabled_skills())
         for skill_name, skill_func in self.skills.items():
+            if skill_name not in enabled:
+                continue
             skill_text = skill_func(context)
             if skill_text: active_skills.append(skill_text)
 
@@ -392,6 +404,30 @@ class PromptManager:
         except Exception:
             return {}
 
+    def get_enabled_skills(self) -> list[str]:
+        features = self.get_mod_features()
+        raw = features.get("enabled_skills")
+        auto_new_skills = {"secret_note", "relationship_milestone"}
+        disabled = set()
+        disabled_raw = features.get("disabled_skills")
+        if isinstance(disabled_raw, list):
+            for item in disabled_raw:
+                name = str(item or "").strip()
+                if name:
+                    disabled.add(name)
+        if isinstance(raw, list):
+            enabled = []
+            for item in raw:
+                name = str(item or "").strip()
+                if name and name in self.skills:
+                    enabled.append(name)
+            for name in auto_new_skills:
+                if name in self.skills and name not in enabled and name not in disabled:
+                    enabled.append(name)
+            if enabled:
+                return enabled
+        return [x for x in list(self.default_enabled_skills) if x not in disabled]
+
     def is_phone_system_enabled(self) -> bool:
         features = self.get_mod_features()
         value = features.get("phone_system_enabled", features.get("wechat_system_enabled", True))
@@ -406,17 +442,22 @@ class PromptManager:
         compact_ctx["prompt_budget"] = "compact"
 
         blocks = []
-        world_text = self._skill_academic_world(compact_ctx)
-        if world_text:
-            blocks.append(world_text.strip())
+        enabled = set(self.get_enabled_skills())
 
-        char_text = self._skill_character_roster(compact_ctx)
-        if char_text:
-            blocks.append(char_text.strip())
+        if "academic_world" in enabled:
+            world_text = self._skill_academic_world(compact_ctx)
+            if world_text:
+                blocks.append(world_text.strip())
 
-        rel_text = self._skill_relationship_matrix(compact_ctx)
-        if rel_text:
-            blocks.append(rel_text.strip())
+        if "character_roster" in enabled:
+            char_text = self._skill_character_roster(compact_ctx)
+            if char_text:
+                blocks.append(char_text.strip())
+
+        if "relationship_matrix" in enabled:
+            rel_text = self._skill_relationship_matrix(compact_ctx)
+            if rel_text:
+                blocks.append(rel_text.strip())
 
         if not blocks:
             return ""
@@ -441,7 +482,7 @@ class PromptManager:
                     "7. dialogue_sequence 优先给 4-8 条有效互动。\n"
                     "8. next_options 给 3-4 个有明显策略差异的可执行选项。\n"
                     "8.1 严禁使用“继续剧情...”这类占位词做选项文案。\n"
-                    "9. 只用 effects 表达数值或微信变化，不要输出多余字段。\n"
+                    "9. effects 只表达数值变化；手机消息优先使用 phone_enqueue_message 工具调用，不要输出多余字段。\n"
                     "10. 不要解释规则，不要输出代码块。"
                 )
             return self._render_prompt_template(self._compact_author_note_cache, context)

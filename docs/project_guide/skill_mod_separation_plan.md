@@ -57,6 +57,13 @@
 - 不改现有模组也能跑
 - 新字段缺失时自动回退默认技能集
 
+当前进度（2026-03-23）：
+- 已完成：`mod_features.json.enabled_skills` 读取与默认回退
+- 已完成：PromptManager 按启用列表筛选 skills（main + expression flavor）
+- 已完成：回包新增 `enabled_skills`，调试面板可见本局技能集
+- 备注：`manifest.enabled_skills` 已支持写入与校验（可选字段）
+- 已完成：模组记录/列表项新增 `enabled_skills` 元数据输出，工坊详情可见“启用技能”
+
 ---
 
 ## P1（分离提示词型 skill）
@@ -93,6 +100,17 @@
 - 手机消息稳定落库
 - 不影响主对话速度（每回合最多 0-1 次调用）
 
+当前进度（2026-03-23）：
+- 已完成：LLM service 新增 `generate_response_with_tools`（含不支持 tools 时自动降级）
+- 已完成：expression 回合注册 `phone_enqueue_message` 工具 schema
+- 已完成：工具结果并入既有 `wechat_notifications` 管线（与 effects 并存兼容）
+- 已完成：`ToolManager` 新增 `phone_enqueue_message` 执行器
+- 已完成：手机消息主通路切换为 `tool_calls` 优先；`effects.wechat` 降级为兼容回退
+- 已完成：单回合 `phone_enqueue_message` 调用上限=1（超限会在 debug 中标记失败）
+- 已完成：手机通知去重（按 chat_name/sender/message），减少重复消息刷屏
+- 已完成：编辑器与 JSON 协议文本已显式标注“`effects.wechat` 仅兼容模式”
+- 已完成：默认模板与官方预设模组（3个）已迁移为“`phone_enqueue_message` 优先”提示词
+
 ---
 
 ## P3（状态写入能力工具化）
@@ -108,6 +126,12 @@
 验收：
 - 状态漂移减少
 - 回放和调试更清晰
+
+当前进度（2026-03-23）：
+- 已完成：新增 `memory_add_tag` / `relationship_apply_delta` 两个状态工具（提议型，不直接改状态）
+- 已完成：服务端“系统裁决”落地（target 校验、增量限幅、标签格式校验）
+- 已完成：状态工具审计回包 `state_tool_audit`，调试面板可见 accepted/rejected 与原因
+- 已完成：新增 `secret_note` / `relationship_milestone` 两个玩法增强 skill（含编辑器开关、默认提示词、运行时演出逻辑）
 
 ---
 

@@ -6,7 +6,7 @@
 - 场景一句话（scene_line）
 - 3-6句对话（dialogue_lines），例：角色名：内容
 - 3-4个可执行选项文案（options_copy）
-- 可选：若本轮存在明显互动后果，可在 effects 添加 0-1 条 wechat:群聊名|发送者|消息内容
+- 若本轮存在明显互动后果，优先使用 phone_enqueue_message 函数投递手机消息；不要依赖 effects.wechat
 - 不输出 mood 字段，不输出解释文本
 
 风格：自然口语、具体动作，不要模板腔。

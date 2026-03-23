@@ -43,10 +43,19 @@ interface GameState {
   pendingChoice: string | null;
 
   eventScript: any | null;
+  phoneSourceStats: Record<string, number>;
+  stateToolStats: { total: number; accepted: number; rejected: number };
   turnDebug: {
     timings?: Record<string, number>;
     prompt_diagnostics?: any;
     prompt_payload?: any;
+    enabled_skills?: string[];
+    tool_calls_summary?: Array<{name: string; args?: Record<string, any>; ok?: boolean}>;
+    state_tool_audit?: Array<Record<string, any>>;
+    state_tool_stats?: { total: number; accepted: number; rejected: number };
+    legacy_wechat_used?: boolean;
+    legacy_wechat_count?: number;
+    phone_message_source?: string;
     render_source?: string;
     ai_usage?: any;
     state_delta?: any;
@@ -117,6 +126,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   })(),
   pendingChoice: null,
   turnDebug: null,
+  phoneSourceStats: {},
+  stateToolStats: { total: 0, accepted: 0, rejected: 0 },
 
   setEventScript: (script: any) => set({ eventScript: script }),
 
@@ -159,11 +170,27 @@ export const useGameStore = create<GameState>((set, get) => ({
         phoneSystemEnabled: data.phone_system_enabled !== false,
         eventScript: data.event_script || null
         ,
-        turnDebug: (data.timings || data.prompt_diagnostics || data.prompt_payload || data.render_source || data.ai_usage || data.state_delta)
+        phoneSourceStats: (() => {
+          const src = String(data.phone_message_source || 'none');
+          return src && src !== 'none' ? { [src]: 1 } : {};
+        })(),
+        stateToolStats: {
+          total: Number(data.state_tool_stats?.total || 0),
+          accepted: Number(data.state_tool_stats?.accepted || 0),
+          rejected: Number(data.state_tool_stats?.rejected || 0),
+        },
+        turnDebug: (data.timings || data.prompt_diagnostics || data.prompt_payload || data.enabled_skills || data.tool_calls_summary || data.state_tool_audit || data.legacy_wechat_used || data.phone_message_source || data.render_source || data.ai_usage || data.state_delta)
           ? {
               timings: data.timings || undefined,
               prompt_diagnostics: data.prompt_diagnostics || undefined,
               prompt_payload: data.prompt_payload || undefined,
+              enabled_skills: Array.isArray(data.enabled_skills) ? data.enabled_skills : undefined,
+              tool_calls_summary: Array.isArray(data.tool_calls_summary) ? data.tool_calls_summary : undefined,
+              state_tool_audit: Array.isArray(data.state_tool_audit) ? data.state_tool_audit : undefined,
+              state_tool_stats: data.state_tool_stats || undefined,
+              legacy_wechat_used: data.legacy_wechat_used === true,
+              legacy_wechat_count: Number(data.legacy_wechat_count || 0),
+              phone_message_source: String(data.phone_message_source || ''),
               render_source: data.render_source || undefined,
               ai_usage: data.ai_usage || undefined,
               state_delta: data.state_delta || undefined,
@@ -279,11 +306,33 @@ export const useGameStore = create<GameState>((set, get) => ({
         isPhoneOpen: (data.phone_system_enabled === false) ? false : prev.isPhoneOpen,
         eventScript: data.event_script || null
         ,
-        turnDebug: (data.timings || data.prompt_diagnostics || data.prompt_payload || data.render_source || data.ai_usage || data.state_delta)
+        phoneSourceStats: (() => {
+          const prevStats = prev.phoneSourceStats || {};
+          const src = String(data.phone_message_source || 'none');
+          if (!src || src === 'none') return prevStats;
+          return { ...prevStats, [src]: Number(prevStats[src] || 0) + 1 };
+        })(),
+        stateToolStats: (() => {
+          const prevStats = prev.stateToolStats || { total: 0, accepted: 0, rejected: 0 };
+          const cur = data.state_tool_stats || {};
+          return {
+            total: Number(prevStats.total || 0) + Number(cur.total || 0),
+            accepted: Number(prevStats.accepted || 0) + Number(cur.accepted || 0),
+            rejected: Number(prevStats.rejected || 0) + Number(cur.rejected || 0),
+          };
+        })(),
+        turnDebug: (data.timings || data.prompt_diagnostics || data.prompt_payload || data.enabled_skills || data.tool_calls_summary || data.state_tool_audit || data.legacy_wechat_used || data.phone_message_source || data.render_source || data.ai_usage || data.state_delta)
           ? {
               timings: data.timings || undefined,
               prompt_diagnostics: data.prompt_diagnostics || undefined,
               prompt_payload: data.prompt_payload || undefined,
+              enabled_skills: Array.isArray(data.enabled_skills) ? data.enabled_skills : undefined,
+              tool_calls_summary: Array.isArray(data.tool_calls_summary) ? data.tool_calls_summary : undefined,
+              state_tool_audit: Array.isArray(data.state_tool_audit) ? data.state_tool_audit : undefined,
+              state_tool_stats: data.state_tool_stats || undefined,
+              legacy_wechat_used: data.legacy_wechat_used === true,
+              legacy_wechat_count: Number(data.legacy_wechat_count || 0),
+              phone_message_source: String(data.phone_message_source || ''),
               render_source: data.render_source || undefined,
               ai_usage: data.ai_usage || undefined,
               state_delta: data.state_delta || undefined,
@@ -377,7 +426,10 @@ export const useGameStore = create<GameState>((set, get) => ({
               ,
               phoneSystemEnabled: true
               ,
+              phoneSourceStats: {},
               turnDebug: null
+              ,
+              stateToolStats: { total: 0, accepted: 0, rejected: 0 }
           });
       } catch (e) {
           console.error(e);
@@ -438,6 +490,8 @@ export const useGameStore = create<GameState>((set, get) => ({
               phoneSystemEnabled: true,
               isPhoneOpen: false,
               displayText: '',
+              phoneSourceStats: {},
+              stateToolStats: { total: 0, accepted: 0, rejected: 0 },
               turnDebug: null
           });
       } catch (e) {
