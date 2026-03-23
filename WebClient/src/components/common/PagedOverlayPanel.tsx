@@ -36,7 +36,7 @@ export const PagedOverlayPanel = ({
 
   return (
     <div className="fixed inset-0 z-[650] flex items-center justify-center bg-[var(--color-cyan-dark)]/45 backdrop-blur-md p-4 md:p-8">
-      <div className="bg-white w-[min(92vw,56rem)] h-[min(82vh,46rem)] rounded-[2.75rem] shadow-2xl border border-white overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col">
+      <div className="relative bg-white w-[min(92vw,56rem)] h-[min(82vh,46rem)] rounded-[2.75rem] shadow-2xl border border-white overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col">
         <div className="px-8 md:px-10 py-6 md:py-7 flex items-center justify-between border-b border-[var(--color-soft-border)] bg-[var(--color-warm-bg)]/60 shrink-0">
           <div className="flex items-center space-x-4 min-w-0">
             <div
@@ -98,6 +98,12 @@ export const PagedOverlayPanel = ({
             <ChevronRight size={16} />
           </button>
         </div>
+
+        <img
+          src="/assets/Q_portraits/anran_portrait.webp"
+          alt="公告看板娘"
+          className="pointer-events-none select-none absolute right-3 md:right-5 bottom-[4.75rem] md:bottom-[5.25rem] w-[96px] md:w-[132px] opacity-95 drop-shadow-[0_10px_24px_rgba(20,84,116,0.22)]"
+        />
       </div>
     </div>
   );

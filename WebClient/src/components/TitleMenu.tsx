@@ -25,12 +25,12 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
             {/* Warm/Light Background Layer */}
             <div className="absolute inset-0 z-0">
                 {/* Scrolling texture (below protagonist cover) */}
-                <div className="absolute inset-0 opacity-[0.46] pointer-events-none">
+                <div className="absolute inset-0 opacity-[0.5] pointer-events-none">
                     <div
                         className="absolute inset-0 animate-texture-scroll"
                         style={{
-                            backgroundImage: "repeating-linear-gradient(135deg, rgba(0,188,212,0.22) 0 6px, rgba(0,188,212,0) 6px 30px)",
-                            backgroundSize: "40px 40px",
+                            backgroundImage: "repeating-linear-gradient(135deg, rgba(0,188,212,0.22) 0 8px, rgba(0,188,212,0) 8px 30px)",
+                            backgroundSize: "43px 43px",
                         }}
                     />
                 </div>
@@ -41,13 +41,19 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
                         className="absolute inset-0 w-full h-full object-contain"
                         style={{ objectPosition: "92% bottom" }}
                     />
+                    <img
+                        src="/assets/cover/cover_02.webp"
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-contain"
+                        style={{ objectPosition: "92% bottom" }}
+                    />
                 </div>
                 {/* Light overlays */}
                 <div className="absolute inset-0 bg-gradient-to-t from-[var(--color-cyan-light)]/80 via-transparent to-white/40" />
                 <div className="absolute inset-0 backdrop-blur-[0.5px] bg-white/10 mix-blend-soft-light" />
 
                 {/* Floating roommate placeholders (6 cards) */}
-                
+
             </div>
 
             {/* Center Logo & Actions (Cyan + Yellow) */}

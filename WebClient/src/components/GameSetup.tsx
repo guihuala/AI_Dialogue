@@ -90,7 +90,7 @@ export const GameSetup = ({ onBack, onStartGame, onTabChange }: GameSetupProps) 
                             className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-4 bg-white hover:bg-[var(--color-cyan-main)]/5 text-[var(--color-cyan-main)] text-xs font-black uppercase tracking-[0.2em] rounded-2xl border-2 border-[var(--color-cyan-main)]/20 transition-all active:scale-95 group shadow-lg"
                         >
                             <Dices size={20} className="group-hover:rotate-180 transition-transform duration-700" />
-                            随机配置舍友
+                            随机
                         </button>
                         
                         <StartGameButton 
