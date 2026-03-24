@@ -118,6 +118,7 @@ if os.path.exists(STATIC_DIR):
 WORKSHOP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "workshop")
 if not os.path.exists(WORKSHOP_DIR):
     os.makedirs(WORKSHOP_DIR)
+WORKSHOP_SEED_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "workshop_seed")
 
 
 def _load_default_mod_content() -> Dict[str, Dict[str, str]]:
@@ -153,11 +154,35 @@ def _load_default_mod_content() -> Dict[str, Dict[str, str]]:
     return {"md": md_bucket, "csv": csv_bucket}
 
 
+def _seed_from_workshop_seed_dir() -> int:
+    if not os.path.exists(WORKSHOP_SEED_DIR):
+        return 0
+    copied = 0
+    for fn in os.listdir(WORKSHOP_SEED_DIR):
+        if not fn.endswith(".json"):
+            continue
+        src = os.path.join(WORKSHOP_SEED_DIR, fn)
+        dst = os.path.join(WORKSHOP_DIR, fn)
+        if os.path.exists(dst):
+            continue
+        try:
+            with open(src, "r", encoding="utf-8") as f:
+                raw = f.read()
+            with open(dst, "w", encoding="utf-8") as f:
+                f.write(raw)
+            copied += 1
+        except Exception:
+            continue
+    return copied
+
+
 def _ensure_official_default_mod_seeded() -> None:
+    copied = _seed_from_workshop_seed_dir()
     target_path = os.path.join(WORKSHOP_DIR, "official_star_campus_v1.json")
     if os.path.exists(target_path):
         return
 
+    # 若 seed 目录没有提供默认模板，则退回自动生成一个最小可用官方模组。
     content = _load_default_mod_content()
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     record = {
@@ -188,6 +213,8 @@ def _ensure_official_default_mod_seeded() -> None:
         import json
 
         json.dump(record, f, ensure_ascii=False, indent=2)
+    if copied:
+        print(f"✅ 已从 workshop_seed 导入 {copied} 个默认模组")
 
 
 _ensure_official_default_mod_seeded()

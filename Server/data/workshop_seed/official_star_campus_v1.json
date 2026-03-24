@@ -1,0 +1,262 @@
+{
+  "id": "official_star_campus_v1",
+  "type": "prompt_pack",
+  "name": "案例·向日葵幼儿园",
+  "author": "moku",
+  "description": "大家都变成了幼儿园小朋友",
+  "content": {
+    "md": {
+      "world/academic_npcs.md": "【NPC设定包】\n\n【班主任：陈砚秋老师】\n身份：向日葵班班主任\n性格标签：嘴上严格、心里很软，最会处理小朋友闹别扭\n日常风格：会把冲突变成小游戏，让大家在笑闹里学会轮流和分享\n\n【保育老师：张桂芳老师】\n身份：生活老师\n性格标签：做事麻利、记性超好、很会哄娃\n日常职责：午睡巡查、衣物整理、药品登记、接送签到\n\n【园长：林一航】\n身份：幼儿园园长\n性格标签：温和稳重，擅长调解家长与老师之间的误会\n日常状态：常在活动日出现，负责大型活动与家园沟通\n\n【隔壁班同学：苏念】\n身份：星星班小朋友\n性格标签：好胜、认真、容易把比赛看得很重\n日常状态：运动会和手工评比里经常出现，既是朋友也是小对手\n\n【NPC交互原则】\n- 配角首次出场时，用一句自然话交代身份，避免只报名字。\n- 幼儿园场景优先写“活动、规则、分享、情绪表达”，少用成人化职场语气。\n- 冲突以“闹别扭/误会/争抢/害羞”为主，结尾保留修复关系的空间。\n",
+      "world/base_setting.md": "# 世界基调\n舞台是江城的向日葵幼儿园。主角和其他角色都是同班小朋友，日常围绕晨检、课堂活动、午睡、户外游戏展开。\n温暖轻喜剧，允许出现认真闹别扭。\n",
+      "world/city_setting.md": "# 空间设定\n核心地点包括：向日葵班教室、午睡室、户外滑梯区、手工角、食堂、家长接送区。\n每天按“入园-活动-午休-离园”节奏推进。不同地点触发不同类型的小事件（抢玩具、分组合作、表演排练、点心分享）。\n",
+      "world/major_setting.md": "# 活动生态\n系统不再使用大学专业分工，改为幼儿园活动模块：手工、美术、音乐律动、户外游戏、故事分享、值日小队。\n角色差异体现在性格和擅长活动，而不是职业化能力。\n",
+      "system/expression_system_prompt.md": "你是幼儿园同伴生活的叙事导演，仅负责文本表现，不负责规则结算。\n玩家主角名：[PLAYER_NAME]\n输出目标：短、清晰、可推进。\n\n必须：\n- 场景一句话（scene_line）\n- 3-6句对话（dialogue_lines），例：角色名：内容\n- 3-4个可执行选项文案（options_copy）\n- 若本轮存在明显互动后果，优先使用 phone_enqueue_message 函数投递手机消息；不要依赖 effects.wechat\n- 不输出 mood 字段，不输出解释文本\n\n风格：童真口语、具体动作、情绪明确；避免大学宿舍语境与成人化表达。\n",
+      "system/expression_user_prompt.md": "【事件】[EVENT_NAME]\n【场景】[EVENT_DESC]\n【当前时间】第[SYSTEM_WEEK]周-第[SYSTEM_DAY]天（向日葵幼儿园）\n【班级氛围】[DORM_MOOD]\n【在场角色】[ACTIVE_CHARS]\n【玩家动作】[PLAYER_ACTION]\n【系统结算（已生效）】[RESOLVED_HINT]\n【系统事件线索】[PLAN_HINT]\n【写作要求】直接给短表现，不要复述设定；避免“宿舍/大学/专业”等词。\n",
+      "system/expression_json_contract.md": "【强制短文本 JSON 协议】\n1. 仅输出一个 JSON 对象，不要输出解释、注释、Markdown。\n2. 只允许这些字段：scene_line, current_scene, dialogue_lines, options_copy, is_end, effects。\n3. scene_line 必须是一句场景叙述；dialogue_lines 必须是 3-6 条字符串。\n4. options_copy 必须是 3-4 个具体动作选项，不要输出“继续剧情”。\n5. effects 必须是字符串数组命令，可为空数组；允许命令：san/money/arg/affinity；禁止输出 stat_changes/tool_calls。\n5.1 手机消息请优先使用函数 `phone_enqueue_message`，不要把 wechat 写在 effects 里（仅兼容老模组时才允许）。\n6. 不要输出 mood 字段，不要输出多余嵌套结构。\n",
+      "skills/wechat_monitor.md": "【表里不一判定】：我会提供【近期微信动态】。若玩家微信发言和现实意图严重冲突，请让内情NPC立刻拆穿！",
+      "skills/slang_chapter_4.md": "【幼儿园阶段语言包（活动收束期）】\n时间感：学期活动变多（汇演、运动会、作品展示），关系进入阶段总结。\n\n【语气要求】\n- 台词强调“我们一起完成”的团队感。\n- 允许出现紧张和比较，但落点偏向成长与修复。\n- 避免大学毕业/就业语境。\n\n【关键词】\n- 表演\n- 练习\n- 加油\n- 牵手\n- 一起\n\n【行为倾向】\n- 角色会在公开场景里重新定义彼此关系（护着你、犹豫、退缩、和解）。\n- 关键事件更强调“站出来/让一步/一起完成”。\n",
+      "skills/slang_chapter_1.md": "【幼儿园阶段语言包（入园适应期）】\n时间感：刚入园到逐渐熟悉班级。\n\n【语气要求】\n- 句子短、口语化、带一点孩子式表达。\n- 多用“我想…/我不要…/你陪我…/老师她说…”这类直接表达。\n- 允许出现可爱拟声和重复，但不要过度幼稚化。\n\n【关键词】\n- 排队\n- 轮流\n- 分享\n- 贴贴\n- 不开心\n\n【行为倾向】\n- 容易因为小事闹别扭，也容易很快和好。\n- 很在意“谁跟谁最好”。\n",
+      "skills/slang_chapter_2.md": "【幼儿园阶段语言包（规则磨合期）】\n时间感：开始熟悉班级规则，冲突从陌生感转为边界感。\n\n【语气要求】\n- 对话强调“讲道理但带情绪”。\n- 可以有“你这样不公平”“我先来的”“那我们猜拳”这类表达。\n- 避免成人化说教和网络黑话。\n\n【关键词】\n- 公平\n- 约定\n- 轮值\n- 道歉\n- 和好\n\n【行为倾向】\n- 角色会更明确表达立场：守规则、求关注、怕冲突、爱出头等。\n- 玩家的回应会影响“小团体站位”。\n",
+      "skills/slang_chapter_3.md": "【幼儿园阶段语言包（情感升温期）】\n时间感：同伴关系变深，开始出现“偏爱、吃醋、秘密分享”。\n\n【语气要求】\n- 保持童真，但情绪要真实细腻。\n- 可出现“这是只给你的”“你今天不理我”“我们还是朋友吗”。\n- 避免油腻暧昧，重点是同伴亲密与依赖。\n\n【关键词】\n- 秘密\n- 偏爱\n- 吃醋\n- 陪伴\n- 约定\n\n【行为倾向】\n- 关系高时更愿意分享心事和小零食。\n- 关系低时会出现冷战、纸条传话、回避互动。\n",
+      "characters/tang_mengqi.md": "## 唐梦琪\n向日葵班的气氛担当，喜欢亮晶晶贴纸和公主裙。情绪来得快去得也快，最怕被忽视。\n",
+      "characters/li_yinuo.md": "## 李一诺\n规则感最强的小朋友，值日表和排队顺序记得一清二楚。讨厌插队，也不喜欢别人破坏约定。\n",
+      "characters/roster.json": "{\n    \"player_anran\": {\n        \"name\": \"陆陈安然\",\n        \"avatar\": \"/assets/portraits/安然.webp\",\n        \"archetype\": \"慢热/观察型/怕冲突但重感情\",\n        \"tags\": [\"Protagonist\", \"Observer\", \"Kind\"],\n        \"description\": \"向日葵班小朋友，常在大家吵起来时尝试和稀泥。\",\n        \"file\": \"player_anran.md\",\n        \"is_player\": true\n    },\n    \"tang_mengqi\": {\n        \"name\": \"唐梦琪\",\n        \"avatar\": \"/assets/portraits/唐.webp\",\n        \"archetype\": \"活泼/爱表现/情绪外露\",\n        \"tags\": [\"Cheerful\", \"Expressive\"],\n        \"description\": \"喜欢被关注，爱拉朋友一起玩角色扮演。\",\n        \"file\": \"tang_mengqi.md\",\n        \"is_player\": false\n    },\n    \"li_yinuo\": {\n        \"name\": \"李一诺\",\n        \"avatar\": \"/assets/portraits/李.webp\",\n        \"archetype\": \"守规则/较真/条理控\",\n        \"tags\": [\"Rule_Enforcer\", \"Orderly\"],\n        \"description\": \"最在意轮流和公平，对插队行为零容忍。\",\n        \"file\": \"li_yinuo.md\",\n        \"is_player\": false\n    },\n    \"zhao_xin\": {\n        \"name\": \"赵鑫\",\n        \"avatar\": \"/assets/portraits/赵.webp\",\n        \"archetype\": \"行动派/手工达人/有点倔\",\n        \"tags\": [\"Maker\", \"Sporty\"],\n        \"description\": \"动手能力很强，搭积木和修玩具都很拿手。\",\n        \"file\": \"zhao_xin.md\",\n        \"is_player\": false\n    },\n    \"lin_sa\": {\n        \"name\": \"林飒\",\n        \"avatar\": \"/assets/portraits/林.webp\",\n        \"archetype\": \"酷酷的/有主见/嘴硬心软\",\n        \"tags\": [\"Independent\", \"Straightforward\"],\n        \"description\": \"不爱废话，遇到不公平会直接站出来。\",\n        \"file\": \"lin_sa.md\",\n        \"is_player\": false\n    },\n    \"chen_yuting\": {\n        \"name\": \"陈雨婷\",\n        \"avatar\": \"/assets/portraits/陈.webp\",\n        \"archetype\": \"小干部/组织型/爱照顾人\",\n        \"tags\": [\"Organizer\", \"Outgoing\"],\n        \"description\": \"喜欢安排活动，也喜欢当大家的传话小喇叭。\",\n        \"file\": \"chen_yuting.md\",\n        \"is_player\": false\n    },\n    \"su_qian\": {\n        \"name\": \"苏浅\",\n        \"avatar\": \"/assets/portraits/苏.webp\",\n        \"archetype\": \"安静/敏感/绘画天赋\",\n        \"tags\": [\"Sensitive\", \"Artist\"],\n        \"description\": \"害羞但细腻，常用画画表达情绪。\",\n        \"file\": \"su_qian.md\",\n        \"is_player\": false\n    }\n}",
+      "characters/player_anran.md": "## 陆陈安然（玩家主角）\n\n- 向日葵班里最会观察气氛的小朋友。\n- 遇到冲突时会先犹豫，但会努力让大家重新一起玩。\n- 对“被当成好朋友”这件事很在意，也因此容易在选择上纠结。\n",
+      "characters/lin_sa.md": "## 林飒\n做事很干脆，说话直，讨厌被人当小孩糊弄。看着不好接近，其实很护短。\n",
+      "characters/chen_yuting.md": "## 陈雨婷\n向日葵班小干部，负责提醒大家排队、分发手工材料。热情外向，偶尔会因为太想把事情做好而显得有点强势。\n",
+      "characters/su_qian.md": "## 苏浅\n安静敏感，喜欢躲在角落画画。熟悉之后会很黏人，尤其愿意和信任的人分享自己的小秘密。\n",
+      "characters/zhao_xin.md": "## 赵鑫\n精力旺盛，最爱户外区和搭建游戏。平时看起来大大咧咧，但对自己在意的人和物非常护短。\n",
+      "system/mod_features.json": "{\n  \"phone_system_enabled\": false,\n  \"wechat_system_enabled\": false\n}",
+      "world/scenes.json": "{\n  \"default_image\": \"/assets/backgrounds/操场.jpg\",\n  \"scenes\": [\n    {\n      \"name\": \"向日葵班教室\",\n      \"image\": \"/assets/backgrounds/教室.jpg\",\n      \"keywords\": [\"教室\", \"课堂\", \"晨会\", \"故事会\"]\n    },\n    {\n      \"name\": \"午睡室\",\n      \"image\": \"/assets/backgrounds/宿舍.jpg\",\n      \"keywords\": [\"午睡\", \"小床\", \"安静时间\"]\n    },\n    {\n      \"name\": \"户外游戏区\",\n      \"image\": \"/assets/backgrounds/操场.jpg\",\n      \"keywords\": [\"滑梯\", \"秋千\", \"沙坑\", \"户外\"]\n    }\n  ]\n}"
+    },
+    "csv": {
+      "02_通用随机池.csv": "Event_ID,事件标题,所属章节,事件类型,触发条件,专属角色,是否Boss,场景与冲突描述,潜在冲突点,玩家交互,结果,最短回合,最长回合,推进节点,收束条件,叙事标签,状态钩子,关系钩子,开场目标,施压目标,转折目标,收束目标,兜底后果,权重,冷却回合,允许重复,预设剧本\nRAND_KG_01,积木城堡塌了,1,通用随机池,,,FALSE,大家一起搭的积木城堡被不小心碰倒，现场有人立刻开始互相指责。,责任归属|合作耐心,A:先安抚情绪再重搭|B:追问是谁碰倒的|C:提议换玩法,A:合作氛围提升|B:冲突升温|C:矛盾暂缓,3,5,作品倒塌|情绪上来|重建或改玩法,重新进入合作,合作|指责|修复,,,把矛盾从“事故”引到“关系”,制造站队压力,让玩家做态度选择,留下一次信任变化,若迟迟无解老师暂停活动,1.0,1,TRUE,苏浅:呜……刚搭好的塔倒了。|赵鑫:谁碰的？刚刚谁在后面挤！\nRAND_KG_02,彩笔借用误会,1,通用随机池,,,FALSE,一盒彩笔被借走后少了两支，失主怀疑是同桌故意拿走。,物品边界|信任裂缝,A:先一起找彩笔|B:要求当面道歉|C:表示先别追究,A:误会易解开|B:压力增加|C:短期平静但疑心留存,3,5,发现少笔|质问与否认|查找线索,找到彩笔或达成处理,误会|边界|信任,,,明确冲突对象,推动玩家介入方式,决定是修复还是扩大,形成关系后续钩子,若无进展由老师调解,1.0,1,TRUE,李一诺:借东西要登记，不然每次都说不清。|唐梦琪:我真的只拿了粉色那支！\nRAND_KG_03,户外排队插队,2,通用随机池,,,FALSE,去滑梯区时队伍里出现插队，后面的小朋友立刻不满。,规则执行|情绪爆发,A:坚持按队伍顺序|B:允许一次但提醒下次不行|C:让大家玩别的设施,A:规则权威增强|B:关系温和|C:冲突转移,3,5,排队混乱|双方争辩|重新安排秩序,队伍恢复可执行,排队|规则|妥协,,,把小冲突具象化,让玩家表达“规则严或松”,引导角色对玩家立场形成记忆,落地可持续规则,若僵持则暂停滑梯,1.0,1,TRUE,林飒:你刚刚明明在我后面。|陈雨婷:别吵别吵，先数一二三四站好。\nRAND_KG_04,家长接送迟到,3,通用随机池,,,FALSE,离园时间到了，有小朋友家长迟迟未到，情绪开始低落并影响全班。,安抚方式|同伴陪伴,A:主动陪对方等家长|B:请老师讲故事转移注意|C:保持距离不参与,A:关系升温|B:氛围稳定|C:你形象偏冷,3,5,离园等待|情绪下滑|同伴与老师安抚,情绪恢复并安全离园,陪伴|不安|共情,,,制造温柔场景压力,观察玩家共情倾向,让角色记住玩家态度,输出情绪价值回合,若情绪失控则老师联系家长,1.0,1,TRUE,苏浅:是不是我妈妈忘记来接我了……|陈老师:我们先坐在一起等，好吗？\n",
+      "03_角色专属.csv": "Event_ID,事件标题,所属章节,事件类型,是否Boss,触发条件,专属角色,场景与冲突描述,潜在冲突点,叙事标签,状态钩子,关系钩子,开场目标,施压目标,转折目标,收束目标,兜底后果\nevt_tang_sticker,贴纸交换小风波,1,角色专属事件,FALSE,,唐梦琪,唐梦琪拿出珍藏贴纸想和你交换，但她临时反悔，现场气氛突然尴尬。,占有欲|承诺变化,友谊试探|体面,主角高压力=>更容易语气变硬,高亲密唐梦琪=>更愿意补偿,让唐梦琪先提出交换并制造期待,让冲突从玩闹推进到“说话算不算数”,逼玩家做包容或较真选择,形成你和唐梦琪之间的新边界,若一直绕圈则老师要求继续上课\n\nevt_lin_teamgame,接力赛分组争执,2,角色专属事件,FALSE,,林飒,户外接力赛分组时，林飒坚持按实力分组，其他人觉得她太强势。,效率与照顾感受,竞争|站队,主角低SAN=>更易被带节奏,高亲密林飒=>她更愿听你的建议,先把林飒的“要赢”态度立起来,让其他角色表达被忽视的不满,逼玩家在效率与公平之间表态,形成林飒对你“懂不懂我”的判断,若无结论则老师随机分组\n\nevt_yinuo_rulesheet,值日表被涂改,2,角色专属事件,FALSE,,李一诺,李一诺做好的值日表被人涂改，她非常生气，要求立即查清楚。,规则被破坏|公开追责,秩序|委屈|控制,主角高口碑=>更容易被请来仲裁,高亲密李一诺=>她愿意先听解释,先明确李一诺的受伤点,把事件从“谁干的”推进到“以后怎么防止”,逼玩家选择修复或直接追责,形成李一诺对你可靠度的更新,若追责失败则全班重做值日表\n",
+      "04_条件触发.csv": "Event_ID,事件标题,所属章节,事件类型,触发条件,专属角色,是否Boss,场景与冲突描述,潜在冲突点,玩家交互,结果,最短回合,最长回合,推进节点,收束条件,叙事标签,状态钩子,关系钩子,开场目标,施压目标,转折目标,收束目标,兜底后果,权重,冷却回合,允许重复,预设剧本\nCOND_KG_LOW_01,冷战后的小纸条,2,条件触发池,Affinity(target)<35,,FALSE,你在桌肚发现一张写着“我不想和你玩了”的小纸条，疑似来自关系紧张的角色。,误会扩大|表达方式幼稚,A:直接去问对方|B:先找共同朋友|C:把纸条收起来不回应,A:有机会解开误会|B:信息更全面|C:冷战延续,3,5,发现纸条|选择应对|当面对话,关系明确升降,冷战|误会|修复尝试,,,制造低关系触发点,推动玩家面对冲突,给出修复窗口,形成关系分叉,若回避则下一轮继续冷战,1.0,2,TRUE,你看到皱巴巴的小纸条，上面歪歪扭扭写着一句气话。\nCOND_KG_HIGH_01,悄悄分享小饼干,3,条件触发池,Affinity(target)>70,,FALSE,午休后某角色偷偷把家里带的小饼干分给你，叮嘱“别告诉别人”。,亲密与公平,偏爱|信任|甜味时刻,A:接受并道谢|B:提议大家一起分享|C:婉拒并安抚,A:亲密提升|B:全班氛围提升|C:关系轻微回落,3,5,秘密分享|是否公开|情绪反馈,关系与班级氛围同步变化,亲密|分享|边界,,,给高关系正反馈事件,让玩家选择“二人世界”或“集体公平”,放大角色性格差异,沉淀甜系记忆点,若处理不当会引发别的小朋友吃醋,1.0,2,TRUE,对方把饼干塞进你手心，小声说：这是我最喜欢的口味。\n",
+      "event_skeletons.generated.json": "{\n  \"events\": [\n    {\n      \"id\": \"daily_morning_circle\",\n      \"type\": \"daily\",\n      \"title\": \"晨会点名小游戏\",\n      \"priority\": 62,\n      \"cooldown_days\": 1,\n      \"triggers\": { \"day_min\": 1 },\n      \"meta\": { \"kind\": \"daily\", \"initiator\": \"chen_yuting\", \"public_line\": \"晨会开始，大家围成圈做自我介绍接龙。\" }\n    },\n    {\n      \"id\": \"daily_playground_queue\",\n      \"type\": \"daily\",\n      \"title\": \"滑梯排队小摩擦\",\n      \"priority\": 66,\n      \"cooldown_days\": 1,\n      \"triggers\": { \"day_min\": 1 },\n      \"meta\": { \"kind\": \"daily\", \"initiator\": \"lin_sa\", \"public_line\": \"户外活动时，队伍里出现插队争议。\" }\n    },\n    {\n      \"id\": \"key_snack_share\",\n      \"type\": \"key\",\n      \"title\": \"点心分享决策\",\n      \"priority\": 80,\n      \"cooldown_days\": 2,\n      \"triggers\": { \"day_min\": 2 },\n      \"options\": [\n        { \"id\": \"support\", \"attitude\": \"支持\", \"effects\": { \"dorm_mood_delta\": 2 } },\n        { \"id\": \"neutral\", \"attitude\": \"中立\", \"effects\": { \"dorm_mood_delta\": 0 } },\n        { \"id\": \"avoid\", \"attitude\": \"回避\", \"effects\": { \"dorm_mood_delta\": -1 } }\n      ],\n      \"meta\": { \"kind\": \"key\" }\n    },\n    {\n      \"id\": \"key_nap_room_conflict\",\n      \"type\": \"key\",\n      \"title\": \"午睡室床位冲突\",\n      \"priority\": 84,\n      \"cooldown_days\": 2,\n      \"triggers\": { \"day_min\": 3 },\n      \"options\": [\n        { \"id\": \"support_rules\", \"attitude\": \"支持\", \"effects\": { \"dorm_mood_delta\": 1 } },\n        { \"id\": \"neutral\", \"attitude\": \"中立\", \"effects\": { \"dorm_mood_delta\": 0 } },\n        { \"id\": \"confront\", \"attitude\": \"对抗\", \"effects\": { \"dorm_mood_delta\": -2 } }\n      ],\n      \"meta\": { \"kind\": \"conflict\" }\n    }\n  ]\n}\n",
+      "timeline.json": "{\n  \"1\": [\"开局\", \"固定\", \"通用\", \"角色专属\", \"关键\"],\n  \"2\": [\"固定\", \"通用\", \"条件\", \"关键\"],\n  \"3\": [\"通用\", \"角色专属\", \"条件\", \"关键\"],\n  \"4\": [\"固定\", \"通用\", \"关键\"]\n}\n",
+      "01_固定剧情.csv": "Event_ID,事件标题,所属章节,事件类型,触发条件,专属角色,是否Boss,场景与冲突描述,潜在冲突点,玩家交互,结果,最短回合,最长回合,推进节点,收束条件,叙事标签,状态钩子,关系钩子,开场目标,施压目标,转折目标,收束目标,兜底后果,权重,冷却回合,允许重复,预设剧本\nFIX_KG_01,点心分配风波,1,固定池,,,FALSE,下午点心时间只剩最后一份草莓布丁，两个小朋友都说自己先看到。,公平与偏心|分享规则,A:提议一人一半|B:建议猜拳决定|C:请老师重新分配,A:气氛缓和|B:有人不服但接受|C:规则更明确,3,6,发现点心不够|争执升级|做出分配决定,所有人拿到可接受结果,分享|公平|情绪管理,,,快速建立冲突焦点,逼玩家表达价值取向,让角色对玩家形成印象,形成新的班级分配规则,若一直僵持则老师介入,1.0,1,TRUE,唐梦琪:这是我最喜欢的口味！|林飒:先看到也要讲规则。|你站在两人中间，大家都在等你说话。\nFIX_KG_02,午睡小床之争,2,固定池,,,FALSE,午睡室里靠窗的小床被认为“最舒服”，几位小朋友都想睡那里。,资源争夺|轮流制度,A:提出轮流表|B:今天让最困的人睡|C:抽签决定,A:秩序上升|B:短期和气但有后续|C:结果公平感较强,3,6,午睡前准备|抢床位|敲定规则,午睡顺利开始,规则建立|协商|边界,,,放大“公平与情绪”张力,推动玩家做可执行方案,形成班级长期小规则,冲突得到可回溯结论,若拖住则保育老师强制安排,1.0,1,TRUE,张老师:小朋友们，躺好准备午睡。|赵鑫:我昨天都没睡好，今天让我靠窗吧！|李一诺:要按顺序来。\n",
+      "event_skeleton_rules.json": "{\n  \"key_min_options\": 3,\n  \"warn_on_empty_title\": true,\n  \"warn_on_legacy_flags\": true,\n  \"warn_on_migration_notes\": true,\n  \"require_reviewed_for_pass\": false,\n  \"allowed_types\": [\n    \"daily\",\n    \"key\"\n  ]\n}\n",
+      "00_开局剧情.csv": "Event_ID,事件标题,所属章节,事件类型,触发条件,专属角色,是否Boss,场景与冲突描述,潜在冲突点,玩家交互,结果,最短回合,最长回合,推进节点,收束条件,叙事标签,状态钩子,关系钩子,开场目标,施压目标,转折目标,收束目标,兜底后果,权重,冷却回合,允许重复,预设剧本\nOPEN_KG_01,入园第一天,1,开局剧情池,,,FALSE,你第一次来到向日葵幼儿园。老师安排新同学自我介绍时，几位小朋友都想先发言，场面有点乱。,谁先发言|是否愿意分享玩具,A:主动先介绍并邀请大家轮流|B:先观察再举手|C:把机会让给最紧张的小朋友,A:你很快被注意到|B:你更了解大家性格|C:你获得一位角色好感,3,6,晨检入园|自我介绍|自由活动分组,班级秩序初步稳定,入园|破冰|同伴关系,,,建立幼儿园日常基调,让玩家快速进入关系网络,出现第一轮情绪与规则冲突,形成初步分组与互动氛围,如果没人表态则由老师点名安排,1.0,0,FALSE,陈老师:今天有新朋友，大家轮流说名字哦。|唐梦琪:我先我先！我带了闪闪贴纸！|李一诺:要排队，不然听不清。\n",
+      "event_skeletons.json": "{\n  \"events\": [\n    {\n      \"id\": \"daily_morning_circle\",\n      \"type\": \"daily\",\n      \"title\": \"晨会点名小游戏\",\n      \"priority\": 62,\n      \"cooldown_days\": 1,\n      \"triggers\": { \"day_min\": 1 },\n      \"meta\": { \"kind\": \"daily\", \"initiator\": \"chen_yuting\", \"public_line\": \"晨会开始，大家围成圈做自我介绍接龙。\" }\n    },\n    {\n      \"id\": \"daily_playground_queue\",\n      \"type\": \"daily\",\n      \"title\": \"滑梯排队小摩擦\",\n      \"priority\": 66,\n      \"cooldown_days\": 1,\n      \"triggers\": { \"day_min\": 1 },\n      \"meta\": { \"kind\": \"daily\", \"initiator\": \"lin_sa\", \"public_line\": \"户外活动时，队伍里出现插队争议。\" }\n    },\n    {\n      \"id\": \"key_snack_share\",\n      \"type\": \"key\",\n      \"title\": \"点心分享决策\",\n      \"priority\": 80,\n      \"cooldown_days\": 2,\n      \"triggers\": { \"day_min\": 2 },\n      \"options\": [\n        { \"id\": \"support\", \"attitude\": \"支持\", \"effects\": { \"dorm_mood_delta\": 2 } },\n        { \"id\": \"neutral\", \"attitude\": \"中立\", \"effects\": { \"dorm_mood_delta\": 0 } },\n        { \"id\": \"avoid\", \"attitude\": \"回避\", \"effects\": { \"dorm_mood_delta\": -1 } }\n      ],\n      \"meta\": { \"kind\": \"key\" }\n    },\n    {\n      \"id\": \"key_nap_room_conflict\",\n      \"type\": \"key\",\n      \"title\": \"午睡室床位冲突\",\n      \"priority\": 84,\n      \"cooldown_days\": 2,\n      \"triggers\": { \"day_min\": 3 },\n      \"options\": [\n        { \"id\": \"support_rules\", \"attitude\": \"支持\", \"effects\": { \"dorm_mood_delta\": 1 } },\n        { \"id\": \"neutral\", \"attitude\": \"中立\", \"effects\": { \"dorm_mood_delta\": 0 } },\n        { \"id\": \"confront\", \"attitude\": \"对抗\", \"effects\": { \"dorm_mood_delta\": -2 } }\n      ],\n      \"meta\": { \"kind\": \"conflict\" }\n    }\n  ]\n}\n"
+    }
+  },
+  "manifest": {
+    "schema_version": 1,
+    "mod_id": "official_star_campus_v1",
+    "name": "案例·向日葵幼儿园",
+    "author": "moku",
+    "source": "workshop",
+    "base_version": "default-v1",
+    "created_at": "2026-03-22T20:50:27",
+    "entry": {
+      "player_id": "player_anran"
+    },
+    "files": [
+      {
+        "path": "prompts/world/academic_npcs.md",
+        "kind": "md",
+        "size": 1145,
+        "sha256": "617d1946792d6cf9dc471cfb0dde87bce70b87b5dcd43209df01e7e3d916bdf6"
+      },
+      {
+        "path": "prompts/world/base_setting.md",
+        "kind": "md",
+        "size": 215,
+        "sha256": "599851c42dad6daf94df581bed84776849c21901145769054de19ae0ce56f588"
+      },
+      {
+        "path": "prompts/world/city_setting.md",
+        "kind": "md",
+        "size": 290,
+        "sha256": "10f632762fa3fb7f3a6ce047479d7068a9eb8e28dd67687c9c07cc717fd08654"
+      },
+      {
+        "path": "prompts/world/major_setting.md",
+        "kind": "md",
+        "size": 236,
+        "sha256": "5df3612c0351b5ccd6c7c4277eff19ef15cd31139c3a1fa741233cdcfe32107d"
+      },
+      {
+        "path": "prompts/system/expression_system_prompt.md",
+        "kind": "md",
+        "size": 545,
+        "sha256": "969856478781df8fd9497673a1577e0a16a5dd7cdb6fe32ad85fa294cf325e4b"
+      },
+      {
+        "path": "prompts/system/expression_user_prompt.md",
+        "kind": "md",
+        "size": 350,
+        "sha256": "18a10ee2e8ab1f4797686caf7371adb2d71e00715f9dd6536981a3ae191f9cab"
+      },
+      {
+        "path": "prompts/system/expression_json_contract.md",
+        "kind": "md",
+        "size": 602,
+        "sha256": "1e821f398cd27b0d6d1fa1666a8728dfb1fcffff13cf8bdac86966945420b9b3"
+      },
+      {
+        "path": "prompts/skills/wechat_monitor.md",
+        "kind": "md",
+        "size": 147,
+        "sha256": "025a3ab840f240c0b04c2aa02caab0bb68f1a6fcf32a72c012dc94dd43abf62d"
+      },
+      {
+        "path": "prompts/skills/slang_chapter_4.md",
+        "kind": "md",
+        "size": 575,
+        "sha256": "52d8b3742070cf2ba3e7b19b7da1208797707b3acea2e3c73b0698e36b13aa1f"
+      },
+      {
+        "path": "prompts/skills/slang_chapter_1.md",
+        "kind": "md",
+        "size": 503,
+        "sha256": "291ea8564c702e638c983dd59e404d254b7270ebf9573f4d7917035f4ede36d5"
+      },
+      {
+        "path": "prompts/skills/slang_chapter_2.md",
+        "kind": "md",
+        "size": 545,
+        "sha256": "71d44c7bfb1da13aadca99d5fd1f8f0d3e8cbb481479a00b58314fc5bb07517b"
+      },
+      {
+        "path": "prompts/skills/slang_chapter_3.md",
+        "kind": "md",
+        "size": 545,
+        "sha256": "17165f2773b367200271eac84a3d1d50cc375f171dc6b2c1dd201c0f66102959"
+      },
+      {
+        "path": "prompts/characters/tang_mengqi.md",
+        "kind": "md",
+        "size": 128,
+        "sha256": "73d986c568c857493dc0123b4eb51b55dce2ba72f8ece89946493e9984a4baa1"
+      },
+      {
+        "path": "prompts/characters/li_yinuo.md",
+        "kind": "md",
+        "size": 137,
+        "sha256": "d9a9b6ac072e109df918942bd0ade4185d15e2bf57022444d90ec822def2378f"
+      },
+      {
+        "path": "prompts/characters/roster.json",
+        "kind": "md",
+        "size": 2414,
+        "sha256": "9b79ccaddb78ca1db1588573b7b7282ae139594576b24b758d36908a83daace8"
+      },
+      {
+        "path": "prompts/characters/player_anran.md",
+        "kind": "md",
+        "size": 245,
+        "sha256": "1ae254a196d5be27bb5c271135b84185978cc4537161833ab06cad8d7b058671"
+      },
+      {
+        "path": "prompts/characters/lin_sa.md",
+        "kind": "md",
+        "size": 110,
+        "sha256": "5e7836872812c5dea5ea98722b859b70efdb4f69dbee6bb547676dd8edbd631e"
+      },
+      {
+        "path": "prompts/characters/chen_yuting.md",
+        "kind": "md",
+        "size": 161,
+        "sha256": "fe979b96ce5f819f4ff9c7c6214a0f1abb9c78e037efda45c1e40adf4985957d"
+      },
+      {
+        "path": "prompts/characters/su_qian.md",
+        "kind": "md",
+        "size": 134,
+        "sha256": "03b581918ccc19063ba9405d4df299218778ed3543cedeb609f0d00c52cca2d3"
+      },
+      {
+        "path": "prompts/characters/zhao_xin.md",
+        "kind": "md",
+        "size": 134,
+        "sha256": "8d3f9b83c75c9aaeb7bbf617ee371822311570063d46bda3410596f0ad90b6a0"
+      },
+      {
+        "path": "prompts/system/mod_features.json",
+        "kind": "md",
+        "size": 69,
+        "sha256": "14d7e415e4173da3b5addaace039fd018222e81d785c3b63367d1421fc4b0940"
+      },
+      {
+        "path": "prompts/world/scenes.json",
+        "kind": "md",
+        "size": 531,
+        "sha256": "6ab93a9ac8372651a698fec0662a9b129439a07d428f65f8eac152057a2a55c1"
+      },
+      {
+        "path": "events/02_通用随机池.csv",
+        "kind": "csv",
+        "size": 2882,
+        "sha256": "133e828e20ca2ba4fd1c778c110209d76e30b71ffcf1743aff1a675a6c256a88"
+      },
+      {
+        "path": "events/03_角色专属.csv",
+        "kind": "csv",
+        "size": 1711,
+        "sha256": "1497260eabeab55d42d239797cbab79b0c5ef495a51ca30e700b8aa3067316eb"
+      },
+      {
+        "path": "events/04_条件触发.csv",
+        "kind": "csv",
+        "size": 1694,
+        "sha256": "bbef8c5179e821b9031291991af575df74cacd8bc5e314d89fb2dd1d362e067f"
+      },
+      {
+        "path": "events/event_skeletons.generated.json",
+        "kind": "csv",
+        "size": 1713,
+        "sha256": "90a744528cf70d812c1a7c6292cc8bcbfbdd38214080b17c11e05559e3e60497"
+      },
+      {
+        "path": "events/timeline.json",
+        "kind": "csv",
+        "size": 211,
+        "sha256": "9a18432b9d85cf85627702725dd3c262c082f4a21ae061b85ada8cfd32144ad3"
+      },
+      {
+        "path": "events/01_固定剧情.csv",
+        "kind": "csv",
+        "size": 1718,
+        "sha256": "2b1569768e4edacde5e8b4b26d3a05a3c29151dc154f358f6718a9fc8770315f"
+      },
+      {
+        "path": "events/event_skeleton_rules.json",
+        "kind": "csv",
+        "size": 212,
+        "sha256": "5bcf7837696e2e36f3be1d762aa0e8104cd067055cf76d75df107402ac9e9195"
+      },
+      {
+        "path": "events/00_开局剧情.csv",
+        "kind": "csv",
+        "size": 1187,
+        "sha256": "7c694dcd0d14e4f3d84eb7d50e69cd8f09a12ef1ee463a754f28d8c7551ce128"
+      },
+      {
+        "path": "events/event_skeletons.json",
+        "kind": "csv",
+        "size": 1713,
+        "sha256": "90a744528cf70d812c1a7c6292cc8bcbfbdd38214080b17c11e05559e3e60497"
+      }
+    ]
+  },
+  "downloads": 5,
+  "timestamp": "2026-03-22 13:56:31",
+  "updated_at": "2026-03-22 20:50:27",
+  "published_at": "2026-03-22 13:56:31",
+  "owner_user_id": "system_official",
+  "linked_library_id": "",
+  "version": 1,
+  "visibility": "public",
+  "source_type": "original",
+  "source_mod_id": "",
+  "parent_workshop_id": "",
+  "summary": {
+    "md_files": 22,
+    "csv_files": 9,
+    "character_count": 7,
+    "skill_count": 5,
+    "world_count": 5
+  }
+}

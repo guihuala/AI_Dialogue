@@ -145,10 +145,12 @@ def build_admin_router(
         return "", "", {}
 
     def _revision_summary_row(row: Dict[str, Any], fallback_status: str, fallback_id: str) -> Dict[str, Any]:
+        raw_status = str(row.get("status", fallback_status) or fallback_status)
+        norm_status = "applied" if raw_status == "approved" else raw_status
         return {
             "proposal_id": str(row.get("proposal_id", "") or "").strip() or fallback_id,
             "created_at": str(row.get("created_at", "")),
-            "status": str(row.get("status", fallback_status)),
+            "status": norm_status,
             "target_mod_id": str(row.get("target_mod_id", "")),
             "summary": str(row.get("summary", "")),
             "risk_level": str(row.get("risk_level", "medium")),
@@ -1180,21 +1182,7 @@ def build_admin_router(
                 row = _read_json(path)
             except Exception:
                 continue
-            rows.append(
-                {
-                    "proposal_id": str(row.get("proposal_id", "") or "").strip() or fn[:-5],
-                    "created_at": str(row.get("created_at", "")),
-                    "status": str(row.get("status", s)),
-                    "target_mod_id": str(row.get("target_mod_id", "")),
-                    "summary": str(row.get("summary", "")),
-                    "risk_level": str(row.get("risk_level", "medium")),
-                    "changes_count": len(row.get("changes", []) if isinstance(row.get("changes", []), list) else []),
-                    "memory_candidates_count": len(row.get("memory_candidates", []) if isinstance(row.get("memory_candidates", []), list) else []),
-                    "quality_score": int(row.get("quality_score", 0) or 0),
-                    "priority": str(row.get("priority", "medium") or "medium"),
-                    "validator": row.get("validator", {}) if isinstance(row.get("validator", {}), dict) else {},
-                }
-            )
+            rows.append(_revision_summary_row(row, s, fn[:-5]))
         rows.sort(key=lambda x: str(x.get("created_at", "")), reverse=True)
         lim = max(1, min(int(limit or 50), 200))
         return {"status": "success", "data": {"items": rows[:lim], "count": len(rows)}}
@@ -1307,12 +1295,12 @@ def build_admin_router(
         st, _, data = _load_revision(user_id, proposal_id)
         if not st:
             raise HTTPException(status_code=404, detail="proposal not found")
-        data["status"] = "approved"
+        data["status"] = "applied"
         data["approved_at"] = datetime.now().isoformat(timespec="seconds")
         data["approved_note"] = str(req.note or "")
         _move_revision(user_id, st, "applied", proposal_id, data)
         append_audit_log(user_id, "agent_revision_approve", "ok", proposal_id, {"note": req.note or ""})
-        return {"status": "success", "data": {"proposal_id": proposal_id, "status": "approved"}}
+        return {"status": "success", "data": {"proposal_id": proposal_id, "status": "applied"}}
 
     @router.post("/api/admin/revisions/{proposal_id}/reject")
     def reject_revision(
@@ -1345,7 +1333,7 @@ def build_admin_router(
         st, _, data = _load_revision(user_id, proposal_id)
         if not st:
             raise HTTPException(status_code=404, detail="proposal not found")
-        data["status"] = "approved"
+        data["status"] = "applied"
         data["approved_at"] = datetime.now().isoformat(timespec="seconds")
         data["approved_note"] = str(req.note or "")
         data["approved_by"] = "openclaw_bot"
@@ -1363,7 +1351,7 @@ def build_admin_router(
                 "request_id": str(x_request_id or "").strip(),
             },
         )
-        return {"status": "success", "data": {"proposal_id": proposal_id, "status": "approved"}}
+        return {"status": "success", "data": {"proposal_id": proposal_id, "status": "applied"}}
 
     @router.post("/api/openclaw/revisions/{proposal_id}/reject")
     def reject_revision_for_openclaw(
@@ -1422,7 +1410,7 @@ def build_admin_router(
             if st != "queue":
                 skipped.append({"proposal_id": proposal_id, "reason": f"not_queue:{st}"})
                 continue
-            data["status"] = "approved"
+            data["status"] = "applied"
             data["approved_at"] = now_iso
             data["approved_note"] = str(req.note or "")
             data["approved_by"] = "openclaw_bot"

@@ -1,0 +1,263 @@
+{
+  "id": "official_romance_dorm_v1",
+  "type": "prompt_pack",
+  "name": "案例·全是姛",
+  "author": "moku",
+  "description": "下半身发力大作",
+  "content": {
+    "md": {
+      "world/academic_npcs.md": "【NPC设定包】\n\n【教师：陈砚秋】\n身份：编导专业主讲教师\n性格标签：毒舌但负责，课上骂人狠，课下请学生吃饭\n教学风格：作业批语比作业本身还长，能一眼看出你片子里的“学生思维”\n\n【宿管：张桂芳】\n身份：校内公寓宿管阿姨\n性格标签：严格但护犊，查寝铁面，学生有事第一个上\n特殊技能：能从学生提的袋子里闻出有没有带外卖；能记住全楼200多号人的脸和班级\n管理规定：11点锁门，11点半记晚归，12点上报学院。违禁电器每周一查\n\n【学长：林一航】\n身份：大四学长/影视工作室创始人\n性格标签：技术大神，话少活好，作品拿奖无数，但从不炫耀\n日常状态：不是在剪片，就是在去剪片的路上。朋友圈一年更新三条，全是作品获奖\n\n【同学：苏念】\n身份：同班同学/卷王代表\n性格标签：永远最早交作业，永远最早到教室，永远坐在第一排\n日常状态：朋友圈全是各种比赛获奖、实习offer、证书考过。但凌晨三点经常发“又是充实的一天”\n让人又爱又恨的特质：小组作业时能carry全场，但和她一组压力巨大\n\n【NPC交互原则】\n- 若上述配角第一次在当前事件中出场，必须在首次台词或旁白里自然补充一句身份说明，让玩家知道“这个人是谁、和主角是什么关系”，避免只报名字不解释。\n- 首次介绍要简短自然，不要写成资料卡。优先使用类似“这是……”“你认出她是……”“她是班里那个……”这样的句式。\n- 同一事件内，同一名配角完成首次介绍后，后续就不要重复做完整介绍，避免台词显得生硬。\n\n【恋爱向补充规则】\n- 主要女性角色之间都允许产生双向或多向吸引，不预设单一官配。\n- 同一事件内可出现暧昧张力，但不要强行表白或瞬间锁死关系。\n- 当出现修罗场时，优先写“情绪与选择”，避免低俗化描写。\n",
+      "world/base_setting.md": "# 世界基调\n江城传媒学院宿舍生活线，时间与地点保持原设定不变。\n寝室与校园核心角色均为女性，且彼此都可能在长期相处中产生吸引。\n可能的关系走向：暧昧、互相试探、吃醋、修罗场、和解共存。\n请注意：吸引是可能性，不是强制结果；请尊重角色边界与玩家选择。\n",
+      "world/city_setting.md": "# 城市设定\n校园位于老城区，咖啡馆、排练厅和展演空间密集。\n夜晚娱乐活动多，偶遇与误会都很常见。\n在本模组里，公共空间更容易成为“情绪放大器”——同一场公开活动可能同时触发告白、误会和猜忌。\n",
+      "world/major_setting.md": "# 专业生态\n表演、导演、摄影、编剧跨专业组队比较频繁。\n关系推进重点：\n- 合作排练容易升温\n- 公开评价容易触发嫉妒\n- 私下复盘容易形成亲密同盟",
+      "system/expression_system_prompt.md": "你是校园宿舍生活的叙事导演，仅负责文本表现，不负责规则结算。\n玩家主角名：[PLAYER_NAME]\n输出目标：短、清晰、可推进。\n\n必须：\n- 场景一句话（scene_line）\n- 3-6句对话（dialogue_lines），例：角色名：内容\n- 3-4个可执行选项文案（options_copy）\n- 若本轮存在明显互动后果，优先使用 phone_enqueue_message 函数投递手机消息；不要依赖 effects.wechat\n- 不输出 mood 字段，不输出解释文本\n\n风格：自然口语、具体动作，不要模板腔。\n",
+      "system/expression_user_prompt.md": "【事件】[EVENT_NAME]\n【场景】[EVENT_DESC]\n【当前时间】第[SYSTEM_WEEK]周-第[SYSTEM_DAY]天\n【宿舍氛围】[DORM_MOOD]\n【在场角色】[ACTIVE_CHARS]\n【玩家动作】[PLAYER_ACTION]\n【系统结算】[RESOLVED_HINT]\n【系统事件线索】[PLAN_HINT]\n【写作要求】直接给短表现。\n",
+      "system/expression_json_contract.md": "【强制短文本 JSON 协议】\n1. 仅输出一个 JSON 对象，不要输出解释、注释、Markdown。\n2. 只允许这些字段：scene_line, current_scene, dialogue_lines, options_copy, is_end, effects。\n3. scene_line 必须是一句场景叙述；dialogue_lines 必须是 3-6 条字符串。\n4. options_copy 必须是 3-4 个具体动作选项，不要输出“继续剧情”。\n5. effects 必须是字符串数组命令，可为空数组；允许命令：san/money/arg/affinity；禁止输出 stat_changes/tool_calls。\n5.1 手机消息请优先使用函数 `phone_enqueue_message`，不要把 wechat 写在 effects 里（仅兼容老模组时才允许）。\n6. 不要输出 mood 字段，不要输出多余嵌套结构。\n",
+      "skills/wechat_monitor.md": "【表里不一判定】：我会提供【近期微信动态】。若玩家微信发言和现实意图严重冲突，请让内情NPC立刻拆穿！",
+      "skills/slang_chapter_4.md": "【学年设定】\n当前是2025年9月至2026年6月，玩家是一名大四毕业生。\n时代特征：深度AI化的一年。就业市场承压，学生更加理性务实地选择赛道。\n\n【语言风格指令】\n请自然使用以下2025-2026年度流行语（基于趋势预测）：\n- “DeepSeek” - 指使用AI辅助学习、工作的行为（名词动用）\n- “助我破鼎” - 表达突破困境、破局而出的决心\n- “情绪价值” - 衡量事物能否带来情感满足的标准\n- “浪浪山” - 隐喻家乡小城或安稳但平淡的生活（出自国产动画）\n- “拉布布/LABUBU” - 指代成年人用来守护童心的潮玩、挂件\n\n【角色行为倾向】\n务实但不失理想，成熟但不失天真。主动拥抱AI工具，但也更珍视人与人之间的真实连接。面临人生重大抉择，对未来既焦虑又期待，试图在现实压力下保留一份“少年气”。",
+      "skills/slang_chapter_1.md": "【年度流行词插件(大一)】\n当前是2022年9月至2023年6月，玩家是一名大一新生。\n时代特征：疫情管控逐步放开前后的特殊过渡期。上半年可能还在上网课，下半年突然迎来大学生活重启。学生群体既带有疫情时代的谨慎，又充满对自由社交的渴望。\n\n【语言风格指令】\n请自然使用以下2022-2023年度流行语：\n- “我真的会谢” - 表达无奈、无语\n- “大冤种” - 自嘲吃亏、被坑\n- “特种兵式XX” - 形容行程极满、效率极高的活动\n- “CPU/PUA” - 指精神控制、被拿捏\n- “小镇做题家” - 自嘲出身普通、只会考试的学生\n\n【角色行为倾向】\n对解封后的世界充满好奇，热衷于集体活动，容易被网络热点带动，情绪波动较大，正在适应从“被保护”到“自主生活”的转变。",
+      "skills/slang_chapter_2.md": "【学年设定】\n当前是2023年9月至2024年6月，玩家是一名大二学生。\n时代特征：全面放开后的狂欢期。社交需求爆发式增长，短视频文化深度渗透校园生活。ChatGPT等AI工具开始进入大学生作业，引发关于学术诚信的讨论。\n\n【语言风格指令】\n请自然使用以下2023-2024年度流行语：\n- “显眼包” - 指那些爱出风头、引人注目的社牛\n- “主打一个XX” - 表示核心目标或状态，如“主打一个陪伴”\n- “多巴胺穿搭” - 指鲜艳明亮的着装风格\n- “City不City” - 询问某事是否洋气、时髦、有都市感\n- “命运的齿轮开始转动” - 感慨人生转折点\n\n【角色行为倾向】\n社交达人，热衷组织活动和打卡网红地，开始有意识地打造人设，对AI工具既好奇又警惕，面临社团留任还是退出的抉择。在此输入设定内容...",
+      "skills/slang_chapter_3.md": "【学年设定】\n当前是2024年9月至2025年6月，玩家是一名大三学生。\n时代特征：从校园新人变成“老油条”，开始直面未来规划的压力。考研、考公、实习三条赛道逐渐分明。国产文化产品崛起，情绪消费成为主流。在“内卷”与“躺平”之间寻找平衡点。\n\n【语言风格指令】\n请自然使用以下2024-2025年度流行语：\n- “偷感” - 形容做某事偷偷摸摸、不想被人发现的心理状态\n- “班味” - 指打工人的疲惫气质，即使卸了妆也掩盖不住\n- “松弛感” - 形容不紧绷、允许一切发生的从容心态\n- “谷子” - 指动漫、游戏周边商品（goods的谐音）\n- “接” - 在社交媒体上接好运、接上岸的表达\n\n【角色行为倾向】\n目标感分化严重，有人拼命内卷，有人提前养老。开始精打细算时间成本，社交圈缩小但深度增加。对“意义感”产生强烈需求，容易被提供情绪价值的事物吸引。",
+      "characters/tang_mengqi.md": "## 唐梦琪\n热烈直接，情绪来得快也去得快。对亲近的人有很强参与感，容易因为在意而吃醋。\n",
+      "characters/li_yinuo.md": "## 李一诺\n克制安静，观察力极强。很少先开口，但会通过细节照顾表达偏爱。\n",
+      "characters/roster.json": "{\n    \"player_anran\": {\n        \"name\": \"陆陈安然\",\n        \"avatar\": \"/assets/portraits/安然.webp\",\n        \"archetype\": \"温吞/淡漠/选择困难症/观察型内倾\",\n        \"tags\": [\n            \"Protagonist\",\n            \"Observer\",\n            \"Indecisive\"\n        ],\n        \"description\": \"长相清秀但缺乏辨识度。习惯性隐藏真实情绪。由于父母离异，她习惯了看人眼色，在寝室里扮演和稀泥的角色。\",\n        \"file\": \"player_anran.md\",\n        \"is_player\": true\n    },\n    \"tang_mengqi\": {\n        \"name\": \"唐梦琪\",\n        \"avatar\": \"/assets/portraits/唐.webp\",\n        \"archetype\": \"热烈直球/情绪外显/占有欲\",\n        \"tags\": [\n            \"Social_Butterfly\",\n            \"Jealous_When_In_Love\"\n        ],\n        \"description\": \"高社交高情绪推进者，容易在亲密关系里吃醋。\",\n        \"file\": \"tang_mengqi.md\",\n        \"is_player\": false\n    },\n    \"li_yinuo\": {\n        \"name\": \"李一诺\",\n        \"avatar\": \"/assets/portraits/李.webp\",\n        \"archetype\": \"冷静克制/规则感强/慢热偏爱\",\n        \"tags\": [\n            \"Rule_Enforcer\",\n            \"Early_Bird\",\n            \"GPA_Oriented\"\n        ],\n        \"description\": \"规则驱动的理性观察者\",\n        \"file\": \"li_yinuo.md\",\n        \"is_player\": false\n    },\n    \"zhao_xin\": {\n        \"name\": \"赵鑫\",\n        \"avatar\": \"/assets/portraits/赵.webp\",\n        \"archetype\": \"老鼠人/韧性强/实用主义/抠搜\",\n        \"tags\": [\n            \"Hoarder\",\n            \"Gamer\",\n            \"Frugal\",\n            \"Tomboy\"\n        ],\n        \"description\": \"爱打游戏的老熟人罢了。...\",\n        \"file\": \"zhao_xin.md\",\n        \"is_player\": false\n    },\n    \"lin_sa\": {\n        \"name\": \"林飒\",\n        \"avatar\": \"/assets/portraits/林.webp\",\n        \"archetype\": \"嘴硬心软/反叛感/高行动力\",\n        \"tags\": [\n            \"Rebel\",\n            \"Artistic\",\n            \"Smoker\",\n            \"Night_Owl\"\n        ],\n        \"description\": \"冷直觉型行动派\",\n        \"file\": \"lin_sa.md\",\n        \"is_player\": false\n    },\n    \"chen_yuting\": {\n        \"name\": \"陈雨婷\",\n        \"avatar\": \"/assets/portraits/陈.webp\",\n        \"archetype\": \"控制狂/社交为王/精于算计\",\n        \"tags\": [\n            \"Student_Council_Leader\",\n            \"Clean_Freak\",\n            \"Two_Faced\",\n            \"Information_Hub\"\n        ],\n        \"description\": \"超级爱八卦，超级热情。...\",\n        \"file\": \"chen_yuting.md\",\n        \"is_player\": false\n    },\n    \"su_qian\": {\n        \"name\": \"苏浅\",\n        \"avatar\": \"/assets/portraits/苏.webp\",\n        \"archetype\": \"社恐/内向敏感/脆弱易碎\",\n        \"tags\": [\n            \"Social_Phobia\",\n            \"Net_Famous\",\n            \"Depressed\",\n            \"Artist\"\n        ],\n        \"description\": \"有点像老鼠？每天都窝在床上。...\",\n        \"file\": \"su_qian.md\",\n        \"is_player\": false\n    }\n}",
+      "characters/player_anran.md": "## 7. 陆陈安然 (Lu-Chen Anran) —— 玩家主角\n\n* **核心人设**：温吞，淡漠，选择困难症，观察型内倾。\n* **外貌特征**：长相清秀但缺乏辨识度，总是穿着最保险、不出彩的衣服。\n* **性格深度**：习惯性隐藏真实情绪。由于父母离异，她习惯了看人眼色，在寝室里扮演和稀泥的角色。\n* **家庭背景**：本地人。复杂的家庭关系让她对“家”这个概念既渴望又逃避，把寝室当成不得不维持的脆弱港湾。",
+      "characters/lin_sa.md": "## 林飒\n外表锋利，内心细腻。越在意越嘴硬，常用玩笑试探对方底线与心意。\n",
+      "characters/chen_yuting.md": "## 陈雨婷\n社交能力强，擅长组织局面，也擅长维持模糊边界。温柔和控制欲经常同时出现。\n",
+      "characters/su_qian.md": "## 苏浅\n敏感内向，情绪反应细腻。安全感建立后会非常依赖对方，也容易在沉默里受伤。\n",
+      "characters/zhao_xin.md": "## 赵鑫\n务实直接，不爱废话。看似不在意情绪，实际会用行动护短，表达方式偏笨拙。\n",
+      "system/mod_features.json": "{\n  \"phone_system_enabled\": true,\n  \"wechat_system_enabled\": true\n}",
+      "world/scenes.json": "{\n  \"default_image\": \"/assets/backgrounds/宿舍.jpg\",\n  \"scenes\": [\n    {\n      \"name\": \"剧场区\",\n      \"image\": \"/assets/backgrounds/商业街.jpg\",\n      \"keywords\": [\n        \"剧场\",\n        \"排练厅\",\n        \"展演\"\n      ]\n    },\n    {\n      \"name\": \"宿舍\",\n      \"image\": \"/assets/backgrounds/宿舍.jpg\",\n      \"keywords\": [\n        \"宿舍\",\n        \"寝室\"\n      ]\n    },\n    {\n      \"name\": \"图书馆\",\n      \"image\": \"/assets/backgrounds/图书馆.jpg\",\n      \"keywords\": [\n        \"图书馆\"\n      ]\n    }\n  ]\n}"
+    },
+    "csv": {
+      "02_通用随机池.csv": "Event_ID,事件标题,所属章节,事件类型,触发条件,专属角色,是否Boss,场景与冲突描述,潜在冲突点,玩家交互,结果,最短回合,最长回合,推进节点,收束条件,叙事标签,状态钩子,关系钩子,开场目标,施压目标,转折目标,收束目标,兜底后果,权重,冷却回合,允许重复,预设剧本\nRAND_GL_01,座位“巧合”风波,1,通用随机池,,,FALSE,公共课上有人总“刚好”坐到你旁边，另一人明显不爽，课间语气开始变刺。,占位宣示|吃醋,A:顺势接受靠近|B:主动调座缓和|C:装作没看懂,A:一方升温一方吃醋|B:短期缓和|C:两边都不满,3,5,座位变化|情绪外露|课后摊牌或冷处理,关系张力明牌化,吃醋|宣示|暗战,,,让暧昧体感具体可见,制造轻微修罗场,逼玩家对“靠近”给出态度,沉淀角色间竞争关系,若拖住则下节课再次复现,1.0,1,TRUE,林飒:你旁边还有位子吗？|唐梦琪:哇，今天又这么巧？\nRAND_GL_02,手作礼物署名,1,通用随机池,,,FALSE,手工课成品上出现“给你”的便签，却没人承认是谁写的，几个人都在观察你的反应。,匿名示好|安全感,A:公开感谢并追问|B:私下只问一人|C:不表态收下,A:可能触发表白苗头|B:建立秘密线|C:暧昧持续但疑心并存,3,5,发现便签|旁敲侧击|线索收束,形成公开或私密关系推进,暗恋|试探|心照不宣,,,给角色制造“进可攻退可守”的示好场景,推动玩家选择公开度,明确关系推进路径,留下二周目可追踪线索,若无人承认则苏浅悄悄看向你,1.0,1,TRUE,你打开抽屉，看到一枚小挂件和一句“今天也很可爱”。\nRAND_GL_03,排练肢体界限,2,通用随机池,,,FALSE,排练需要双人肢体配合，有人主动提出和你搭档，另一位角色当场沉默。,界限与占有欲|专业与私情,A:接受邀请|B:改为三人练习|C:拒绝并换组,A:关系升温并引发旁人情绪|B:风险可控|C:错失升温点,3,5,分组决定|排练磨合|情绪反馈,关系边界被重新定义,身体距离|试探|边界,,,把“合作”转化为情感压力,放大谁在意谁,逼玩家做边界决策,形成高低亲密可见差异,若犹豫过久则老师催分组,1.0,1,TRUE,陈雨婷:这段我想和你搭，会更有感觉。|李一诺合上本子，没说话。\nRAND_GL_04,夜聊越界瞬间,3,通用随机池,,,FALSE,熄灯后有人在下铺轻声问你“如果我认真追你，你会跑吗”。周围似乎都没睡着。,真心话压力|群体偷听,A:认真回答|B:玩笑带过|C:反问对方,A:关系大幅波动|B:气氛暧昧悬置|C:主动权转移,3,5,提问出现|沉默拉长|回答落地,形成一次清晰情感记忆,夜谈|越界|告白前夜,,,制造高张力低噪音场景,迫使玩家面对情感问题,决定是推进还是挂起,给后续关键事件提供燃点,若玩家回避则对方转身沉默到天亮,1.0,2,TRUE,黑暗里只听见风扇声，她的声音很轻：你会不会讨厌我这样问？\n",
+      "03_角色专属.csv": "Event_ID,事件标题,所属章节,事件类型,是否Boss,触发条件,专属角色,场景与冲突描述,潜在冲突点,叙事标签,状态钩子,关系钩子,开场目标,施压目标,转折目标,收束目标,兜底后果\nevt_tang_jealous,唐梦琪的“玩笑吃醋”,1,角色专属事件,FALSE,,唐梦琪,你和别人聊得太久，唐梦琪笑着打断，语气轻快却句句带刺。,撒娇与控制边界,吃醋|试探|拉扯,主角压力高=>更易烦躁,高亲密唐梦琪=>会在结尾示弱,先让唐梦琪的占有欲以玩笑包装出现,把玩笑推进成需要回应的情绪诉求,逼玩家在安抚/划界/回避中选择,形成唐梦琪对你安全感的变化,若回避则她会整晚冷处理\n\nevt_lin_blunt,林飒的直球时刻,2,角色专属事件,FALSE,,林飒,林飒在天台直接问你“你到底把我当什么”，不给任何打哈哈空间。,直球告压|关系命名焦虑,直球|命名关系|边界,主角回避倾向高=>更容易僵住,高亲密林飒=>她会给二次机会,先让林飒把压抑已久的在意说出口,把对话从暧昧拉到关系定义层面,逼玩家给出清晰或半清晰答案,形成林飒线升温或短期断联,若玩家沉默则林飒先离开现场\n\nevt_yinuo_silentcare,李一诺的无声偏爱,2,角色专属事件,FALSE,,李一诺,你身体不舒服时，李一诺默默替你占位、打水、记笔记，却嘴硬说“顺手”。,行动与语言不一致,慢热偏爱|口是心非,主角高敏感=>更容易捕捉细节,高亲密李一诺=>会罕见说真话,先用细节堆出李一诺的在意,推动玩家决定要不要拆穿她的嘴硬,形成温柔升温或礼貌距离,让李一诺线出现稳定信任感,若玩家忽视则她恢复克制模式\n\nevt_chen_network,陈雨婷的关系棋局,3,角色专属事件,FALSE,,陈雨婷,陈雨婷组织聚会故意让你和“某人”坐一起，试图试探你真实心意。,操盘与真心冲突,操盘|试探|嫉妒引导,主角口碑高=>更容易被围观,高亲密陈雨婷=>会在最后坦白动机,先让“被安排”的不适感出现,推动从社交局发展到私人摊牌,逼玩家回应陈雨婷的控制与脆弱,形成陈线信任重建或防备升级,若不回应则她继续加码安排\n\nevt_su_confess,苏浅的低声告白,3,角色专属事件,FALSE,,苏浅,苏浅递给你一张画，背面写着“我喜欢你很久了”，说完就想逃。,脆弱告白|被拒恐惧,告白|脆弱|依赖,主角强硬=>更可能伤到她,高亲密苏浅=>更愿意留在现场听答案,先建立苏浅鼓起勇气的脆弱氛围,推动玩家在安抚与诚实间给出回应,形成苏浅线明显升降,给后续修复或稳定关系留空间,若玩家回避则苏浅暂时疏远\n",
+      "04_条件触发.csv": "Event_ID,事件标题,所属章节,事件类型,触发条件,专属角色,是否Boss,场景与冲突描述,潜在冲突点,玩家交互,结果,最短回合,最长回合,推进节点,收束条件,叙事标签,状态钩子,关系钩子,开场目标,施压目标,转折目标,收束目标,兜底后果,权重,冷却回合,允许重复,预设剧本\nCOND_GL_LOW_01,公开场合的冷脸,2,条件触发池,Affinity(target)<35,,FALSE,目标角色在公开场合明显回避你，第三人当众追问你们是不是闹掰了。,面子压力|关系失衡,A:当场解释挽回|B:冷处理带过|C:私下再谈,A:有修复机会|B:裂痕扩大|C:短期止血,3,5,冷脸出现|旁人起哄|处理方式落地,关系是否止跌,冷战|体面|修复窗口,,,为低关系提供戏剧化修复点,逼玩家面对而非拖延,形成“敢不敢承担关系后果”的人设,留下长线记忆,若继续回避则下一轮冲突升级,1.0,2,TRUE,她看见你就移开视线，旁边有人笑问：你们不是之前很黏吗？\nCOND_GL_HIGH_01,被偏爱的证据,3,条件触发池,Affinity(target)>75,,FALSE,你在包里发现目标角色悄悄放的护手霜和纸条：“天冷记得涂”。,温柔偏爱与公开风险,偏爱|秘密|守护,A:收下并回礼|B:公开感谢|C:装作没发现,A:双向升温|B:可能引发他人吃醋|C:关系停滞,3,5,发现线索|决定公开度|情绪反馈,形成高关系甜点回合,甜度|偏爱|风险管理,,,给高关系线提供明确奖励,让玩家选择“私密幸福”或“公开承认”,引出后续修罗场或稳态亲密,沉淀可回忆片段,若处理生硬会触发他人失落,1.0,2,TRUE,纸条上的字很工整：今天风大，别总把手露在外面。\n",
+      "event_skeletons.generated.json": "{\n  \"events\": [\n    {\n      \"id\": \"daily_corridor_encounter\",\n      \"type\": \"daily\",\n      \"title\": \"走廊偶遇试探\",\n      \"priority\": 64,\n      \"cooldown_days\": 1,\n      \"triggers\": {\n        \"day_min\": 1\n      },\n      \"meta\": {\n        \"kind\": \"daily\",\n        \"public_line\": \"晚课后走廊相遇，话题从日常拐向暧昧。\"\n      }\n    },\n    {\n      \"id\": \"daily_group_rehearsal\",\n      \"type\": \"daily\",\n      \"title\": \"排练搭档微妙站位\",\n      \"priority\": 68,\n      \"cooldown_days\": 1,\n      \"triggers\": {\n        \"day_min\": 1\n      },\n      \"meta\": {\n        \"kind\": \"daily\",\n        \"public_line\": \"分组排练时，谁和谁搭档引发微妙情绪。\"\n      }\n    },\n    {\n      \"id\": \"key_public_choice\",\n      \"type\": \"key\",\n      \"title\": \"公开场合偏爱选择\",\n      \"priority\": 82,\n      \"cooldown_days\": 2,\n      \"triggers\": {\n        \"day_min\": 2\n      },\n      \"options\": [\n        {\n          \"id\": \"support\",\n          \"attitude\": \"支持\",\n          \"effects\": {\n            \"dorm_mood_delta\": 1\n          }\n        },\n        {\n          \"id\": \"neutral\",\n          \"attitude\": \"中立\",\n          \"effects\": {\n            \"dorm_mood_delta\": 0\n          }\n        },\n        {\n          \"id\": \"avoid\",\n          \"attitude\": \"回避\",\n          \"effects\": {\n            \"dorm_mood_delta\": -1\n          }\n        }\n      ],\n      \"meta\": {\n        \"kind\": \"key\"\n      }\n    },\n    {\n      \"id\": \"key_confession_night\",\n      \"type\": \"key\",\n      \"title\": \"深夜告白与回应\",\n      \"priority\": 88,\n      \"cooldown_days\": 2,\n      \"triggers\": {\n        \"day_min\": 3\n      },\n      \"options\": [\n        {\n          \"id\": \"accept\",\n          \"attitude\": \"支持\",\n          \"effects\": {\n            \"dorm_mood_delta\": 2\n          }\n        },\n        {\n          \"id\": \"hold\",\n          \"attitude\": \"中立\",\n          \"effects\": {\n            \"dorm_mood_delta\": 0\n          }\n        },\n        {\n          \"id\": \"reject\",\n          \"attitude\": \"对抗\",\n          \"effects\": {\n            \"dorm_mood_delta\": -2\n          }\n        }\n      ],\n      \"meta\": {\n        \"kind\": \"conflict\"\n      }\n    }\n  ]\n}",
+      "timeline.json": "{\n  \"1\": [\"开局\", \"固定\", \"通用\", \"角色专属\", \"关键\"],\n  \"2\": [\"固定\", \"通用\", \"条件\", \"角色专属\", \"关键\"],\n  \"3\": [\"通用\", \"角色专属\", \"条件\", \"关键\"],\n  \"4\": [\"固定\", \"通用\", \"关键\"]\n}\n",
+      "01_固定剧情.csv": "Event_ID,事件标题,所属章节,事件类型,触发条件,专属角色,是否Boss,场景与冲突描述,潜在冲突点,玩家交互,结果,最短回合,最长回合,推进节点,收束条件,叙事标签,状态钩子,关系钩子,开场目标,施压目标,转折目标,收束目标,兜底后果,权重,冷却回合,允许重复,预设剧本\nFIX_GL_01,雨夜同伞争夺,1,固定池,,,FALSE,晚课后突降大雨，只剩一把伞。两位角色都下意识朝你靠近，谁和你同伞立刻变得微妙。,偏爱感|公开站位,A:明确邀请其中一人同伞|B:三人硬挤同伞|C:把伞让人自己淋雨,A:关系迅速分化|B:尴尬升温但维持体面|C:你形象受损或被心疼,3,6,雨夜相遇|站位抉择|余波扩散,回寝后关系重新洗牌,偏爱|公开选择|修罗场,,,建立“选择即信号”,迫使玩家承担偏爱后果,让旁观角色产生情绪反应,形成一条明确升温线与一条暗中不满线,若玩家迟疑则对方直接挽住手臂,1.0,1,TRUE,陈雨婷:伞这么小，你选一个吧。|苏浅低声:我……其实也可以一起走。|你握着伞柄，心跳有点快。\nFIX_GL_02,朋友圈文案误会,2,固定池,,,FALSE,有人发了“今晚和最特别的人在一起”配图，评论区开始猜对象，寝室里暗流涌动。,信息不对称|误会扩散,A:主动澄清对象|B:故意模糊回应|C:沉默观察,A:短期止损|B:暧昧升温但吃醋加剧|C:误会持续发酵,3,6,动态发出|私下追问|当面对质或和解,误会被利用或化解,误会|吃醋|关系博弈,,,把线上信号拉回线下冲突,制造多角色情绪碰撞,逼玩家选择坦白或经营暧昧,形成公开关系风向,如果无人挑明则林飒直接问你“说的是谁”,1.0,1,TRUE,赵鑫:这条文案写得挺敢啊。|唐梦琪:评论都在问，是谁呀？|你手机屏幕还亮着。\n",
+      "event_skeleton_rules.json": "{\n  \"key_min_options\": 3,\n  \"warn_on_empty_title\": true,\n  \"warn_on_legacy_flags\": true,\n  \"warn_on_migration_notes\": true,\n  \"require_reviewed_for_pass\": false,\n  \"allowed_types\": [\n    \"daily\",\n    \"key\"\n  ]\n}\n",
+      "00_开局剧情.csv": "Event_ID,事件标题,所属章节,事件类型,触发条件,专属角色,是否Boss,场景与冲突描述,潜在冲突点,玩家交互,结果,最短回合,最长回合,推进节点,收束条件,叙事标签,状态钩子,关系钩子,开场目标,施压目标,转折目标,收束目标,兜底后果,权重,冷却回合,允许重复,预设剧本\nOPEN_GL_01,新寝破冰局,1,开局剧情池,,,FALSE,新生夜，寝室自发玩“二选一真心话”。话题很快从兴趣爱好滑向“更想和谁单独出去”。,暧昧试探|公开尴尬,A:顺势开玩笑回应|B:认真表达偏好|C:回避并转移话题,A:气氛轻松但留悬念|B:关系快速升温或降温|C:短期安全但错过窗口,3,6,破冰开场|试探升级|全寝观察反应,形成第一轮关系张力,破冰|试探|暧昧起点,,,快速建立“全员可互相吸引”的氛围,推动玩家对关系态度表态,形成第一组潜在CP与对立面,留下后续吃醋与拉扯的种子,如果无人接话则由唐梦琪点名玩家,1.0,0,FALSE,唐梦琪:真心话！你最想和谁一起去夜市？|林飒:别怂，选一个。|空气一下安静下来，大家都看向你。\n",
+      "event_skeletons.json": "{\n  \"events\": [\n    {\n      \"id\": \"daily_corridor_encounter\",\n      \"type\": \"daily\",\n      \"title\": \"走廊偶遇试探\",\n      \"priority\": 64,\n      \"cooldown_days\": 1,\n      \"triggers\": {\n        \"day_min\": 1\n      },\n      \"meta\": {\n        \"kind\": \"daily\",\n        \"public_line\": \"晚课后走廊相遇，话题从日常拐向暧昧。\"\n      }\n    },\n    {\n      \"id\": \"daily_group_rehearsal\",\n      \"type\": \"daily\",\n      \"title\": \"排练搭档微妙站位\",\n      \"priority\": 68,\n      \"cooldown_days\": 1,\n      \"triggers\": {\n        \"day_min\": 1\n      },\n      \"meta\": {\n        \"kind\": \"daily\",\n        \"public_line\": \"分组排练时，谁和谁搭档引发微妙情绪。\"\n      }\n    },\n    {\n      \"id\": \"key_public_choice\",\n      \"type\": \"key\",\n      \"title\": \"公开场合偏爱选择\",\n      \"priority\": 82,\n      \"cooldown_days\": 2,\n      \"triggers\": {\n        \"day_min\": 2\n      },\n      \"options\": [\n        {\n          \"id\": \"support\",\n          \"attitude\": \"支持\",\n          \"effects\": {\n            \"dorm_mood_delta\": 1\n          }\n        },\n        {\n          \"id\": \"neutral\",\n          \"attitude\": \"中立\",\n          \"effects\": {\n            \"dorm_mood_delta\": 0\n          }\n        },\n        {\n          \"id\": \"avoid\",\n          \"attitude\": \"回避\",\n          \"effects\": {\n            \"dorm_mood_delta\": -1\n          }\n        }\n      ],\n      \"meta\": {\n        \"kind\": \"key\"\n      }\n    },\n    {\n      \"id\": \"key_confession_night\",\n      \"type\": \"key\",\n      \"title\": \"深夜告白与回应\",\n      \"priority\": 88,\n      \"cooldown_days\": 2,\n      \"triggers\": {\n        \"day_min\": 3\n      },\n      \"options\": [\n        {\n          \"id\": \"accept\",\n          \"attitude\": \"支持\",\n          \"effects\": {\n            \"dorm_mood_delta\": 2\n          }\n        },\n        {\n          \"id\": \"hold\",\n          \"attitude\": \"中立\",\n          \"effects\": {\n            \"dorm_mood_delta\": 0\n          }\n        },\n        {\n          \"id\": \"reject\",\n          \"attitude\": \"对抗\",\n          \"effects\": {\n            \"dorm_mood_delta\": -2\n          }\n        }\n      ],\n      \"meta\": {\n        \"kind\": \"conflict\"\n      }\n    }\n  ]\n}"
+    }
+  },
+  "manifest": {
+    "schema_version": 1,
+    "mod_id": "official_romance_dorm_v1",
+    "name": "案例·全是姛",
+    "author": "moku",
+    "source": "workshop",
+    "base_version": "default-v1",
+    "created_at": "2026-03-23T15:43:17",
+    "entry": {
+      "player_id": "player_anran"
+    },
+    "files": [
+      {
+        "path": "prompts/world/academic_npcs.md",
+        "kind": "md",
+        "size": 2046,
+        "sha256": "1e2bacab2ed93fa46bbc0423c22aa34e871caececd43fd4aaa2280cf985b9b41"
+      },
+      {
+        "path": "prompts/world/base_setting.md",
+        "kind": "md",
+        "size": 364,
+        "sha256": "40d8e09beeadd7e5a53a9a4cc91aa555aabd220613267a64b69e6445947f45bd"
+      },
+      {
+        "path": "prompts/world/city_setting.md",
+        "kind": "md",
+        "size": 279,
+        "sha256": "b854da39a4190fe5e3b6df7a2f690b6829fea8d106e43641753c99c09d162785"
+      },
+      {
+        "path": "prompts/world/major_setting.md",
+        "kind": "md",
+        "size": 199,
+        "sha256": "a08d189af8bb5e5cefe0d9b9fa227c55483a528c6840b0ad0357deda8a026b6b"
+      },
+      {
+        "path": "prompts/system/expression_system_prompt.md",
+        "kind": "md",
+        "size": 556,
+        "sha256": "57343f582a0794d2b1c2c9d0ecf23901864e50afc08b209c1b76bffbf357acbd"
+      },
+      {
+        "path": "prompts/system/expression_user_prompt.md",
+        "kind": "md",
+        "size": 314,
+        "sha256": "37c863fc679a76a5391175015931baaf4d50f068f2a55d12d3ceb2af4be4cc5f"
+      },
+      {
+        "path": "prompts/system/expression_json_contract.md",
+        "kind": "md",
+        "size": 734,
+        "sha256": "f430bb2cc6bee09c32953df5a283551f81a7bb5949211cf102128b1f01553880"
+      },
+      {
+        "path": "prompts/skills/wechat_monitor.md",
+        "kind": "md",
+        "size": 147,
+        "sha256": "025a3ab840f240c0b04c2aa02caab0bb68f1a6fcf32a72c012dc94dd43abf62d"
+      },
+      {
+        "path": "prompts/skills/slang_chapter_4.md",
+        "kind": "md",
+        "size": 930,
+        "sha256": "e3629d01432aa069c525d94086c24060fbbf6b2737726f2ab37759a252bd828d"
+      },
+      {
+        "path": "prompts/skills/slang_chapter_1.md",
+        "kind": "md",
+        "size": 875,
+        "sha256": "3eb9ac7f5f84c55e855a5b173723a6a0395ba114ac4c8e3f02b9caec8d97d3bf"
+      },
+      {
+        "path": "prompts/skills/slang_chapter_2.md",
+        "kind": "md",
+        "size": 915,
+        "sha256": "9aaa81e63ad4bd5f5f9fa1db8b1ca326c05491c9d131e862c5cea201719a3d1e"
+      },
+      {
+        "path": "prompts/skills/slang_chapter_3.md",
+        "kind": "md",
+        "size": 1016,
+        "sha256": "7bf4fc2f64b883b2a519a8325eaf326f78683fd06991520ca8431cf3801abeee"
+      },
+      {
+        "path": "prompts/characters/tang_mengqi.md",
+        "kind": "md",
+        "size": 125,
+        "sha256": "1c0077ddd464af8c9de1982f9b839ac4a5d7bcf5996f879e12df469a40c19ea4"
+      },
+      {
+        "path": "prompts/characters/li_yinuo.md",
+        "kind": "md",
+        "size": 104,
+        "sha256": "9c2cab9d658eb559476afb5cb160b31e453466cb0b9eb49602a285572a29499e"
+      },
+      {
+        "path": "prompts/characters/roster.json",
+        "kind": "md",
+        "size": 2963,
+        "sha256": "a25f3a6e32759c4cdb529aca99cab33865c1e5d90eb9e515147a03cb9f2a6617"
+      },
+      {
+        "path": "prompts/characters/player_anran.md",
+        "kind": "md",
+        "size": 524,
+        "sha256": "832f75bfb289ef2c564dc430a9723f29664c0ccecbebd864df7d69d7608cafaf"
+      },
+      {
+        "path": "prompts/characters/lin_sa.md",
+        "kind": "md",
+        "size": 104,
+        "sha256": "41dea637003ea7787d35aa0af7642d6d2f41b77ad47513fb64c12b7ef59d7146"
+      },
+      {
+        "path": "prompts/characters/chen_yuting.md",
+        "kind": "md",
+        "size": 122,
+        "sha256": "0112064990c464548bc03973dd723e95915468a2880ce5338cfdfff5274db440"
+      },
+      {
+        "path": "prompts/characters/su_qian.md",
+        "kind": "md",
+        "size": 119,
+        "sha256": "e6cde3f4c878d0fa2d78709814c3cf75f3ea4c9c0d4f009b2ddd78fa0bb0ee0f"
+      },
+      {
+        "path": "prompts/characters/zhao_xin.md",
+        "kind": "md",
+        "size": 116,
+        "sha256": "f5a52246b93cb823c4a90ff511d3ec85861f96152500092f18181bb12fb964a3"
+      },
+      {
+        "path": "prompts/system/mod_features.json",
+        "kind": "md",
+        "size": 67,
+        "sha256": "6642bb90643e59da042c2af9030fec3edea35976f22870e72f320f4048091a86"
+      },
+      {
+        "path": "prompts/world/scenes.json",
+        "kind": "md",
+        "size": 538,
+        "sha256": "1057e6938c087bedb9937f1ea2c44b1963082adf5e004858f184515e1c52fcc9"
+      },
+      {
+        "path": "events/02_通用随机池.csv",
+        "kind": "csv",
+        "size": 3013,
+        "sha256": "8ab8d778e52ac4c9d07a32c5ab0518970c3d75a8e718a144ad6064d5837e3fa1"
+      },
+      {
+        "path": "events/03_角色专属.csv",
+        "kind": "csv",
+        "size": 2720,
+        "sha256": "49ec6f95a1a82dc4ddfa5e66bb195bb42fb692bbd4a9333b5a9c48573bb6959f"
+      },
+      {
+        "path": "events/04_条件触发.csv",
+        "kind": "csv",
+        "size": 1706,
+        "sha256": "f009ee087eb48ff5bd67ba89c42688f4bc8b24bf0b09cdda6ae246f56b6d1453"
+      },
+      {
+        "path": "events/event_skeletons.generated.json",
+        "kind": "csv",
+        "size": 2153,
+        "sha256": "234e2233aab7d43b108b8b28956d553db4e6b81510a5e8acafa38e16cbdbd13a"
+      },
+      {
+        "path": "events/timeline.json",
+        "kind": "csv",
+        "size": 227,
+        "sha256": "ec3dbeeb201358dba3701d4fd5acc27ee7ab2312264ad561512af18b3dccd2f6"
+      },
+      {
+        "path": "events/01_固定剧情.csv",
+        "kind": "csv",
+        "size": 1852,
+        "sha256": "618c6b5ecf046f48830b8b51ab19fb1f57c506e682ed969aec5d2f2b110a1026"
+      },
+      {
+        "path": "events/event_skeleton_rules.json",
+        "kind": "csv",
+        "size": 212,
+        "sha256": "5bcf7837696e2e36f3be1d762aa0e8104cd067055cf76d75df107402ac9e9195"
+      },
+      {
+        "path": "events/00_开局剧情.csv",
+        "kind": "csv",
+        "size": 1155,
+        "sha256": "cbae305cfe4ab4780690ad9d23eb59422462d4452d26942825837df2d77199a9"
+      },
+      {
+        "path": "events/event_skeletons.json",
+        "kind": "csv",
+        "size": 2153,
+        "sha256": "234e2233aab7d43b108b8b28956d553db4e6b81510a5e8acafa38e16cbdbd13a"
+      }
+    ]
+  },
+  "downloads": 5,
+  "timestamp": "2026-03-22 13:56:31",
+  "updated_at": "2026-03-22 21:06:17",
+  "published_at": "2026-03-22 13:56:31",
+  "owner_user_id": "system_official",
+  "linked_library_id": "",
+  "version": 1,
+  "visibility": "public",
+  "source_type": "original",
+  "source_mod_id": "",
+  "parent_workshop_id": "",
+  "summary": {
+    "md_files": 22,
+    "csv_files": 9,
+    "character_count": 7,
+    "skill_count": 5,
+    "world_count": 5
+  },
+  "enabled_skills": []
+}

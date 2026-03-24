@@ -34,11 +34,40 @@ export interface SystemSettings {
 
 export const settingsApi = {
     getSettings: async (): Promise<SystemSettings> => {
-        const response = await apiClient.get(`/settings`);
-        return response.data.data;
+        const candidates = [
+            `${API_BASE}/system/settings`,
+            `/api/system/settings`,
+            `${window.location.origin}/api/system/settings`,
+        ];
+        let lastError: any = null;
+        for (const url of candidates) {
+            try {
+                const response = await apiClient.get(url);
+                if (response?.data?.status === 'success' && response?.data?.data) {
+                    return response.data.data;
+                }
+            } catch (e) {
+                lastError = e;
+            }
+        }
+        throw lastError || new Error('读取系统设置失败');
     },
 
     updateSettings: async (settings: Partial<SystemSettings>): Promise<void> => {
-        await apiClient.post(`/settings`, settings);
+        const candidates = [
+            `${API_BASE}/system/settings`,
+            `/api/system/settings`,
+            `${window.location.origin}/api/system/settings`,
+        ];
+        let lastError: any = null;
+        for (const url of candidates) {
+            try {
+                const res = await apiClient.post(url, settings);
+                if (res?.data?.status === 'success') return;
+            } catch (e) {
+                lastError = e;
+            }
+        }
+        throw lastError || new Error('保存系统设置失败');
     }
 };

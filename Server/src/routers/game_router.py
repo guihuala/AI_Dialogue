@@ -375,21 +375,63 @@ def build_game_router(
     ):
         """获取所有可用角色（室友候选人）"""
         roster = _load_roster_for_mod(user_id, mod_id)
+        if not isinstance(roster, dict) or not roster:
+            roster = get_current_roster(user_id)
         candidates = []
         for cid, info in roster.items():
-            if info.get("is_player"):
+            item = info if isinstance(info, dict) else {}
+            if bool(item.get("is_player", False)):
                 continue
+
+            name = str(
+                item.get("name")
+                or item.get("Name")
+                or item.get("display_name")
+                or item.get("角色名")
+                or cid
+            ).strip() or str(cid)
+
+            raw_tags = item.get("tags", [])
+            if isinstance(raw_tags, str):
+                tags = [x.strip() for x in raw_tags.split(",") if x.strip()]
+            elif isinstance(raw_tags, list):
+                tags = [str(x).strip() for x in raw_tags if str(x).strip()]
+            else:
+                tags = []
+
+            archetype = str(item.get("archetype") or item.get("Archetype") or item.get("role") or "").strip()
+            description = str(item.get("description") or item.get("desc") or "").strip()
+            avatar = str(item.get("avatar") or item.get("image") or item.get("portrait") or "").strip()
 
             candidates.append(
                 {
                     "id": cid,
-                    "name": info.get("name"),
-                    "archetype": info.get("archetype"),
-                    "tags": info.get("tags", []),
-                    "description": info.get("description"),
+                    "name": name,
+                    "archetype": archetype,
+                    "tags": tags,
+                    "description": description,
+                    "avatar": avatar,
                     "is_player": False,
                 }
             )
+        if not candidates:
+            # 兜底：回退默认 roster，避免前端选人界面空白。
+            fallback = get_current_roster(user_id)
+            for cid, info in fallback.items():
+                item = info if isinstance(info, dict) else {}
+                if bool(item.get("is_player", False)):
+                    continue
+                candidates.append(
+                    {
+                        "id": cid,
+                        "name": str(item.get("name") or cid),
+                        "archetype": str(item.get("archetype") or ""),
+                        "tags": item.get("tags", []) if isinstance(item.get("tags", []), list) else [],
+                        "description": str(item.get("description") or ""),
+                        "avatar": str(item.get("avatar") or ""),
+                        "is_player": False,
+                    }
+                )
         return {"status": "success", "data": candidates}
 
     @router.post("/api/game/start")
