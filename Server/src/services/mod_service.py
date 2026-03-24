@@ -27,6 +27,28 @@ def extract_enabled_skills(content: Dict[str, Any]) -> list[str]:
     return []
 
 
+def extract_recommended_skills(content: Dict[str, Any]) -> list[str]:
+    md_files = content.get("md", {}) if isinstance(content, dict) else {}
+    raw = md_files.get("system/mod_features.json", "")
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+        data = parsed if isinstance(parsed, dict) else {}
+        arr = data.get("recommended_skills")
+        if isinstance(arr, list):
+            out = [str(item).strip() for item in arr if str(item).strip()]
+            if out:
+                return out
+        # 兼容：若未配置 recommended_skills，则回退旧字段
+        arr2 = data.get("enabled_skills")
+        if isinstance(arr2, list):
+            return [str(item).strip() for item in arr2 if str(item).strip()]
+    except Exception:
+        return []
+    return []
+
+
 def package_mod(user_id: str):
     """将用户当前 active 目录打包为 Content 字典"""
     prompts_dir = get_user_prompts_dir(user_id)
@@ -104,6 +126,7 @@ def normalize_library_record(record: Dict[str, Any], user_id: str) -> Dict[str, 
     data["timestamp"] = str(data.get("timestamp", data["updated_at"]) or data["updated_at"])
     data["summary"] = summarize_content(content)
     data["enabled_skills"] = extract_enabled_skills(content)
+    data["recommended_skills"] = extract_recommended_skills(content)
     return data
 
 
@@ -119,6 +142,7 @@ def normalize_workshop_record(record: Dict[str, Any]) -> Dict[str, Any]:
     data["updated_at"] = str(data.get("updated_at", data.get("published_at", now_str())) or now_str())
     data["summary"] = summarize_content(content)
     data["enabled_skills"] = extract_enabled_skills(content)
+    data["recommended_skills"] = extract_recommended_skills(content)
     return data
 
 
@@ -168,6 +192,7 @@ def build_library_record(
         "updated_at": current_time,
         "summary": summarize_content(content),
         "enabled_skills": extract_enabled_skills(content),
+        "recommended_skills": extract_recommended_skills(content),
     }
 
 
@@ -218,6 +243,7 @@ def build_workshop_record(
         "parent_workshop_id": parent_workshop_id or source_mod_id,
         "summary": summarize_content(content),
         "enabled_skills": extract_enabled_skills(content),
+        "recommended_skills": extract_recommended_skills(content),
     }
 
 
@@ -272,6 +298,7 @@ def build_library_list_item(record: Dict[str, Any], upstream_record: Optional[Di
         "updated_at": record.get("updated_at", record.get("timestamp", "")),
         "summary": summary,
         "enabled_skills": record.get("enabled_skills", []),
+        "recommended_skills": record.get("recommended_skills", []),
         "focus_tags": derive_focus_tags(summary),
         "upstream_version": upstream_version,
         "has_update": has_update,
@@ -292,6 +319,7 @@ def build_workshop_list_item(record: Dict[str, Any], current_user_id: str) -> Di
         "published_at": record.get("published_at", ""),
         "summary": summary,
         "enabled_skills": record.get("enabled_skills", []),
+        "recommended_skills": record.get("recommended_skills", []),
         "focus_tags": derive_focus_tags(summary),
         "version": record.get("version", 1),
         "source_type": record.get("source_type", "original"),
@@ -323,6 +351,7 @@ def build_mod_index_entry(record: Dict[str, Any], scope: str) -> Dict[str, Any]:
             str(record.get("description", "") or ""),
             str(record.get("source_type", "") or ""),
             *[str(x or "") for x in (record.get("enabled_skills", []) if isinstance(record.get("enabled_skills"), list) else [])],
+            *[str(x or "") for x in (record.get("recommended_skills", []) if isinstance(record.get("recommended_skills"), list) else [])],
             *focus_tags,
         ],
     }

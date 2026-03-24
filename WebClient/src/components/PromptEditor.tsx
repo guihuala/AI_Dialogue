@@ -77,6 +77,11 @@ export const PromptEditor = ({
         phone_system_enabled: true,
         enabled_skills: ['slang_dict', 'academic_world', 'character_roster', 'relationship_matrix', 'secret_note', 'relationship_milestone', 'user_skills'],
     });
+    const [skillProfile, setSkillProfile] = useState<any>(null);
+    const [skillResolveSources, setSkillResolveSources] = useState<{ phoneSource?: string; skillSources?: Record<string, string> }>({});
+    const [isMigratingSkillProfile, setIsMigratingSkillProfile] = useState(false);
+    const [recommendedSkills, setRecommendedSkills] = useState<string[]>([]);
+    const [isSavingRecommendedSkills, setIsSavingRecommendedSkills] = useState(false);
     const [isSavingFeatures, setIsSavingFeatures] = useState(false);
     const [showSkillToolbar, setShowSkillToolbar] = useState(false);
 
@@ -166,7 +171,12 @@ export const PromptEditor = ({
                         setShowExplorer(false);
                     }
                 }
-                await loadModFeatures(filesRes.md || []);
+                if (adminPresetMode) {
+                    await loadModFeatures(filesRes.md || []);
+                } else {
+                    await resolveSkillFromProfile(undefined, stateRes?.data || null);
+                }
+                await loadRecommendedSkillsFromFile(filesRes.md || []);
             }
         } catch (e) {
             setMessage('无法获取文件列表');
@@ -174,6 +184,7 @@ export const PromptEditor = ({
     };
 
     const loadModFeatures = async (mdFiles?: string[]) => {
+        if (!adminPresetMode) return;
         const mdList = Array.isArray(mdFiles) ? mdFiles : files.md;
         const target = mdList.find((f: string) => f === 'system/mod_features.json') || 'system/mod_features.json';
         try {
@@ -200,11 +211,86 @@ export const PromptEditor = ({
         });
     };
 
+    const loadRecommendedSkillsFromFile = async (mdFiles?: string[]) => {
+        const mdList = Array.isArray(mdFiles) ? mdFiles : files.md;
+        const target = mdList.find((f: string) => f === 'system/mod_features.json') || 'system/mod_features.json';
+        try {
+            const res = await readFileContent('md', target);
+            if (res?.status === 'success' && res.content) {
+                const parsed = JSON.parse(res.content);
+                if (parsed && typeof parsed === 'object') {
+                    const recommended = Array.isArray(parsed.recommended_skills) && parsed.recommended_skills.length > 0
+                        ? parsed.recommended_skills
+                        : (Array.isArray(parsed.enabled_skills) ? parsed.enabled_skills : defaultEnabledSkills);
+                    setRecommendedSkills(
+                        recommended.filter((s: string) => SKILL_TOGGLE_OPTIONS.some((item) => item.key === s))
+                    );
+                    return;
+                }
+            }
+        } catch {
+            // ignore
+        }
+        setRecommendedSkills(defaultEnabledSkills);
+    };
+
+    const resolveSkillFromProfile = async (nextProfile?: any, stateHint?: any) => {
+        if (adminPresetMode) return;
+        try {
+            let profile = nextProfile;
+            if (!profile) {
+                const p = await gameApi.getSkillProfile();
+                profile = p?.data || {};
+            }
+            setSkillProfile(profile);
+            const modId = String(stateHint?.editor_mod_id || stateHint?.active_mod_id || userState?.editor_mod_id || userState?.active_mod_id || 'default');
+            const resolved = await gameApi.resolveSkillProfile(modId);
+            const data = resolved?.data || {};
+            setSkillResolveSources({
+                phoneSource: String(data?.phone_source || ''),
+                skillSources: (data?.skill_sources && typeof data.skill_sources === 'object') ? data.skill_sources : {},
+            });
+            setModFeatures((prev: any) => ({
+                ...(prev || {}),
+                phone_system_enabled: data?.phone_system_enabled !== false,
+                enabled_skills: Array.isArray(data?.enabled_skills) && data.enabled_skills.length > 0
+                    ? data.enabled_skills
+                    : defaultEnabledSkills,
+            }));
+        } catch {
+            setSkillResolveSources({});
+            setModFeatures({
+                phone_system_enabled: true,
+                enabled_skills: defaultEnabledSkills,
+            });
+        }
+    };
+
     const persistModFeatures = async (next: any, successMsg: string, failMsg: string) => {
         setModFeatures(next);
         setIsSavingFeatures(true);
         try {
-            await saveFileContent('md', 'system/mod_features.json', JSON.stringify(next, null, 2));
+            if (adminPresetMode) {
+                await saveFileContent('md', 'system/mod_features.json', JSON.stringify(next, null, 2));
+            } else {
+                const current = skillProfile && typeof skillProfile === 'object'
+                    ? { ...skillProfile }
+                    : { version: 1, global: {}, skills: {}, per_mod_overrides: {} };
+                current.global = typeof current.global === 'object' && current.global ? { ...current.global } : {};
+                current.skills = typeof current.skills === 'object' && current.skills ? { ...current.skills } : {};
+                current.per_mod_overrides = typeof current.per_mod_overrides === 'object' && current.per_mod_overrides ? { ...current.per_mod_overrides } : {};
+                current.global.phone_system_enabled = next.phone_system_enabled !== false;
+                const enabledSet = new Set(Array.isArray(next.enabled_skills) ? next.enabled_skills : []);
+                defaultEnabledSkills.forEach((key) => {
+                    current.skills[key] = {
+                        ...(current.skills[key] || {}),
+                        enabled: enabledSet.has(key),
+                        priority: Number(current.skills[key]?.priority || 100),
+                    };
+                });
+                const saved = await gameApi.saveSkillProfile(current);
+                setSkillProfile(saved?.data || current);
+            }
             setMessage(successMsg);
         } catch {
             setMessage(failMsg);
@@ -305,6 +391,12 @@ export const PromptEditor = ({
     useEffect(() => {
         fetchFiles();
     }, [adminPresetMode, adminPresetTarget, adminPresetModId]);
+
+    useEffect(() => {
+        if (adminPresetMode) return;
+        if (!userState) return;
+        resolveSkillFromProfile(undefined, userState);
+    }, [adminPresetMode, userState?.editor_mod_id, userState?.active_mod_id]);
 
     useEffect(() => {
         if (files.md.length > 0 && !stableRoster) {
@@ -473,6 +565,72 @@ export const PromptEditor = ({
             return;
         }
         await handleToggleSkill(skillKey);
+    };
+
+    const handleMigrateSkillProfile = async () => {
+        if (adminPresetMode) return;
+        if (!canEditCurrentMod) {
+            setMessage('默认模组为只读，请先另存到本地模组库后再编辑');
+            setTimeout(() => setMessage(''), 3000);
+            return;
+        }
+        setIsMigratingSkillProfile(true);
+        try {
+            const res = await readFileContent('md', 'system/mod_features.json');
+            const parsed = JSON.parse(String(res?.content || '{}'));
+            const enabledSkills = Array.isArray(parsed?.enabled_skills) ? parsed.enabled_skills : defaultEnabledSkills;
+            const nextProfile = skillProfile && typeof skillProfile === 'object'
+                ? { ...skillProfile }
+                : { version: 1, global: {}, skills: {}, per_mod_overrides: {} };
+            nextProfile.global = typeof nextProfile.global === 'object' && nextProfile.global ? { ...nextProfile.global } : {};
+            nextProfile.skills = typeof nextProfile.skills === 'object' && nextProfile.skills ? { ...nextProfile.skills } : {};
+            nextProfile.global.phone_system_enabled = parsed?.phone_system_enabled !== false;
+            const enabledSet = new Set(enabledSkills.map((x: any) => String(x || '')));
+            defaultEnabledSkills.forEach((key) => {
+                nextProfile.skills[key] = {
+                    ...(nextProfile.skills[key] || {}),
+                    enabled: enabledSet.has(key),
+                    priority: Number(nextProfile.skills[key]?.priority || 100),
+                };
+            });
+            const saved = await gameApi.saveSkillProfile(nextProfile);
+            await resolveSkillFromProfile(saved?.data || nextProfile, userState);
+            setMessage('已迁移旧版开关到 skill profile');
+        } catch {
+            setMessage('迁移失败：mod_features 读取或写入异常');
+        } finally {
+            setIsMigratingSkillProfile(false);
+            setTimeout(() => setMessage(''), 3000);
+        }
+    };
+
+    const handleToggleRecommendedSkill = (skillKey: string) => {
+        const current = Array.isArray(recommendedSkills) ? recommendedSkills : defaultEnabledSkills;
+        const has = current.includes(skillKey);
+        const next = has ? current.filter((x) => x !== skillKey) : [...current, skillKey];
+        setRecommendedSkills(next.filter((s: string) => SKILL_TOGGLE_OPTIONS.some((item) => item.key === s)));
+    };
+
+    const saveRecommendedSkillsToModFeatures = async () => {
+        if (!canEditCurrentMod) {
+            setMessage('默认模组为只读，请先另存到本地模组库后再编辑');
+            setTimeout(() => setMessage(''), 3000);
+            return;
+        }
+        setIsSavingRecommendedSkills(true);
+        try {
+            const res = await readFileContent('md', 'system/mod_features.json');
+            const parsed = JSON.parse(String(res?.content || '{}'));
+            const next = (parsed && typeof parsed === 'object') ? { ...parsed } : {};
+            next.recommended_skills = Array.isArray(recommendedSkills) ? recommendedSkills : [];
+            await saveFileContent('md', 'system/mod_features.json', JSON.stringify(next, null, 2));
+            setMessage('推荐技能已写入 mod_features');
+        } catch {
+            setMessage('推荐技能保存失败');
+        } finally {
+            setIsSavingRecommendedSkills(false);
+            setTimeout(() => setMessage(''), 2500);
+        }
     };
 
     const parsedScenes = useMemo(() => {
@@ -1320,7 +1478,66 @@ ${data.content}`;
                                                     <div className="mb-2 text-[10px] font-bold text-[var(--color-cyan-dark)]/70">
                                                         手机消息默认走 <span className="font-black">phone_enqueue_message</span>；<span className="font-black">effects.wechat</span> 仅兼容旧模组。
                                                     </div>
+                                                    {!adminPresetMode && (
+                                                        <div className="mb-2 text-[10px] font-bold text-slate-500">
+                                                            来源：手机(
+                                                            {String(skillResolveSources?.phoneSource || 'default')
+                                                                .replace('mod_features', 'mod')
+                                                                .replace('profile_global', 'profile')
+                                                                .replace('profile_mod', 'profile(mod)')}
+                                                            )
+                                                        </div>
+                                                    )}
+                                                    <div className="mb-2">
+                                                        <div className="text-[10px] font-bold text-[var(--color-cyan-dark)]/70 mb-1">
+                                                            模组市场推荐技能（用于展示，不影响运行时开关）
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide whitespace-nowrap mb-1.5">
+                                                            {SKILL_TOGGLE_OPTIONS.map((item) => {
+                                                                const selected = (Array.isArray(recommendedSkills) ? recommendedSkills : defaultEnabledSkills).includes(item.key);
+                                                                return (
+                                                                    <button
+                                                                        key={`rec-${item.key}`}
+                                                                        type="button"
+                                                                        onClick={() => handleToggleRecommendedSkill(item.key)}
+                                                                        disabled={isSavingRecommendedSkills}
+                                                                        className={`px-2.5 py-1 rounded-md text-[10px] font-black transition-all shrink-0 ${
+                                                                            selected
+                                                                                ? 'bg-indigo-100 text-indigo-700 border border-indigo-300'
+                                                                                : 'bg-white text-slate-500 border border-[var(--color-cyan-main)]/12'
+                                                                        } ${isSavingRecommendedSkills ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white'}`}
+                                                                    >
+                                                                        {item.label
+                                                                            .replace('阶段语气包', '语气')
+                                                                            .replace('世界观补充', '世界')
+                                                                            .replace('角色速览', '角色')
+                                                                            .replace('关系矩阵', '关系')
+                                                                            .replace('秘密纸条', '纸条')
+                                                                            .replace('关系里程碑', '里程碑')
+                                                                            .replace('自定义技能', '自定义')} {selected ? '✓' : ''}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                        <button
+                                                            onClick={saveRecommendedSkillsToModFeatures}
+                                                            disabled={isSavingRecommendedSkills}
+                                                            className="px-2.5 py-1 rounded-md text-[10px] font-black transition-all shrink-0 bg-indigo-50 text-indigo-700 border border-indigo-200 disabled:opacity-60"
+                                                        >
+                                                            {isSavingRecommendedSkills ? '保存推荐中…' : '保存推荐技能'}
+                                                        </button>
+                                                    </div>
                                                     <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide whitespace-nowrap">
+                                                        {!adminPresetMode && (
+                                                            <button
+                                                                onClick={handleMigrateSkillProfile}
+                                                                disabled={isMigratingSkillProfile || isSavingFeatures}
+                                                                className="px-2.5 py-1 rounded-md text-[10px] font-black transition-all shrink-0 bg-indigo-50 text-indigo-700 border border-indigo-200 disabled:opacity-60"
+                                                                title="将旧版 system/mod_features.json 开关迁移到 skill profile"
+                                                            >
+                                                                {isMigratingSkillProfile ? '迁移中…' : '迁移旧开关'}
+                                                            </button>
+                                                        )}
                                                         <button
                                                             onClick={() => handleTogglePhoneSystem(!(modFeatures?.phone_system_enabled !== false))}
                                                             disabled={isSavingFeatures}
@@ -1334,6 +1551,11 @@ ${data.content}`;
                                                         </button>
                                                         {SKILL_TOGGLE_OPTIONS.map((item) => {
                                                             const enabled = (Array.isArray(modFeatures?.enabled_skills) ? modFeatures.enabled_skills : defaultEnabledSkills).includes(item.key);
+                                                            const sourceMap = (skillResolveSources?.skillSources || {}) as Record<string, string>;
+                                                            const sourceText = String(sourceMap[item.key] || 'default')
+                                                                .replace('mod_features', 'mod')
+                                                                .replace('profile_global', 'profile')
+                                                                .replace('profile_mod', 'profile(mod)');
                                                             return (
                                                                 <button
                                                                     key={item.key}
@@ -1354,7 +1576,7 @@ ${data.content}`;
                                                                         .replace('关系矩阵', '关系')
                                                                         .replace('秘密纸条', '纸条')
                                                                         .replace('关系里程碑', '里程碑')
-                                                                        .replace('自定义技能', '自定义')} {enabled ? 'ON' : 'OFF'}
+                                                                        .replace('自定义技能', '自定义')} {enabled ? 'ON' : 'OFF'} · {sourceText}
                                                                 </button>
                                                             );
                                                         })}

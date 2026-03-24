@@ -399,6 +399,11 @@ def build_content_router(
         pm = getattr(engine, "pm", None) if engine else None
         profile = _read_skill_profile(user_id)
         mod_id = str(req.mod_id or "").strip()
+        global_cfg = profile.get("global", {}) if isinstance(profile.get("global", {}), dict) else {}
+        profile_skills = profile.get("skills", {}) if isinstance(profile.get("skills", {}), dict) else {}
+        per_mod = profile.get("per_mod_overrides", {}) if isinstance(profile.get("per_mod_overrides", {}), dict) else {}
+        mod_override = per_mod.get(mod_id, {}) if isinstance(per_mod.get(mod_id, {}), dict) else {}
+        mod_override_skills = mod_override.get("skills", {}) if isinstance(mod_override.get("skills", {}), dict) else {}
         if not pm:
             return {
                 "status": "success",
@@ -407,12 +412,33 @@ def build_content_router(
                     "phone_system_enabled": bool(profile.get("global", {}).get("phone_system_enabled", True)),
                     "enabled_skills": [],
                     "all_skills": [],
+                    "phone_source": "profile_global" if "phone_system_enabled" in global_cfg else "default",
+                    "skill_sources": {},
                     "profile": profile,
                 },
             }
         all_skills = sorted(list(getattr(pm, "skills", {}).keys())) if hasattr(pm, "skills") else []
         enabled_skills = pm.get_enabled_skills({"mod_id": mod_id}) if hasattr(pm, "get_enabled_skills") else []
         phone_enabled = pm.is_phone_system_enabled({"mod_id": mod_id}) if hasattr(pm, "is_phone_system_enabled") else True
+        features = pm.get_mod_features() if hasattr(pm, "get_mod_features") else {}
+        feature_enabled = features.get("enabled_skills", []) if isinstance(features.get("enabled_skills", []), list) else []
+        skill_sources: Dict[str, str] = {}
+        for sid in all_skills:
+            source = "default"
+            if sid in feature_enabled:
+                source = "mod_features"
+            if sid in profile_skills:
+                source = "profile_global"
+            if sid in mod_override_skills:
+                source = "profile_mod"
+            skill_sources[sid] = source
+        phone_source = "default"
+        if "phone_system_enabled" in features:
+            phone_source = "mod_features"
+        if "phone_system_enabled" in global_cfg:
+            phone_source = "profile_global"
+        if "phone_system_enabled" in mod_override:
+            phone_source = "profile_mod"
         return {
             "status": "success",
             "data": {
@@ -420,6 +446,8 @@ def build_content_router(
                 "phone_system_enabled": bool(phone_enabled),
                 "enabled_skills": enabled_skills,
                 "all_skills": all_skills,
+                "phone_source": phone_source,
+                "skill_sources": skill_sources,
                 "profile": profile,
             },
         }
