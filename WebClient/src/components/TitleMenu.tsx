@@ -1,5 +1,4 @@
 import { Settings, Cloud, BookOpen, Bell } from 'lucide-react';
-import { useState, useEffect } from 'react';
 
 interface TitleMenuProps {
     onStart: () => void;
@@ -10,15 +9,6 @@ interface TitleMenuProps {
 }
 
 export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnouncement }: TitleMenuProps) => {
-    const [currentTime, setCurrentTime] = useState(new Date());
-
-    useEffect(() => {
-        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-        return () => {
-            clearInterval(timer);
-        };
-    }, []);
-
     return (
         <div className="flex-1 flex flex-col items-center justify-center relative min-h-[500px] h-full w-full animate-fade-in group overflow-hidden rounded-[2.5rem] bg-[var(--color-cyan-light)]/30 border-2 border-[var(--color-cyan-main)]/20 shadow-[0_20px_50px_rgba(0,188,212,0.1)]">
 

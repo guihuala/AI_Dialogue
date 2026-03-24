@@ -27,8 +27,7 @@ class NPCAgent:
 {{
     "dialogue": "（你的台词。如果没有说话留空）",
     "mood": "（你当前的情绪，例如：愤怒/鄙夷/平静）",
-    "action": "（你的暗场动作，例如：翻白眼/叹气/摔门/在一旁冷笑 等）",
-    "wechat_message": "（如果在这种情况下你想在微信里说话，写下内容，否则留空）"
+    "action": "（你的暗场动作，例如：翻白眼/叹气/摔门/在一旁冷笑 等）"
 }}"""
 
         user_prompt = f"【当前发生的事件】:\n{event_context}\n\n【玩家的行动】:\n{player_action}\n\n请给出你的独立反应："
@@ -46,7 +45,7 @@ class NPCAgent:
             res_text = res_text.replace('“', '"').replace('”', '"')
             return json.loads(res_text)
         except:
-            return {"dialogue": "", "mood": "沉默", "action": "（没有明显反应）", "wechat_message": ""}
+            return {"dialogue": "", "mood": "沉默", "action": "（没有明显反应）"}
 
     async def async_react(self, event_context: str, player_action: str) -> dict:
         """异步并发版本的 NPC 反应"""
@@ -65,8 +64,7 @@ class NPCAgent:
 {{
     "dialogue": "（你的台词。如果没有说话留空）",
     "mood": "（你当前的情绪，例如：愤怒/鄙夷/平静）",
-    "action": "（你的暗场动作，例如：翻白眼/叹气/摔门/在一旁冷笑 等）",
-    "wechat_message": "（如果在这种情况下你想在微信里说话，写下内容，否则留空）"
+    "action": "（你的暗场动作，例如：翻白眼/叹气/摔门/在一旁冷笑 等）"
 }}"""
 
         user_prompt = f"【当前发生的事件】:\n{event_context}\n\n【玩家的行动】:\n{player_action}\n\n请给出你的独立反应："

@@ -16,10 +16,10 @@ export const WellnessApp = ({ san }: WellnessAppProps) => {
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 animate-in slide-in-from-right duration-500 overflow-hidden">
-      <div className="bg-white px-8 py-10 border-b border-slate-100 shrink-0">
+      <div className="bg-gradient-to-r from-cyan-50 to-indigo-50 px-8 py-10 border-b border-cyan-100 shrink-0">
         <div className="flex items-center justify-between mb-8">
-           <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-500"><Brain size={24}/></div>
-           <Activity size={20} className="text-indigo-200 animate-pulse" />
+           <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-indigo-500 border border-indigo-100"><Brain size={24}/></div>
+           <Activity size={20} className="text-cyan-400 animate-pulse" />
         </div>
         
         <div className="flex flex-col items-center">
@@ -28,7 +28,7 @@ export const WellnessApp = ({ san }: WellnessAppProps) => {
                     <circle cx="88" cy="88" r="80" className="stroke-slate-100 fill-none" strokeWidth="8" />
                     <circle 
                         cx="88" cy="88" r="80" 
-                        className="stroke-indigo-500 fill-none transition-all duration-1000 ease-out" 
+                        className="stroke-cyan-500 fill-none transition-all duration-1000 ease-out" 
                         strokeWidth="8" 
                         strokeDasharray={2 * Math.PI * 80} 
                         strokeDashoffset={2 * Math.PI * 80 * (1 - san / 100)} 
@@ -40,14 +40,14 @@ export const WellnessApp = ({ san }: WellnessAppProps) => {
                     <span className="text-[10px] font-black tracking-[0.2em] text-slate-400 uppercase mt-[-4px]">SANITY</span>
                 </div>
             </div>
-            <div className="text-[10px] font-black text-slate-400 border border-slate-200 px-4 py-1.5 rounded-full uppercase tracking-widest flex items-center gap-2 bg-white">
-                <ShieldCheck size={14} className="text-indigo-500" /> Mental Status OK
+            <div className="text-[10px] font-black text-slate-500 border border-cyan-100 px-4 py-1.5 rounded-full uppercase tracking-widest flex items-center gap-2 bg-white">
+                <ShieldCheck size={14} className="text-cyan-500" /> Mental Status OK
             </div>
         </div>
       </div>
       
       <div className="flex-1 p-6 overflow-y-auto custom-scrollbar pb-32">
-        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm mb-6 overflow-hidden relative">
+        <div className="bg-white p-6 rounded-[2rem] border border-cyan-100/70 shadow-sm mb-6 overflow-hidden relative">
           <h5 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mb-8 flex justify-center">Cognitive Analysis</h5>
           <div className="h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -58,8 +58,8 @@ export const WellnessApp = ({ san }: WellnessAppProps) => {
                 <Radar 
                     name="Status" 
                     dataKey="A" 
-                    stroke="#6366f1" 
-                    fill="#818cf8" 
+                    stroke="#06b6d4" 
+                    fill="#67e8f9" 
                     fillOpacity={0.3} 
                     animationDuration={1500} 
                 />
@@ -68,9 +68,9 @@ export const WellnessApp = ({ san }: WellnessAppProps) => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 flex items-center justify-between group cursor-pointer active:scale-95 transition-all shadow-sm">
+        <div className="bg-white p-6 rounded-[1.4rem] border border-cyan-100/70 flex items-center justify-between group cursor-pointer active:scale-95 transition-all shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-500"><RefreshCw size={24}/></div>
+            <div className="w-12 h-12 bg-cyan-50 rounded-2xl flex items-center justify-center text-cyan-500"><RefreshCw size={24}/></div>
             <div>
               <div className="text-sm font-bold text-slate-800">心理调节</div>
               <div className="text-[10px] font-medium text-slate-400 uppercase tracking-widest mt-0.5">Therapy Session</div>

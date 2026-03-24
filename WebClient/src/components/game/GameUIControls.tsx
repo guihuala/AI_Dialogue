@@ -1,10 +1,12 @@
-import { Smartphone, Save, ScrollText, House } from 'lucide-react';
+import { Smartphone, Save, ScrollText, House, Play, Pause } from 'lucide-react';
 
 interface GameUIControlsProps {
   onTogglePhone: () => void;
   onSaveGame: () => void;
   onShowHistory: () => void;
   onBackToMenu: () => void;
+  autoPlayDialogue?: boolean;
+  onToggleAutoPlayDialogue?: () => void;
   wechatNotificationCount: number;
   phoneSystemEnabled?: boolean;
 }
@@ -14,6 +16,8 @@ export const GameUIControls = ({
   onSaveGame,
   onShowHistory,
   onBackToMenu,
+  autoPlayDialogue = false,
+  onToggleAutoPlayDialogue,
   wechatNotificationCount,
   phoneSystemEnabled = true
 }: GameUIControlsProps) => {
@@ -50,6 +54,18 @@ export const GameUIControls = ({
         aria-label="回顾记录"
       >
         <ScrollText size={16} className="text-[var(--color-yellow-main)] drop-shadow-sm" />
+      </button>
+      <button
+        onClick={onToggleAutoPlayDialogue}
+        className="flex items-center justify-center w-10 h-10 text-[var(--color-cyan-dark)] hover:text-[var(--color-cyan-main)] transition-all"
+        title={autoPlayDialogue ? "关闭自动播放" : "开启自动播放"}
+        aria-label={autoPlayDialogue ? "关闭自动播放" : "开启自动播放"}
+      >
+        {autoPlayDialogue ? (
+          <Pause size={16} className="text-emerald-500" />
+        ) : (
+          <Play size={16} className="text-[var(--color-cyan-main)]" />
+        )}
       </button>
       <button
         onClick={onBackToMenu}

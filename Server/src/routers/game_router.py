@@ -3,6 +3,7 @@ from datetime import datetime
 import json
 import os
 import random
+import re
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -50,6 +51,32 @@ class SaveGameRequest(BaseModel):
     wechat_data_list: List[Dict[str, Any]] = []
     narrative_state: Optional[Dict[str, Any]] = None
     system_state: Optional[Dict[str, Any]] = None
+
+
+class AgentChooseRequest(BaseModel):
+    options: List[str]
+    game_state: Dict[str, Any] = {}
+    system_state: Dict[str, Any] = {}
+    history: List[Dict[str, Any]] = []
+
+
+class AgentReportRequest(BaseModel):
+    history: List[Dict[str, Any]] = []
+    final_state: Dict[str, Any] = {}
+
+
+class AgentCriticRequest(BaseModel):
+    report: Dict[str, Any] = {}
+    history: List[Dict[str, Any]] = []
+    final_state: Dict[str, Any] = {}
+
+
+class AgentRevisionProposeRequest(BaseModel):
+    target_mod_id: Optional[str] = None
+    report: Dict[str, Any] = {}
+    critic: Dict[str, Any] = {}
+    history: List[Dict[str, Any]] = []
+    final_state: Dict[str, Any] = {}
 
 
 def build_game_router(
@@ -105,6 +132,133 @@ def build_game_router(
 
     def _workshop_file_path(item_id: str) -> str:
         return os.path.join(workshop_dir, f"{item_id}.json")
+
+    def _revisions_root(user_id: str) -> str:
+        return os.path.join(os.path.dirname(get_user_library_dir(user_id)), "revisions")
+
+    def _revisions_queue_dir(user_id: str) -> str:
+        return os.path.join(_revisions_root(user_id), "queue")
+
+    def _revisions_runs_path(user_id: str) -> str:
+        return os.path.join(_revisions_root(user_id), "run_reports.jsonl")
+
+    def _can_edit_mod_for_revision(user_id: str, mod_id: str) -> tuple[bool, str]:
+        target = str(mod_id or "").strip() or "default"
+        if target == "default":
+            return False, "默认模组只读，请先另存到本地模组库后再迭代"
+        file_path = os.path.join(get_user_library_dir(user_id), f"{target}.json")
+        if not os.path.exists(file_path):
+            return False, "目标模组不存在或无权限"
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            owner = str(data.get("owner_user_id", "") or "").strip()
+            if owner and owner != str(user_id):
+                return False, "你无权修订该模组"
+        except Exception:
+            return False, "目标模组读取失败"
+        return True, ""
+
+    def _append_run_report(user_id: str, row: Dict[str, Any]) -> None:
+        path = _revisions_runs_path(user_id)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        line = json.dumps(row, ensure_ascii=False)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+    def _load_recent_run_reports(user_id: str, *, target_mod_id: str, limit: int = 8) -> List[Dict[str, Any]]:
+        path = _revisions_runs_path(user_id)
+        if not os.path.exists(path):
+            return []
+        rows: List[Dict[str, Any]] = []
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                lines = f.readlines()[-200:]
+            for ln in reversed(lines):
+                ln = str(ln or "").strip()
+                if not ln:
+                    continue
+                try:
+                    item = json.loads(ln)
+                except Exception:
+                    continue
+                if not isinstance(item, dict):
+                    continue
+                if str(item.get("target_mod_id", "") or "").strip() != str(target_mod_id or "").strip():
+                    continue
+                rows.append(item)
+                if len(rows) >= max(1, int(limit)):
+                    break
+        except Exception:
+            return []
+        return rows
+
+    def _normalize_text_for_fingerprint(text: str) -> str:
+        s = str(text or "").lower().strip()
+        s = re.sub(r"\s+", " ", s)
+        return s[:800]
+
+    def _proposal_fingerprint(item: Dict[str, Any]) -> str:
+        if not isinstance(item, dict):
+            return ""
+        files: List[str] = []
+        changes = item.get("changes", []) if isinstance(item.get("changes", []), list) else []
+        for ch in changes:
+            if not isinstance(ch, dict):
+                continue
+            f = str(ch.get("file", "") or "").strip()
+            if f:
+                files.append(f)
+        files = sorted(list(set(files)))[:10]
+        summary = _normalize_text_for_fingerprint(str(item.get("summary", "") or ""))
+        validator = item.get("validator", {}) if isinstance(item.get("validator", {}), dict) else {}
+        issues = validator.get("common_issues", []) if isinstance(validator.get("common_issues", []), list) else []
+        issues_text = "|".join(
+            sorted([_normalize_text_for_fingerprint(str(x or "")) for x in issues if str(x or "").strip()])[:6]
+        )
+        return f"{'|'.join(files)}##{summary}##{issues_text}"
+
+    def _load_recent_revisions_for_mod(user_id: str, *, target_mod_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        for bucket in ("queue", "applied", "rejected"):
+            d = os.path.join(_revisions_root(user_id), bucket)
+            if not os.path.exists(d):
+                continue
+            for fn in os.listdir(d):
+                if not fn.endswith(".json"):
+                    continue
+                path = os.path.join(d, fn)
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        item = json.load(f)
+                except Exception:
+                    continue
+                if not isinstance(item, dict):
+                    continue
+                if str(item.get("target_mod_id", "") or "").strip() != str(target_mod_id or "").strip():
+                    continue
+                item["_bucket"] = bucket
+                rows.append(item)
+        rows.sort(key=lambda x: str(x.get("created_at", "") or ""), reverse=True)
+        return rows[: max(1, int(limit))]
+
+    def _load_mod_content_for_revision(user_id: str, mod_id: str) -> Dict[str, Dict[str, str]]:
+        target = str(mod_id or "").strip() or "default"
+        if target == "default":
+            return {"md": {}, "csv": {}}
+        file_path = os.path.join(get_user_library_dir(user_id), f"{target}.json")
+        if not os.path.exists(file_path):
+            return {"md": {}, "csv": {}}
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            content = data.get("content", {})
+            return {
+                "md": dict(content.get("md", {}) or {}) if isinstance(content, dict) else {},
+                "csv": dict(content.get("csv", {}) or {}) if isinstance(content, dict) else {},
+            }
+        except Exception:
+            return {"md": {}, "csv": {}}
 
     def _reload_engine_runtime(user_id: str) -> None:
         engine = get_engine(user_id)
@@ -452,6 +606,431 @@ def build_game_router(
                 "engine_stats": {"event_completion_count": 0, "recent_event_ids": []},
                 "prefetch_stats": {},
             }
+
+    @router.post("/api/game/agent/choose")
+    def agent_choose(req: AgentChooseRequest, user_id: str = get_user_id):
+        options = [str(x or "").strip() for x in list(req.options or []) if str(x or "").strip()]
+        if not options:
+            return {"status": "error", "detail": "no_options"}
+
+        # 先给一个本地兜底（无模型时也可用）
+        fallback_idx = 0
+        lowered = [s.lower() for s in options]
+        for i, text in enumerate(lowered):
+            if ("中立" in options[i]) or ("考虑" in options[i]) or ("先" in options[i]):
+                fallback_idx = i
+                break
+
+        engine = get_engine(user_id)
+        llm = getattr(engine, "llm", None) if engine else None
+        if llm is None:
+            return {
+                "status": "success",
+                "choice": options[fallback_idx],
+                "choice_index": fallback_idx,
+                "reason": "llm_unavailable_fallback",
+            }
+
+        system_prompt = (
+            "你是文字游戏调试代理，只负责在给定选项中选择一个。\n"
+            "目标：让剧情可推进、避免频繁卡死。\n"
+            "返回 JSON：{\"choice_index\": number, \"reason\": string}\n"
+            "规则：\n"
+            "1) 必须从 0..N-1 中选一个有效下标。\n"
+            "2) 优先选择具体可执行且信息量更高的选项。\n"
+            "3) 避免总是同一态度；尽量保持多样性。\n"
+            "4) reason 一句话即可。"
+        )
+        payload = {
+            "options": options,
+            "game_state": req.game_state or {},
+            "system_state": req.system_state or {},
+            "recent_history": (req.history or [])[-8:],
+        }
+        raw = llm.generate_response(
+            system_prompt=system_prompt,
+            user_input=json.dumps(payload, ensure_ascii=False),
+            context="",
+            temperature=0.3,
+            max_tokens=120,
+        )
+        idx = fallback_idx
+        reason = "fallback"
+        try:
+            parsed = json.loads(str(raw or "{}"))
+            if isinstance(parsed, dict):
+                idx = int(parsed.get("choice_index", fallback_idx))
+                reason = str(parsed.get("reason", "model_choice") or "model_choice")
+        except Exception:
+            idx = fallback_idx
+            reason = "parse_fallback"
+        if idx < 0 or idx >= len(options):
+            idx = fallback_idx
+            reason = "range_fallback"
+        return {
+            "status": "success",
+            "choice": options[idx],
+            "choice_index": idx,
+            "reason": reason,
+        }
+
+    @router.post("/api/game/agent/report")
+    def agent_report(req: AgentReportRequest, user_id: str = get_user_id):
+        history = list(req.history or [])
+        final_state = req.final_state or {}
+        target_mod_id = str((final_state or {}).get("target_mod_id", "") or "").strip()
+        if not target_mod_id:
+            st = read_user_state(user_id)
+            target_mod_id = str(st.get("active_mod_id", "default") or "default")
+        engine = get_engine(user_id)
+        llm = getattr(engine, "llm", None) if engine else None
+        if llm is None:
+            _append_run_report(
+                user_id,
+                {
+                    "ts": datetime.now().isoformat(timespec="seconds"),
+                    "target_mod_id": target_mod_id,
+                    "turn_count": len(history),
+                    "summary": "llm_unavailable_fallback",
+                    "issues": ["llm_unavailable"],
+                    "score": 0,
+                },
+            )
+            return {
+                "status": "success",
+                "report": {
+                    "summary": "调试回放完成（无模型总结，使用简版统计）。",
+                    "turn_count": len(history),
+                    "highlights": [],
+                    "issues": ["未连接 LLM，总结为本地降级版。"],
+                },
+            }
+
+        system_prompt = (
+            "你是游戏测试报告助手。请根据对局历史与最终状态生成简短调试报告。\n"
+            "只返回 JSON：{\"summary\":string,\"turn_count\":number,\"highlights\":string[],\"issues\":string[],\"suggestions\":string[]}\n"
+            "要求：\n"
+            "- summary 1-2 句\n"
+            "- highlights 2-5 条\n"
+            "- issues 0-5 条\n"
+            "- suggestions 1-5 条"
+        )
+        payload = {
+            "history_tail": history[-30:],
+            "turn_count": len(history),
+            "final_state": final_state,
+        }
+        raw = llm.generate_response(
+            system_prompt=system_prompt,
+            user_input=json.dumps(payload, ensure_ascii=False),
+            context="",
+            temperature=0.3,
+            max_tokens=420,
+        )
+        try:
+            parsed = json.loads(str(raw or "{}"))
+            if isinstance(parsed, dict):
+                parsed["turn_count"] = int(parsed.get("turn_count", len(history)) or len(history))
+                _append_run_report(
+                    user_id,
+                    {
+                        "ts": datetime.now().isoformat(timespec="seconds"),
+                        "target_mod_id": target_mod_id,
+                        "turn_count": len(history),
+                        "summary": str(parsed.get("summary", "") or "")[:300],
+                        "issues": list(parsed.get("issues", []) if isinstance(parsed.get("issues", []), list) else [])[:8],
+                        "score": int((parsed.get("score", 0) or 0)) if str(parsed.get("score", "")).strip() else 0,
+                    },
+                )
+                return {"status": "success", "report": parsed}
+        except Exception:
+            pass
+        _append_run_report(
+            user_id,
+            {
+                "ts": datetime.now().isoformat(timespec="seconds"),
+                "target_mod_id": target_mod_id,
+                "turn_count": len(history),
+                "summary": "report_parse_failed",
+                "issues": ["report_parse_failed"],
+                "score": 0,
+            },
+        )
+        return {
+            "status": "success",
+            "report": {
+                "summary": "对局已结束，报告解析失败，返回降级摘要。",
+                "turn_count": len(history),
+                "highlights": [],
+                "issues": ["report_parse_failed"],
+                "suggestions": ["检查模型 JSON 输出稳定性"],
+            },
+        }
+
+    @router.post("/api/game/agent/critic")
+    def agent_critic(req: AgentCriticRequest, user_id: str = get_user_id):
+        report = req.report if isinstance(req.report, dict) else {}
+        history = list(req.history or [])
+        final_state = req.final_state or {}
+
+        engine = get_engine(user_id)
+        llm = getattr(engine, "llm", None) if engine else None
+        if llm is None:
+            return {
+                "status": "success",
+                "critic": {
+                    "overall_score": 60,
+                    "dimensions": [
+                        {"name": "可推进性", "score": 60},
+                        {"name": "叙事连贯", "score": 60},
+                        {"name": "选择反馈", "score": 55},
+                    ],
+                    "strengths": [],
+                    "weaknesses": ["未连接 LLM，使用降级评审。"],
+                    "suggestions": ["先确认 LLM 可用后再启用自迭代评审。"],
+                },
+            }
+
+        system_prompt = (
+            "你是文字游戏测试评审AI。给定一份对局报告和最终状态，请做结构化评审。\n"
+            "只返回 JSON：\n"
+            "{\"overall_score\":0-100,\"dimensions\":[{\"name\":string,\"score\":0-100}],"
+            "\"strengths\":string[],\"weaknesses\":string[],\"suggestions\":string[]}\n"
+            "要求：\n"
+            "1) dimensions 至少包含：可推进性、叙事连贯、选择反馈、角色表现。\n"
+            "2) suggestions 必须可执行，且尽量指向系统/skill/事件配置改动。\n"
+            "3) 输出精炼，不要附加解释文本。"
+        )
+        payload = {
+            "report": report,
+            "history_tail": history[-30:],
+            "final_state": final_state,
+        }
+        raw = llm.generate_response(
+            system_prompt=system_prompt,
+            user_input=json.dumps(payload, ensure_ascii=False),
+            context="",
+            temperature=0.25,
+            max_tokens=420,
+        )
+        try:
+            parsed = json.loads(str(raw or "{}"))
+            if isinstance(parsed, dict):
+                parsed["overall_score"] = max(0, min(100, int(parsed.get("overall_score", 60) or 60)))
+                dims = parsed.get("dimensions")
+                if not isinstance(dims, list):
+                    parsed["dimensions"] = []
+                return {"status": "success", "critic": parsed}
+        except Exception:
+            pass
+        return {
+            "status": "success",
+            "critic": {
+                "overall_score": 58,
+                "dimensions": [],
+                "strengths": [],
+                "weaknesses": ["critic_parse_failed"],
+                "suggestions": ["报告评审解析失败，建议检查 critic 输出稳定性。"],
+            },
+        }
+
+    @router.post("/api/game/agent/revision/propose")
+    def agent_revision_propose(req: AgentRevisionProposeRequest, user_id: str = get_user_id):
+        st = read_user_state(user_id)
+        target_mod_id = str(req.target_mod_id or st.get("active_mod_id") or "").strip() or "default"
+        ok, reason = _can_edit_mod_for_revision(user_id, target_mod_id)
+        if not ok:
+            raise HTTPException(status_code=403, detail=reason)
+
+        engine = get_engine(user_id)
+        llm = getattr(engine, "llm", None) if engine else None
+        if llm is None:
+            raise HTTPException(status_code=503, detail="LLM 不可用，无法生成修订提案")
+
+        target_content = _load_mod_content_for_revision(user_id, target_mod_id)
+        editable_files = []
+        editable_files.extend([f"prompts/{k}" for k in list((target_content.get("md", {}) or {}).keys())])
+        editable_files.extend([f"events/{k}" for k in list((target_content.get("csv", {}) or {}).keys())])
+        editable_files = sorted(list({str(x).strip() for x in editable_files if str(x).strip()}))[:60]
+
+        system_prompt = (
+            "你是模组修订提案助手。请基于报告与评审，输出可审计的结构化提案。\n"
+            "只返回 JSON，格式：\n"
+            "{"
+            "\"summary\":string,"
+            "\"risk_level\":\"low|medium|high\","
+            "\"changes\":[{\"file\":string,\"op\":\"update\",\"reason\":string,\"content_after\":string,\"patch_text\":string}],"
+            "\"memory_candidates\":[{\"content\":string,\"importance\":1-10,\"tags\":[string]}]"
+            "}\n"
+            "要求：\n"
+            "1) changes 仅允许 prompts/events 相关文本文件。\n"
+            "2) 优先提供 content_after（完整新内容）；patch_text 仅作为备注。\n"
+            "3) memory_candidates 用于长期记忆候选，内容要简短具体。"
+        )
+        payload = {
+            "target_mod_id": target_mod_id,
+            "report": req.report or {},
+            "critic": req.critic or {},
+            "history_tail": (req.history or [])[-20:],
+            "final_state": req.final_state or {},
+            "editable_files": editable_files,
+        }
+        raw = llm.generate_response(
+            system_prompt=system_prompt,
+            user_input=json.dumps(payload, ensure_ascii=False),
+            context="",
+            temperature=0.25,
+            max_tokens=700,
+        )
+        try:
+            parsed = json.loads(str(raw or "{}"))
+        except Exception:
+            parsed = {}
+        if not isinstance(parsed, dict):
+            parsed = {}
+
+        changes = parsed.get("changes") if isinstance(parsed.get("changes"), list) else []
+        filtered_changes = []
+        allowed_prefixes = ("prompts/", "events/")
+        for ch in changes:
+            if not isinstance(ch, dict):
+                continue
+            file_name = str(ch.get("file", "") or "").strip()
+            if not file_name.startswith(allowed_prefixes):
+                continue
+            filtered_changes.append(
+                {
+                    "file": file_name,
+                    "op": "update",
+                    "reason": str(ch.get("reason", "") or "").strip(),
+                    "content_after": str(ch.get("content_after", "") or ""),
+                    "patch_text": str(ch.get("patch_text", "") or "").strip()[:4000],
+                }
+            )
+
+        mem = parsed.get("memory_candidates") if isinstance(parsed.get("memory_candidates"), list) else []
+        memory_candidates = []
+        for item in mem:
+            if not isinstance(item, dict):
+                continue
+            content = str(item.get("content", "") or "").strip()
+            if not content:
+                continue
+            importance = int(item.get("importance", 6) or 6)
+            importance = max(1, min(10, importance))
+            tags = item.get("tags") if isinstance(item.get("tags"), list) else []
+            tags = [str(t).strip() for t in tags if str(t).strip()][:8]
+            memory_candidates.append({"content": content[:300], "importance": importance, "tags": tags})
+
+        recent_runs = _load_recent_run_reports(user_id, target_mod_id=target_mod_id, limit=8)
+        run_count = len(recent_runs)
+        issue_freq: Dict[str, int] = {}
+        for r in recent_runs:
+            issues = r.get("issues", []) if isinstance(r.get("issues", []), list) else []
+            for it in issues:
+                k = str(it or "").strip()
+                if not k:
+                    continue
+                issue_freq[k] = int(issue_freq.get(k, 0) or 0) + 1
+        common_issues = [k for k, _ in sorted(issue_freq.items(), key=lambda kv: kv[1], reverse=True)[:5]]
+
+        proposal_id = f"rev-{datetime.now().strftime('%Y%m%d%H%M%S')}-{str(random.randint(1000, 9999))}"
+        structured_count = sum(1 for x in filtered_changes if str(x.get("content_after", "")).strip())
+        total_changes = len(filtered_changes)
+        structured_ratio = (float(structured_count) / float(total_changes)) if total_changes > 0 else 0.0
+        critic_score = 0
+        try:
+            critic_score = int((req.critic or {}).get("overall_score", 0) or 0)
+        except Exception:
+            critic_score = 0
+        critic_score = max(0, min(100, critic_score))
+        quality_score = int(round(critic_score * 0.6 + structured_ratio * 100.0 * 0.4))
+        priority = "high" if quality_score >= 75 else ("medium" if quality_score >= 50 else "low")
+        schema_ok = total_changes > 0
+        policy_ok = True
+        blocked_rules = []
+        if total_changes > 8:
+            policy_ok = False
+            blocked_rules.append("too_many_changes")
+        if total_changes > 0 and structured_ratio < 0.5:
+            blocked_rules.append("low_structured_ratio")
+        if run_count < 2:
+            blocked_rules.append("insufficient_run_samples")
+        duplicate_proposal = False
+        duplicate_with = ""
+        merge_suggestion = False
+        merge_with = ""
+        current_fp = _proposal_fingerprint(
+            {
+                "summary": parsed.get("summary", ""),
+                "changes": filtered_changes,
+                "validator": {"common_issues": common_issues},
+            }
+        )
+        current_files = {
+            str(x.get("file", "") or "").strip()
+            for x in filtered_changes
+            if isinstance(x, dict) and str(x.get("file", "") or "").strip()
+        }
+        for prev in _load_recent_revisions_for_mod(user_id, target_mod_id=target_mod_id, limit=20):
+            prev_id = str(prev.get("proposal_id", "") or "").strip()
+            if not prev_id:
+                continue
+            prev_fp = _proposal_fingerprint(prev)
+            if current_fp and prev_fp == current_fp:
+                duplicate_proposal = True
+                duplicate_with = prev_id
+                if "duplicate_proposal" not in blocked_rules:
+                    blocked_rules.append("duplicate_proposal")
+                break
+            prev_changes = prev.get("changes", []) if isinstance(prev.get("changes", []), list) else []
+            prev_files = {
+                str(x.get("file", "") or "").strip()
+                for x in prev_changes
+                if isinstance(x, dict) and str(x.get("file", "") or "").strip()
+            }
+            if not merge_suggestion and len(current_files & prev_files) >= 2:
+                merge_suggestion = True
+                merge_with = prev_id
+        proposal = {
+            "proposal_id": proposal_id,
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "scope": "mod_revision",
+            "status": "pending",
+            "target_mod_id": target_mod_id,
+            "summary": str(parsed.get("summary", "") or "").strip() or "AI 生成修订提案",
+            "risk_level": str(parsed.get("risk_level", "medium") or "medium"),
+            "changes": filtered_changes[:8],
+            "memory_candidates": memory_candidates[:10],
+            "validator": {
+                "schema_ok": schema_ok,
+                "policy_ok": policy_ok,
+                "blocked_rules": blocked_rules,
+                "structured_count": structured_count,
+                "total_changes": total_changes,
+                "structured_ratio": round(structured_ratio, 4),
+                "run_sample_count": run_count,
+                "common_issues": common_issues,
+                "duplicate_proposal": duplicate_proposal,
+                "duplicate_with": duplicate_with,
+                "merge_suggestion": merge_suggestion,
+                "merge_with": merge_with,
+            },
+            "quality_score": quality_score,
+            "priority": priority,
+            "source_run": {
+                "user_id": str(user_id),
+                "turn_count": len(req.history or []),
+            },
+        }
+
+        with with_user_write_lock(user_id):
+            qdir = _revisions_queue_dir(user_id)
+            os.makedirs(qdir, exist_ok=True)
+            with open(os.path.join(qdir, f"{proposal_id}.json"), "w", encoding="utf-8") as f:
+                json.dump(proposal, f, ensure_ascii=False, indent=2)
+        append_audit_log(user_id, "agent_revision_propose", "ok", target_mod_id, {"proposal_id": proposal_id})
+        return {"status": "success", "proposal": proposal}
 
     @router.post("/api/game/save")
     def save_game(req: SaveGameRequest, user_id: str = get_user_id):

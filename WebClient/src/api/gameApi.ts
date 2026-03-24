@@ -119,6 +119,59 @@ export const gameApi = {
     return res.data;
   },
 
+  getSkillProfile: async () => {
+    const res = await apiClient.get(`/skills/profile`);
+    return res.data;
+  },
+
+  saveSkillProfile: async (profile: Record<string, any>) => {
+    const res = await apiClient.post(`/skills/profile`, { profile });
+    return res.data;
+  },
+
+  resolveSkillProfile: async (modId?: string) => {
+    const res = await apiClient.post(`/skills/profile/resolve`, { mod_id: modId || '' });
+    return res.data;
+  },
+
+  agentChoose: async (payload: {
+    options: string[];
+    game_state?: Record<string, any>;
+    system_state?: Record<string, any>;
+    history?: Array<Record<string, any>>;
+  }) => {
+    const res = await apiClient.post(`/game/agent/choose`, payload);
+    return res.data;
+  },
+
+  agentReport: async (payload: {
+    history?: Array<Record<string, any>>;
+    final_state?: Record<string, any>;
+  }) => {
+    const res = await apiClient.post(`/game/agent/report`, payload);
+    return res.data;
+  },
+
+  agentCritic: async (payload: {
+    report?: Record<string, any>;
+    history?: Array<Record<string, any>>;
+    final_state?: Record<string, any>;
+  }) => {
+    const res = await apiClient.post(`/game/agent/critic`, payload);
+    return res.data;
+  },
+
+  agentRevisionPropose: async (payload: {
+    target_mod_id?: string;
+    report?: Record<string, any>;
+    critic?: Record<string, any>;
+    history?: Array<Record<string, any>>;
+    final_state?: Record<string, any>;
+  }) => {
+    const res = await apiClient.post(`/game/agent/revision/propose`, payload);
+    return res.data;
+  },
+
   // Admin/Editor Management
   adminLogin: async (password: string) => {
     const res = await apiClient.post(`/admin/login`, { password });
@@ -158,6 +211,41 @@ export const gameApi = {
 
   getAdminUserStats: async () => {
     const res = await apiClient.get(`/admin/users/stats`);
+    return res.data;
+  },
+
+  getAdminRevisions: async (params?: { status?: 'queue' | 'applied' | 'rejected'; limit?: number }) => {
+    const res = await apiClient.get(`/admin/revisions`, { params });
+    return res.data;
+  },
+
+  getAdminRevisionDetail: async (proposalId: string) => {
+    const res = await apiClient.get(`/admin/revisions/${proposalId}`);
+    return res.data;
+  },
+
+  approveAdminRevision: async (proposalId: string, note: string = '') => {
+    const res = await apiClient.post(`/admin/revisions/${proposalId}/approve`, { note });
+    return res.data;
+  },
+
+  rejectAdminRevision: async (proposalId: string, note: string = '') => {
+    const res = await apiClient.post(`/admin/revisions/${proposalId}/reject`, { note });
+    return res.data;
+  },
+
+  applyAdminRevisionMemory: async (proposalId: string, limit: number = 10) => {
+    const res = await apiClient.post(`/admin/revisions/${proposalId}/apply_memory`, { limit });
+    return res.data;
+  },
+
+  applyAdminRevisionToDraft: async (proposalId: string, note: string = '') => {
+    const res = await apiClient.post(`/admin/revisions/${proposalId}/apply_to_draft`, { note });
+    return res.data;
+  },
+
+  rollbackAdminRevision: async (proposalId: string, note: string = '') => {
+    const res = await apiClient.post(`/admin/revisions/${proposalId}/rollback`, { note });
     return res.data;
   },
 

@@ -51,6 +51,14 @@ class WorkshopUpdateReq(BaseModel):
     description: Optional[str] = None
 
 
+class SkillProfileSaveReq(BaseModel):
+    profile: Dict[str, Any] = {}
+
+
+class SkillProfileResolveReq(BaseModel):
+    mod_id: Optional[str] = None
+
+
 def build_content_router(
     *,
     get_user_id,
@@ -92,6 +100,85 @@ def build_content_router(
 
     def _write_json(path: str, data: Dict[str, Any]) -> None:
         write_record_json(path, data)
+
+    def _skill_profile_path(user_id: str) -> str:
+        return os.path.join(get_user_data_root(user_id), "skill_profile.json")
+
+    def _default_skill_profile() -> Dict[str, Any]:
+        return {
+            "version": 1,
+            "updated_at": now_str(),
+            "global": {"phone_system_enabled": True},
+            "skills": {},
+            "per_mod_overrides": {},
+        }
+
+    def _normalize_skill_profile(data: Dict[str, Any]) -> Dict[str, Any]:
+        base = _default_skill_profile()
+        src = data if isinstance(data, dict) else {}
+        base["version"] = int(src.get("version", 1) or 1)
+        base["updated_at"] = str(src.get("updated_at", now_str()) or now_str())
+        g = src.get("global", {}) if isinstance(src.get("global", {}), dict) else {}
+        base["global"] = {
+            "phone_system_enabled": bool(g.get("phone_system_enabled", True)),
+        }
+        skills = src.get("skills", {}) if isinstance(src.get("skills", {}), dict) else {}
+        norm_skills: Dict[str, Dict[str, Any]] = {}
+        for name, item in skills.items():
+            sid = str(name or "").strip()
+            if not sid:
+                continue
+            if isinstance(item, dict):
+                norm_skills[sid] = {
+                    "enabled": bool(item.get("enabled", True)),
+                    "priority": int(item.get("priority", 100) or 100),
+                }
+            else:
+                norm_skills[sid] = {"enabled": bool(item), "priority": 100}
+        base["skills"] = norm_skills
+        overrides = src.get("per_mod_overrides", {}) if isinstance(src.get("per_mod_overrides", {}), dict) else {}
+        norm_overrides: Dict[str, Any] = {}
+        for mod_id, row in overrides.items():
+            mid = str(mod_id or "").strip()
+            if not mid or not isinstance(row, dict):
+                continue
+            item = {}
+            if "phone_system_enabled" in row:
+                item["phone_system_enabled"] = bool(row.get("phone_system_enabled"))
+            rskills = row.get("skills", {}) if isinstance(row.get("skills", {}), dict) else {}
+            if rskills:
+                norm_rskills: Dict[str, Any] = {}
+                for name, conf in rskills.items():
+                    sid = str(name or "").strip()
+                    if not sid:
+                        continue
+                    if isinstance(conf, dict):
+                        norm_rskills[sid] = {
+                            "enabled": bool(conf.get("enabled", True)),
+                            "priority": int(conf.get("priority", 100) or 100),
+                        }
+                    else:
+                        norm_rskills[sid] = {"enabled": bool(conf), "priority": 100}
+                item["skills"] = norm_rskills
+            norm_overrides[mid] = item
+        base["per_mod_overrides"] = norm_overrides
+        base["updated_at"] = now_str()
+        return base
+
+    def _read_skill_profile(user_id: str) -> Dict[str, Any]:
+        path = _skill_profile_path(user_id)
+        if not os.path.exists(path):
+            return _default_skill_profile()
+        try:
+            data = _read_json(path)
+        except Exception:
+            return _default_skill_profile()
+        return _normalize_skill_profile(data)
+
+    def _write_skill_profile(user_id: str, profile: Dict[str, Any]) -> Dict[str, Any]:
+        normalized = _normalize_skill_profile(profile)
+        _write_json(_skill_profile_path(user_id), normalized)
+        return normalized
 
     def _load_workshop_record(item_id: str) -> Dict[str, Any]:
         path = _workshop_file_path(item_id)
@@ -294,6 +381,48 @@ def build_content_router(
         if "editor_source" not in st:
             st["editor_source"] = "default"
         return {"status": "success", "data": st}
+
+    @router.get("/api/skills/profile")
+    def get_skill_profile(user_id: str = get_user_id):
+        return {"status": "success", "data": _read_skill_profile(user_id)}
+
+    @router.post("/api/skills/profile")
+    def save_skill_profile(req: SkillProfileSaveReq, user_id: str = get_user_id):
+        with with_user_write_lock(user_id):
+            saved = _write_skill_profile(user_id, req.profile if isinstance(req.profile, dict) else {})
+        append_audit_log(user_id, "skill_profile_update", "ok", "skill_profile", {})
+        return {"status": "success", "data": saved}
+
+    @router.post("/api/skills/profile/resolve")
+    def resolve_skill_profile(req: SkillProfileResolveReq, user_id: str = get_user_id):
+        engine = get_engine(user_id)
+        pm = getattr(engine, "pm", None) if engine else None
+        profile = _read_skill_profile(user_id)
+        mod_id = str(req.mod_id or "").strip()
+        if not pm:
+            return {
+                "status": "success",
+                "data": {
+                    "mod_id": mod_id,
+                    "phone_system_enabled": bool(profile.get("global", {}).get("phone_system_enabled", True)),
+                    "enabled_skills": [],
+                    "all_skills": [],
+                    "profile": profile,
+                },
+            }
+        all_skills = sorted(list(getattr(pm, "skills", {}).keys())) if hasattr(pm, "skills") else []
+        enabled_skills = pm.get_enabled_skills({"mod_id": mod_id}) if hasattr(pm, "get_enabled_skills") else []
+        phone_enabled = pm.is_phone_system_enabled({"mod_id": mod_id}) if hasattr(pm, "is_phone_system_enabled") else True
+        return {
+            "status": "success",
+            "data": {
+                "mod_id": mod_id,
+                "phone_system_enabled": bool(phone_enabled),
+                "enabled_skills": enabled_skills,
+                "all_skills": all_skills,
+                "profile": profile,
+            },
+        }
 
     @router.post("/api/library/edit/{item_id}")
     def select_library_item_for_edit(item_id: str, user_id: str = get_user_id):

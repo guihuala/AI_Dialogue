@@ -24,6 +24,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
     const {
         displayText,
         nextOptions,
+        nextOptionsMeta,
         isEnd,
         isLoading,
         performTurn,
@@ -50,6 +51,8 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         systemDailyPlan,
         systemKeyResolution,
         weeklySummary
+        ,
+        avgResponseMs
     } = useGameStore();
 
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -83,6 +86,21 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
     // Dialog pacing state
     const [dialogSegments, setDialogSegments] = useState<string[]>([]);
     const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
+    const [autoPlayDialogue, setAutoPlayDialogue] = useState(false);
+    const [agentAutoEnabled, setAgentAutoEnabled] = useState(false);
+    const [agentSelfIterate, setAgentSelfIterate] = useState(false);
+    const [agentRevisionPropose, setAgentRevisionPropose] = useState(false);
+    const [agentBusy, setAgentBusy] = useState(false);
+    const [agentLastReason, setAgentLastReason] = useState('');
+    const [agentReport, setAgentReport] = useState<any>(null);
+    const [agentCritic, setAgentCritic] = useState<any>(null);
+    const [agentCriticBusy, setAgentCriticBusy] = useState(false);
+    const [agentRevision, setAgentRevision] = useState<any>(null);
+    const [agentRevisionBusy, setAgentRevisionBusy] = useState(false);
+    const agentActionLockRef = useRef<string>('');
+    const agentReportLockRef = useRef<string>('');
+    const agentCriticLockRef = useRef<string>('');
+    const agentRevisionLockRef = useRef<string>('');
 
     // Auto-scroll story text
     useEffect(() => {
@@ -219,6 +237,147 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
     };
 
     const isDialogFinished = dialogSegments.length > 0 && currentSegmentIndex === dialogSegments.length - 1 && !isTyping;
+
+    useEffect(() => {
+        if (!autoPlayDialogue) return;
+        if (isLoading || isTyping) return;
+        if (!Array.isArray(dialogSegments) || dialogSegments.length === 0) return;
+        if (currentSegmentIndex >= dialogSegments.length - 1) return;
+        const timer = setTimeout(() => {
+            setCurrentSegmentIndex((prev) => {
+                const maxIdx = Math.max(0, dialogSegments.length - 1);
+                return Math.min(prev + 1, maxIdx);
+            });
+        }, 450);
+        return () => clearTimeout(timer);
+    }, [autoPlayDialogue, isLoading, isTyping, currentSegmentIndex, dialogSegments]);
+
+    useEffect(() => {
+        const canAct = agentAutoEnabled
+            && !agentBusy
+            && !isLoading
+            && isDialogFinished
+            && !isEnd
+            && Array.isArray(nextOptions)
+            && nextOptions.length > 0;
+        if (!canAct) return;
+        const signature = `${current_evt_id}|${history.length}|${nextOptions.join('||')}`;
+        if (agentActionLockRef.current === signature) return;
+        agentActionLockRef.current = signature;
+
+        const run = async () => {
+            setAgentBusy(true);
+            try {
+                const res = await gameApi.agentChoose({
+                    options: nextOptions,
+                    game_state: {
+                        chapter: systemState?.time?.chapter || 1,
+                        day: systemState?.time?.day || 1,
+                        week: systemState?.time?.week || 1,
+                        current_evt_id,
+                    },
+                    system_state: systemState || {},
+                    history: history.slice(-12).map((h) => ({ turn: h.turn, text: h.text })),
+                });
+                const choice = String(res?.choice || '').trim();
+                setAgentLastReason(String(res?.reason || ''));
+                if (choice) {
+                    await performTurn(choice);
+                }
+            } catch {
+                // ignore agent transient errors
+            } finally {
+                setAgentBusy(false);
+            }
+        };
+        run();
+    }, [agentAutoEnabled, agentBusy, isLoading, isDialogFinished, isEnd, nextOptions, performTurn, systemState, history, current_evt_id]);
+
+    useEffect(() => {
+        if (!agentAutoEnabled) return;
+        const done = !!isEnd && !nextOptions.some((opt) => isTransitionChoice(opt));
+        if (!done) return;
+        const signature = `${history.length}|${current_evt_id}|done`;
+        if (agentReportLockRef.current === signature) return;
+        agentReportLockRef.current = signature;
+
+        const runReport = async () => {
+            try {
+                const res = await gameApi.agentReport({
+                    history: history.slice(-60).map((h) => ({ turn: h.turn, text: h.text })),
+                    final_state: {
+                        system_state: systemState || {},
+                        weekly_summary: weeklySummary || null,
+                    },
+                });
+                setAgentReport(res?.report || null);
+                setAgentCritic(null);
+                setAgentRevision(null);
+            } catch {
+                setAgentReport(null);
+                setAgentCritic(null);
+                setAgentRevision(null);
+            }
+        };
+        runReport();
+    }, [agentAutoEnabled, isEnd, nextOptions, history, current_evt_id, systemState, weeklySummary]);
+
+    useEffect(() => {
+        if (!agentAutoEnabled || !agentSelfIterate) return;
+        if (!agentReport || agentCriticBusy) return;
+        const signature = `${history.length}|${current_evt_id}|critic`;
+        if (agentCriticLockRef.current === signature) return;
+        agentCriticLockRef.current = signature;
+
+        const runCritic = async () => {
+            setAgentCriticBusy(true);
+            try {
+                const res = await gameApi.agentCritic({
+                    report: agentReport,
+                    history: history.slice(-60).map((h) => ({ turn: h.turn, text: h.text })),
+                    final_state: {
+                        system_state: systemState || {},
+                        weekly_summary: weeklySummary || null,
+                    },
+                });
+                setAgentCritic(res?.critic || null);
+            } catch {
+                setAgentCritic(null);
+            } finally {
+                setAgentCriticBusy(false);
+            }
+        };
+        runCritic();
+    }, [agentAutoEnabled, agentSelfIterate, agentReport, agentCriticBusy, history, current_evt_id, systemState, weeklySummary]);
+
+    useEffect(() => {
+        if (!agentAutoEnabled || !agentSelfIterate || !agentRevisionPropose) return;
+        if (!agentReport || !agentCritic || agentRevisionBusy) return;
+        const signature = `${history.length}|${current_evt_id}|revision`;
+        if (agentRevisionLockRef.current === signature) return;
+        agentRevisionLockRef.current = signature;
+
+        const runRevision = async () => {
+            setAgentRevisionBusy(true);
+            try {
+                const res = await gameApi.agentRevisionPropose({
+                    report: agentReport,
+                    critic: agentCritic,
+                    history: history.slice(-60).map((h) => ({ turn: h.turn, text: h.text })),
+                    final_state: {
+                        system_state: systemState || {},
+                        weekly_summary: weeklySummary || null,
+                    },
+                });
+                setAgentRevision(res?.proposal || null);
+            } catch {
+                setAgentRevision(null);
+            } finally {
+                setAgentRevisionBusy(false);
+            }
+        };
+        runRevision();
+    }, [agentAutoEnabled, agentSelfIterate, agentRevisionPropose, agentReport, agentCritic, agentRevisionBusy, history, current_evt_id, systemState, weeklySummary]);
 
     const [phase, setPhase] = useState<'title' | 'save_select' | 'setup' | 'playing'>(isPlaying ? 'playing' : 'title');
 
@@ -748,6 +907,104 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                                         ))}
                                     </div>
                                 )}
+                                <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white p-2 space-y-1.5">
+                                    <div className="font-black text-[10px] uppercase tracking-wider text-[var(--color-cyan-main)] mb-1">Agent Debug</div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setAgentAutoEnabled((v) => !v)}
+                                        className={`px-2 py-1 rounded-md text-[10px] font-black border ${
+                                            agentAutoEnabled
+                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                : 'bg-slate-50 text-slate-600 border-slate-200'
+                                        }`}
+                                    >
+                                        {agentAutoEnabled ? 'Auto ON' : 'Auto OFF'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setAgentSelfIterate((v) => !v)}
+                                        className={`ml-2 px-2 py-1 rounded-md text-[10px] font-black border ${
+                                            agentSelfIterate
+                                                ? 'bg-violet-50 text-violet-700 border-violet-200'
+                                                : 'bg-slate-50 text-slate-600 border-slate-200'
+                                        }`}
+                                        title="报告后自动二次评审"
+                                    >
+                                        {agentSelfIterate ? 'Self-Iterate ON' : 'Self-Iterate OFF'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setAgentRevisionPropose((v) => !v)}
+                                        className={`ml-2 px-2 py-1 rounded-md text-[10px] font-black border ${
+                                            agentRevisionPropose
+                                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                                : 'bg-slate-50 text-slate-600 border-slate-200'
+                                        }`}
+                                        title="评审后自动生成修订提案（仅入队，不自动应用）"
+                                    >
+                                        {agentRevisionPropose ? 'Revision Propose ON' : 'Revision Propose OFF'}
+                                    </button>
+                                    <div className="text-[10px] text-slate-600">
+                                        status: {agentBusy ? 'thinking' : 'idle'}
+                                    </div>
+                                    {agentSelfIterate && (
+                                        <div className="text-[10px] text-slate-500">
+                                            critic: {agentCriticBusy ? 'reviewing' : (agentCritic ? 'ready' : 'idle')}
+                                        </div>
+                                    )}
+                                    {agentSelfIterate && agentRevisionPropose && (
+                                        <div className="text-[10px] text-slate-500">
+                                            revision: {agentRevisionBusy ? 'proposing' : (agentRevision ? 'queued' : 'idle')}
+                                        </div>
+                                    )}
+                                    {!!agentLastReason && (
+                                        <div className="text-[10px] text-slate-500">
+                                            reason: {agentLastReason}
+                                        </div>
+                                    )}
+                                    {agentReport && (
+                                        <details className="text-[10px] text-slate-600">
+                                            <summary className="cursor-pointer font-black text-[var(--color-cyan-main)]">查看 Agent 报告</summary>
+                                            <div className="mt-1 space-y-1">
+                                                <div>{String(agentReport?.summary || '')}</div>
+                                                {Array.isArray(agentReport?.highlights) && agentReport.highlights.length > 0 && (
+                                                    <div>亮点：{agentReport.highlights.slice(0, 4).join('；')}</div>
+                                                )}
+                                                {Array.isArray(agentReport?.issues) && agentReport.issues.length > 0 && (
+                                                    <div>问题：{agentReport.issues.slice(0, 4).join('；')}</div>
+                                                )}
+                                            </div>
+                                        </details>
+                                    )}
+                                    {agentCritic && (
+                                        <details className="text-[10px] text-slate-600">
+                                            <summary className="cursor-pointer font-black text-violet-700">查看 Critic 评审</summary>
+                                            <div className="mt-1 space-y-1">
+                                                <div>总分：{Number(agentCritic?.overall_score ?? 0)}</div>
+                                                {Array.isArray(agentCritic?.dimensions) && agentCritic.dimensions.length > 0 && (
+                                                    <div>
+                                                        维度：{agentCritic.dimensions.slice(0, 4).map((d: any) => `${d?.name || '项'} ${d?.score ?? '-'}`).join('；')}
+                                                    </div>
+                                                )}
+                                                {Array.isArray(agentCritic?.suggestions) && agentCritic.suggestions.length > 0 && (
+                                                    <div>建议：{agentCritic.suggestions.slice(0, 4).join('；')}</div>
+                                                )}
+                                            </div>
+                                        </details>
+                                    )}
+                                    {agentRevision && (
+                                        <details className="text-[10px] text-slate-600">
+                                            <summary className="cursor-pointer font-black text-indigo-700">查看 Revision 提案</summary>
+                                            <div className="mt-1 space-y-1">
+                                                <div>proposal: {String(agentRevision?.proposal_id || '-')}</div>
+                                                <div>target mod: {String(agentRevision?.target_mod_id || '-')}</div>
+                                                <div>risk: {String(agentRevision?.risk_level || 'medium')}</div>
+                                                <div>changes: {Array.isArray(agentRevision?.changes) ? agentRevision.changes.length : 0}</div>
+                                                <div>memory candidates: {Array.isArray(agentRevision?.memory_candidates) ? agentRevision.memory_candidates.length : 0}</div>
+                                            </div>
+                                        </details>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -843,6 +1100,8 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                 onBackToMenu={async () => {
                     setShowBackConfirm(true);
                 }}
+                autoPlayDialogue={autoPlayDialogue}
+                onToggleAutoPlayDialogue={() => setAutoPlayDialogue((v) => !v)}
                 wechatNotificationCount={wechatNotifications?.length || 0} 
                 phoneSystemEnabled={phoneSystemEnabled}
             />
@@ -851,6 +1110,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                 {!isTyping && !isLoading && isDialogFinished && (!isEnd || nextOptions.some((opt) => isTransitionChoice(opt))) && (
                     <ActionOptions 
                         options={nextOptions} 
+                        optionsMeta={nextOptionsMeta}
                         onSelect={performTurn} 
                         onHover={prefetch}
                         disabled={isLoading || isTyping} 
@@ -869,6 +1129,8 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
                     parseMarktext={parseMarktext}
                     speakerName={currentSpeaker}
                     pendingChoice={pendingChoice}
+                    avgResponseMs={avgResponseMs}
+                    autoPlayDialogue={autoPlayDialogue}
                 />
             </div>
 

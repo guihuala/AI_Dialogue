@@ -5,6 +5,7 @@ import os
 import shutil
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 from src.core.config import DATA_ROOT
 
@@ -48,6 +49,14 @@ class EventSkeletonRulesSaveReq(BaseModel):
     rules: Dict[str, Any]
 
 
+class RevisionDecisionReq(BaseModel):
+    note: str = ""
+
+
+class RevisionApplyMemoryReq(BaseModel):
+    limit: int = 10
+
+
 def build_admin_router(
     *,
     get_user_id,
@@ -76,6 +85,46 @@ def build_admin_router(
 
     def _workshop_file_path(item_id: str) -> str:
         return os.path.join(workshop_dir, f"{item_id}.json")
+
+    def _revisions_root(user_id: str) -> str:
+        return os.path.join(DATA_ROOT, "users", str(user_id), "revisions")
+
+    def _revisions_dir(user_id: str, status: str) -> str:
+        return os.path.join(_revisions_root(user_id), status)
+
+    def _revision_path(user_id: str, status: str, proposal_id: str) -> str:
+        return os.path.join(_revisions_dir(user_id, status), f"{proposal_id}.json")
+
+    def _load_revision(user_id: str, proposal_id: str):
+        for st in ["queue", "applied", "rejected"]:
+            p = _revision_path(user_id, st, proposal_id)
+            if os.path.exists(p):
+                return st, p, _read_json(p)
+        return "", "", {}
+
+    def _save_revision(user_id: str, status: str, proposal_id: str, data: Dict[str, Any]) -> str:
+        p = _revision_path(user_id, status, proposal_id)
+        _write_json(p, data)
+        return p
+
+    def _move_revision(user_id: str, from_status: str, to_status: str, proposal_id: str, data: Dict[str, Any]) -> None:
+        src = _revision_path(user_id, from_status, proposal_id)
+        dst = _save_revision(user_id, to_status, proposal_id, data)
+        if os.path.exists(src) and os.path.abspath(src) != os.path.abspath(dst):
+            try:
+                os.remove(src)
+            except Exception:
+                pass
+
+    def _load_library_mod(user_id: str, mod_id: str) -> Dict[str, Any]:
+        path = _library_file_path(user_id, mod_id)
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail="target mod not found in library")
+        return _read_json(path)
+
+    def _save_library_mod(user_id: str, mod_id: str, data: Dict[str, Any]) -> None:
+        path = _library_file_path(user_id, mod_id)
+        _write_json(path, data)
 
     def _read_json(path: str) -> Dict[str, Any]:
         with open(path, "r", encoding="utf-8") as f:
@@ -871,5 +920,424 @@ def build_admin_router(
             {"rules_keys": list(normalized.keys())},
         )
         return {"status": "success", "data": {"name": req.name, "rules": normalized}}
+
+    @router.get("/api/admin/skills/snapshot")
+    def export_skill_snapshot(
+        download: bool = False,
+        admin_session: Dict[str, Any] = require_admin,
+        user_id: str = get_user_id,
+    ):
+        _ = admin_session
+        engine = get_engine(user_id)
+        pm = getattr(engine, "pm", None) if engine else None
+
+        enabled_skills: List[str] = []
+        all_skills: List[str] = []
+        phone_system_enabled = True
+        if pm is not None:
+            try:
+                enabled_skills = list(pm.get_enabled_skills()) if hasattr(pm, "get_enabled_skills") else []
+            except Exception:
+                enabled_skills = []
+            try:
+                all_skills = sorted(list(getattr(pm, "skills", {}).keys()))
+            except Exception:
+                all_skills = []
+            try:
+                phone_system_enabled = bool(pm.is_phone_system_enabled()) if hasattr(pm, "is_phone_system_enabled") else True
+            except Exception:
+                phone_system_enabled = True
+
+        target = _editor_target(user_id)
+        state = read_user_state(user_id)
+        snapshot = {
+            "ts": datetime.now().isoformat(timespec="seconds"),
+            "user_id": str(user_id),
+            "editor_target": target,
+            "active_mod_id": str(state.get("mod_id", "") or ""),
+            "phone_system_enabled": phone_system_enabled,
+            "enabled_skills": enabled_skills,
+            "all_skills": all_skills,
+            "skill_count": len(enabled_skills),
+        }
+        if download:
+            body = json.dumps(snapshot, ensure_ascii=False, indent=2)
+            return Response(
+                content=body,
+                media_type="application/json; charset=utf-8",
+                headers={"Content-Disposition": "attachment; filename=skill_snapshot.json"},
+            )
+        return {"status": "success", "data": snapshot}
+
+    @router.get("/api/admin/skills/catalog")
+    def get_skill_catalog(
+        active_only: bool = False,
+        admin_session: Dict[str, Any] = require_admin,
+        user_id: str = get_user_id,
+    ):
+        _ = admin_session
+        engine = get_engine(user_id)
+        pm = getattr(engine, "pm", None) if engine else None
+        items: List[Dict[str, Any]] = []
+        if pm is not None and hasattr(pm, "get_user_skill_catalog"):
+            try:
+                rows = pm.get_user_skill_catalog({}) or []
+                for row in rows:
+                    item = {
+                        "id": str(row.get("id", "")),
+                        "name": str(row.get("name", "")),
+                        "description": str(row.get("description", "")),
+                        "file_path": str(row.get("file_path", "")),
+                        "enabled": bool(row.get("enabled", True)),
+                        "when": str(row.get("when", "always")),
+                        "target": str(row.get("target", "")),
+                        "priority": int(row.get("priority", 100) or 100),
+                        "tags": row.get("tags") if isinstance(row.get("tags"), list) else [],
+                        "active": bool(row.get("active", True)),
+                    }
+                    if active_only and not item["active"]:
+                        continue
+                    items.append(item)
+            except Exception:
+                items = []
+        return {"status": "success", "data": {"count": len(items), "items": items}}
+
+    @router.get("/api/admin/revisions")
+    def list_revisions(
+        status: str = "queue",
+        limit: int = 50,
+        admin_session: Dict[str, Any] = require_admin,
+        user_id: str = get_user_id,
+    ):
+        _ = admin_session
+        s = str(status or "queue").strip()
+        if s not in {"queue", "applied", "rejected"}:
+            s = "queue"
+        d = _revisions_dir(user_id, s)
+        if not os.path.exists(d):
+            return {"status": "success", "data": {"items": [], "count": 0}}
+        rows: List[Dict[str, Any]] = []
+        for fn in os.listdir(d):
+            if not fn.endswith(".json"):
+                continue
+            path = os.path.join(d, fn)
+            try:
+                row = _read_json(path)
+            except Exception:
+                continue
+            rows.append(
+                {
+                    "proposal_id": str(row.get("proposal_id", "") or "").strip() or fn[:-5],
+                    "created_at": str(row.get("created_at", "")),
+                    "status": str(row.get("status", s)),
+                    "target_mod_id": str(row.get("target_mod_id", "")),
+                    "summary": str(row.get("summary", "")),
+                    "risk_level": str(row.get("risk_level", "medium")),
+                    "changes_count": len(row.get("changes", []) if isinstance(row.get("changes", []), list) else []),
+                    "memory_candidates_count": len(row.get("memory_candidates", []) if isinstance(row.get("memory_candidates", []), list) else []),
+                    "quality_score": int(row.get("quality_score", 0) or 0),
+                    "priority": str(row.get("priority", "medium") or "medium"),
+                    "validator": row.get("validator", {}) if isinstance(row.get("validator", {}), dict) else {},
+                }
+            )
+        rows.sort(key=lambda x: str(x.get("created_at", "")), reverse=True)
+        lim = max(1, min(int(limit or 50), 200))
+        return {"status": "success", "data": {"items": rows[:lim], "count": len(rows)}}
+
+    @router.get("/api/admin/revisions/{proposal_id}")
+    def get_revision_detail(
+        proposal_id: str,
+        admin_session: Dict[str, Any] = require_admin,
+        user_id: str = get_user_id,
+    ):
+        _ = admin_session
+        st, _, data = _load_revision(user_id, proposal_id)
+        if not st:
+            raise HTTPException(status_code=404, detail="proposal not found")
+        return {"status": "success", "data": data, "bucket": st}
+
+    @router.post("/api/admin/revisions/{proposal_id}/approve")
+    def approve_revision(
+        proposal_id: str,
+        req: RevisionDecisionReq,
+        admin_session: Dict[str, Any] = require_admin,
+        user_id: str = get_user_id,
+    ):
+        _ = admin_session
+        st, _, data = _load_revision(user_id, proposal_id)
+        if not st:
+            raise HTTPException(status_code=404, detail="proposal not found")
+        data["status"] = "approved"
+        data["approved_at"] = datetime.now().isoformat(timespec="seconds")
+        data["approved_note"] = str(req.note or "")
+        _move_revision(user_id, st, "applied", proposal_id, data)
+        append_audit_log(user_id, "agent_revision_approve", "ok", proposal_id, {"note": req.note or ""})
+        return {"status": "success", "data": {"proposal_id": proposal_id, "status": "approved"}}
+
+    @router.post("/api/admin/revisions/{proposal_id}/reject")
+    def reject_revision(
+        proposal_id: str,
+        req: RevisionDecisionReq,
+        admin_session: Dict[str, Any] = require_admin,
+        user_id: str = get_user_id,
+    ):
+        _ = admin_session
+        st, _, data = _load_revision(user_id, proposal_id)
+        if not st:
+            raise HTTPException(status_code=404, detail="proposal not found")
+        data["status"] = "rejected"
+        data["rejected_at"] = datetime.now().isoformat(timespec="seconds")
+        data["rejected_note"] = str(req.note or "")
+        _move_revision(user_id, st, "rejected", proposal_id, data)
+        append_audit_log(user_id, "agent_revision_reject", "ok", proposal_id, {"note": req.note or ""})
+        return {"status": "success", "data": {"proposal_id": proposal_id, "status": "rejected"}}
+
+    @router.post("/api/admin/revisions/{proposal_id}/apply_memory")
+    def apply_revision_memory(
+        proposal_id: str,
+        req: RevisionApplyMemoryReq,
+        admin_session: Dict[str, Any] = require_admin,
+        user_id: str = get_user_id,
+    ):
+        _ = admin_session
+        st, _, data = _load_revision(user_id, proposal_id)
+        if not st:
+            raise HTTPException(status_code=404, detail="proposal not found")
+        if str(data.get("status", "")).lower() not in {"approved", "applied"}:
+            raise HTTPException(status_code=400, detail="proposal must be approved before apply_memory")
+
+        engine = get_engine(user_id)
+        if not engine or not hasattr(engine, "mm") or not hasattr(engine.mm, "vector_store"):
+            raise HTTPException(status_code=503, detail="memory engine unavailable")
+
+        target_mod_id = str(data.get("target_mod_id", "") or "").strip()
+        if not target_mod_id:
+            raise HTTPException(status_code=400, detail="target_mod_id missing")
+
+        from src.models.schema import MemoryItem  # lazy import
+        import uuid
+
+        candidates = data.get("memory_candidates", [])
+        if not isinstance(candidates, list):
+            candidates = []
+        lim = max(1, min(int(req.limit or 10), 50))
+        payload = []
+        for item in candidates[:lim]:
+            if not isinstance(item, dict):
+                continue
+            content = str(item.get("content", "") or "").strip()
+            if not content:
+                continue
+            importance = int(item.get("importance", 6) or 6)
+            importance = max(1, min(10, importance))
+            payload.append(
+                MemoryItem(
+                    id=str(uuid.uuid4()),
+                    type="mod_long_term",
+                    content=content,
+                    summary=content[:120],
+                    importance=importance,
+                    related_entities=[target_mod_id],
+                )
+            )
+        if payload:
+            engine.mm.vector_store.add_memories(payload, save_id=f"mod:{target_mod_id}")
+        data["memory_applied_at"] = datetime.now().isoformat(timespec="seconds")
+        data["memory_applied_count"] = len(payload)
+        _save_revision(user_id, st, proposal_id, data)
+        append_audit_log(
+            user_id,
+            "agent_revision_apply_memory",
+            "ok",
+            proposal_id,
+            {"count": len(payload), "target_mod_id": target_mod_id},
+        )
+        return {"status": "success", "data": {"proposal_id": proposal_id, "applied_count": len(payload)}}
+
+    @router.post("/api/admin/revisions/{proposal_id}/apply_to_draft")
+    def apply_revision_to_draft(
+        proposal_id: str,
+        req: RevisionDecisionReq,
+        admin_session: Dict[str, Any] = require_admin,
+        user_id: str = get_user_id,
+    ):
+        _ = admin_session
+        st, _, data = _load_revision(user_id, proposal_id)
+        if not st:
+            raise HTTPException(status_code=404, detail="proposal not found")
+        if str(data.get("status", "")).lower() not in {"approved", "applied"}:
+            raise HTTPException(status_code=400, detail="proposal must be approved before apply_to_draft")
+        validator = data.get("validator", {}) if isinstance(data.get("validator", {}), dict) else {}
+        blocked_rules = validator.get("blocked_rules", []) if isinstance(validator.get("blocked_rules", []), list) else []
+        quality_score = int(data.get("quality_score", 0) or 0)
+        run_samples = int(validator.get("run_sample_count", 0) or 0)
+        allow_override = "force_apply" in str(req.note or "").lower()
+        if (quality_score < 50 or run_samples < 2 or "insufficient_run_samples" in blocked_rules) and not allow_override:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"proposal blocked by quality gate: quality={quality_score}, samples={run_samples}. "
+                    "如需强制应用，请在备注中包含 force_apply。"
+                ),
+            )
+
+        target_mod_id = str(data.get("target_mod_id", "") or "").strip()
+        if not target_mod_id or target_mod_id == "default":
+            raise HTTPException(status_code=400, detail="invalid target_mod_id")
+
+        mod_data = _load_library_mod(user_id, target_mod_id)
+        content = mod_data.get("content", {}) if isinstance(mod_data.get("content", {}), dict) else {}
+        md_files = dict(content.get("md", {}) or {})
+        csv_files = dict(content.get("csv", {}) or {})
+
+        changes = data.get("changes", [])
+        if not isinstance(changes, list) or not changes:
+            raise HTTPException(status_code=400, detail="no changes to apply")
+
+        backup_rows: List[Dict[str, Any]] = []
+        applied = 0
+        skipped_legacy = 0
+        for item in changes:
+            if not isinstance(item, dict):
+                continue
+            file_name = str(item.get("file", "") or "").strip()
+            op = str(item.get("op", "update") or "update").strip().lower()
+            content_after = str(item.get("content_after", "") or "").strip()
+            if op != "update":
+                continue
+            if not file_name.startswith(("prompts/", "events/")):
+                continue
+
+            if file_name.startswith("prompts/"):
+                rel = file_name[len("prompts/"):].strip()
+                if not rel:
+                    continue
+                old_val = str(md_files.get(rel, "") or "")
+                backup_rows.append({"file": file_name, "old_content": old_val})
+                if content_after:
+                    md_files[rel] = content_after
+                else:
+                    skipped_legacy += 1
+                    continue
+                applied += 1
+            elif file_name.startswith("events/"):
+                rel = file_name[len("events/"):].strip()
+                if not rel:
+                    continue
+                old_val = str(csv_files.get(rel, "") or "")
+                backup_rows.append({"file": file_name, "old_content": old_val})
+                if content_after:
+                    csv_files[rel] = content_after
+                else:
+                    skipped_legacy += 1
+                    continue
+                applied += 1
+
+        if applied <= 0:
+            raise HTTPException(status_code=400, detail="no applicable changes")
+
+        mod_data["content"] = {"md": md_files, "csv": csv_files}
+        mod_data["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        mod_data["manifest"] = build_manifest(
+            mod_id=str(mod_data.get("id", target_mod_id)),
+            name=str(mod_data.get("name", target_mod_id)),
+            author=str(mod_data.get("author", f"User_{str(user_id)[:4]}")),
+            source="library",
+            content=mod_data["content"],
+        )
+        _save_library_mod(user_id, target_mod_id, mod_data)
+
+        data["draft_applied_at"] = datetime.now().isoformat(timespec="seconds")
+        data["draft_applied_note"] = str(req.note or "")
+        data["draft_applied_count"] = applied
+        data["draft_backup"] = {
+            "target_mod_id": target_mod_id,
+            "files": backup_rows[:50],
+        }
+        _save_revision(user_id, st, proposal_id, data)
+        append_audit_log(
+            user_id,
+            "agent_revision_apply_to_draft",
+            "ok",
+            proposal_id,
+            {"target_mod_id": target_mod_id, "applied": applied},
+        )
+        return {
+            "status": "success",
+            "data": {
+                "proposal_id": proposal_id,
+                "applied": applied,
+                "skipped_without_content_after": skipped_legacy,
+                "target_mod_id": target_mod_id,
+            },
+        }
+
+    @router.post("/api/admin/revisions/{proposal_id}/rollback")
+    def rollback_revision_apply(
+        proposal_id: str,
+        req: RevisionDecisionReq,
+        admin_session: Dict[str, Any] = require_admin,
+        user_id: str = get_user_id,
+    ):
+        _ = admin_session
+        st, _, data = _load_revision(user_id, proposal_id)
+        if not st:
+            raise HTTPException(status_code=404, detail="proposal not found")
+        backup = data.get("draft_backup", {}) if isinstance(data.get("draft_backup", {}), dict) else {}
+        target_mod_id = str(backup.get("target_mod_id", "") or "").strip()
+        files = backup.get("files", []) if isinstance(backup.get("files", []), list) else []
+        if not target_mod_id or not files:
+            raise HTTPException(status_code=400, detail="no draft backup to rollback")
+
+        mod_data = _load_library_mod(user_id, target_mod_id)
+        content = mod_data.get("content", {}) if isinstance(mod_data.get("content", {}), dict) else {}
+        md_files = dict(content.get("md", {}) or {})
+        csv_files = dict(content.get("csv", {}) or {})
+
+        restored = 0
+        for item in files:
+            if not isinstance(item, dict):
+                continue
+            file_name = str(item.get("file", "") or "").strip()
+            old_content = str(item.get("old_content", "") or "")
+            if file_name.startswith("prompts/"):
+                rel = file_name[len("prompts/"):].strip()
+                if not rel:
+                    continue
+                md_files[rel] = old_content
+                restored += 1
+            elif file_name.startswith("events/"):
+                rel = file_name[len("events/"):].strip()
+                if not rel:
+                    continue
+                csv_files[rel] = old_content
+                restored += 1
+
+        if restored <= 0:
+            raise HTTPException(status_code=400, detail="rollback restored 0 files")
+
+        mod_data["content"] = {"md": md_files, "csv": csv_files}
+        mod_data["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        mod_data["manifest"] = build_manifest(
+            mod_id=str(mod_data.get("id", target_mod_id)),
+            name=str(mod_data.get("name", target_mod_id)),
+            author=str(mod_data.get("author", f"User_{str(user_id)[:4]}")),
+            source="library",
+            content=mod_data["content"],
+        )
+        _save_library_mod(user_id, target_mod_id, mod_data)
+
+        data["rollback_at"] = datetime.now().isoformat(timespec="seconds")
+        data["rollback_note"] = str(req.note or "")
+        data["rollback_count"] = restored
+        _save_revision(user_id, st, proposal_id, data)
+        append_audit_log(
+            user_id,
+            "agent_revision_rollback",
+            "ok",
+            proposal_id,
+            {"target_mod_id": target_mod_id, "restored": restored},
+        )
+        return {"status": "success", "data": {"proposal_id": proposal_id, "restored": restored, "target_mod_id": target_mod_id}}
 
     return router

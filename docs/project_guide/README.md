@@ -100,3 +100,6 @@ AI_Dialogue/
 - [账户系统设计](./account_system.md)
 - [叙事记忆系统设计（v1）](./narrative_memory_system.md)
 - [系统驱动重构计划（优先级版）](./system_driven_refactor_plan.md)
+- [玩法增强改造计划：资金门槛 + AI 事件概括兜底](./gameplay_economy_and_fallback_plan.md)
+- [Agent 自迭代修订治理设计](./agent_revision_governance.md)
+- [Skill 与模组市场解耦改造方案](./skill_mod_decoupling_plan.md)

@@ -11,6 +11,8 @@ interface DialogBoxProps {
     parseMarktext: (text: string) => ReactNode;
     speakerName?: string;
     pendingChoice?: string | null;
+    avgResponseMs?: number;
+    autoPlayDialogue?: boolean;
 }
 
 export const DialogBox = ({
@@ -22,9 +24,12 @@ export const DialogBox = ({
     scrollRef,
     parseMarktext,
     speakerName,
-    pendingChoice
+    pendingChoice,
+    avgResponseMs = 8000,
+    autoPlayDialogue = false
 }: DialogBoxProps) => {
     const [loadingPhase, setLoadingPhase] = useState(0);
+    const [loadingElapsedMs, setLoadingElapsedMs] = useState(0);
 
     useEffect(() => {
         if (!(isLoading && pendingChoice)) {
@@ -38,6 +43,18 @@ export const DialogBox = ({
             clearInterval(timer);
         };
     }, [isLoading, pendingChoice]);
+
+    useEffect(() => {
+        if (!isLoading) {
+            setLoadingElapsedMs(0);
+            return;
+        }
+        const startedAt = Date.now();
+        const timer = setInterval(() => {
+            setLoadingElapsedMs(Date.now() - startedAt);
+        }, 120);
+        return () => clearInterval(timer);
+    }, [isLoading]);
 
     const stageHints = useMemo(
         () => [
@@ -53,6 +70,9 @@ export const DialogBox = ({
         ? `你选择了：${pendingChoice}\n\n${stageHints[loadingPhase]}`
         : "";
     const renderText = isLoading && optimisticText ? optimisticText : (typedText || "等待故事载入...");
+    const expectedMs = Math.max(2500, Number(avgResponseMs || 8000));
+    const ratio = Math.max(0, Math.min(1.2, loadingElapsedMs / expectedMs));
+    const progressPercent = Math.min(96, Math.round((1 - Math.exp(-2.4 * ratio)) * 100));
 
     return (
         <div className="w-[95%] mx-auto mb-6 relative group/dialog">
@@ -76,13 +96,27 @@ export const DialogBox = ({
                 {/* Loading hint (non-blocking) */}
                 {!isTyping && isLoading && (
                     <div className="absolute right-5 bottom-4 z-20">
-                        <div className="flex items-center text-[var(--color-cyan-dark)] font-black text-[10px] tracking-[0.15em] uppercase bg-white/90 backdrop-blur-md px-4 py-2 rounded-full border border-[var(--color-cyan-main)]/20 shadow-sm">
-                            <RefreshCcw className="mr-2 text-[var(--color-cyan-main)] animate-spin" size={12} />
-                            {pendingChoice ? '生成中' : '对话生成中'}
-                            <span className="ml-2 flex space-x-1 min-w-[14px]">
-                                <span className="w-1 h-1 bg-[var(--color-cyan-dark)] rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                                <span className="w-1 h-1 bg-[var(--color-cyan-dark)] rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                                <span className="w-1 h-1 bg-[var(--color-cyan-dark)] rounded-full animate-bounce"></span>
+                        <div className="w-[260px] bg-white/90 backdrop-blur-md px-3 py-2 rounded-xl border border-[var(--color-cyan-main)]/20 shadow-sm">
+                            <div className="flex items-center justify-between text-[var(--color-cyan-dark)] font-black text-[10px] tracking-[0.15em] uppercase">
+                                <div className="flex items-center">
+                                    <RefreshCcw className="mr-2 text-[var(--color-cyan-main)] animate-spin" size={12} />
+                                    {pendingChoice ? '生成中' : '对话生成中'}
+                                </div>
+                                <span className="tabular-nums text-[9px] text-[var(--color-cyan-main)]">
+                                    {progressPercent}%
+                                </span>
+                            </div>
+                            <div className="mt-1.5 h-1.5 rounded-full bg-[var(--color-cyan-light)]/60 overflow-hidden">
+                                <div
+                                    className="h-full rounded-full bg-gradient-to-r from-[var(--color-cyan-main)] to-[var(--color-yellow-main)] transition-[width] duration-150"
+                                    style={{ width: `${progressPercent}%` }}
+                                />
+                            </div>
+                            <div className="mt-1 text-[9px] text-slate-500">
+                                预计约 {Math.max(1, Math.round(expectedMs / 1000))}s
+                            </div>
+                            <span className="sr-only">
+                                当前进度 {progressPercent}%
                             </span>
                         </div>
                     </div>
@@ -91,7 +125,7 @@ export const DialogBox = ({
                 {/* Prompt to click text */}
                 {!isDialogFinished && !isLoading && !isTyping && (
                     <div className="sticky bottom-0 right-0 float-right pt-4 px-2 py-1 bg-gradient-to-l from-white/0 via-white/80 to-white text-[10px] text-[var(--color-cyan-main)]/70 font-black tracking-[0.5em] uppercase hover:text-[var(--color-cyan-dark)] transition-colors animate-pulse">
-                        点击继续阅读
+                        {autoPlayDialogue ? '自动播放中' : '点击继续阅读'}
                     </div>
                 )}
             </div>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 interface ActionOptionsProps {
   options: string[];
+  optionsMeta?: Array<{ kind?: string; disabled?: boolean; reason?: string; cost_label?: string }>;
   onSelect: (option: string) => void;
   onHover?: (option: string) => void;
   disabled: boolean;
@@ -28,7 +29,7 @@ const decodeOptionLabel = (raw: string): { title: string; badge: string | null; 
   };
 };
 
-export const ActionOptions = ({ options, onSelect, onHover, disabled }: ActionOptionsProps) => {
+export const ActionOptions = ({ options, optionsMeta = [], onSelect, onHover, disabled }: ActionOptionsProps) => {
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customText, setCustomText] = useState('');
   if (options.length === 0) return null;
@@ -45,14 +46,22 @@ export const ActionOptions = ({ options, onSelect, onHover, disabled }: ActionOp
     <div className="absolute left-10 bottom-[28vh] w-96 flex flex-col space-y-4 pointer-events-auto z-30">
       {options.map((opt, idx) => {
         const decoded = decodeOptionLabel(opt);
+        const meta = optionsMeta[idx] || {};
+        const optionDisabled = !!disabled || !!meta.disabled;
+        const disabledReason = String(meta.reason || '').trim();
+        const costLabel = String(meta.cost_label || '').trim();
         return (
           <button
             key={idx}
-            disabled={disabled}
+            disabled={optionDisabled}
             onClick={() => onSelect(opt)}
-            onMouseEnter={() => !disabled && onHover && onHover(opt)}
-            title={decoded.tooltip || ''}
-            className="p-4 bg-white/95 backdrop-blur-xl border-2 border-[var(--color-cyan-main)]/30 rounded-2xl shadow-2xl hover:border-[var(--color-yellow-main)] hover:bg-white hover:-translate-x-2 transition-all duration-300 disabled:opacity-50 font-black text-[var(--color-cyan-dark)] flex items-center group relative overflow-hidden text-left active:scale-95"
+            onMouseEnter={() => !optionDisabled && onHover && onHover(opt)}
+            title={disabledReason || decoded.tooltip || ''}
+            className={`p-4 bg-white/95 backdrop-blur-xl border-2 rounded-2xl shadow-2xl transition-all duration-300 font-black text-[var(--color-cyan-dark)] flex items-center group relative overflow-hidden text-left active:scale-95 ${
+              optionDisabled
+                ? 'opacity-55 border-slate-300 cursor-not-allowed'
+                : 'border-[var(--color-cyan-main)]/30 hover:border-[var(--color-yellow-main)] hover:bg-white hover:-translate-x-2'
+            }`}
           >
             <div className="absolute inset-0 bg-gradient-to-r from-[var(--color-cyan-light)]/0 via-[var(--color-cyan-light)]/50 to-[var(--color-cyan-light)]/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
             <div className="w-10 h-10 rounded-xl bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] flex items-center justify-center text-sm font-black mr-4 group-hover:bg-[var(--color-yellow-main)] transition-all shrink-0 border border-[var(--color-cyan-main)]/20 shadow-sm">
@@ -65,6 +74,13 @@ export const ActionOptions = ({ options, onSelect, onHover, disabled }: ActionOp
                 </div>
               )}
               <span>{decoded.title}</span>
+              {(costLabel || disabledReason) && (
+                <div className="mt-1 text-[10px] font-bold text-slate-500">
+                  {costLabel && <span>{costLabel}</span>}
+                  {costLabel && disabledReason && <span className="mx-1">·</span>}
+                  {disabledReason && <span>{disabledReason}</span>}
+                </div>
+              )}
             </div>
           </button>
         );

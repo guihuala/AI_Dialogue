@@ -1,9 +1,34 @@
 import { create } from 'zustand';
 import { gameApi } from '../api/gameApi';
 
+type SkillTraceTurn = {
+  enabled_skills: string[];
+  tool_call_names: string[];
+};
+
+const SKILL_TRACE_WINDOW_SIZE = 20;
+
+const updateSkillTraceWindow = (
+  prevWindow: SkillTraceTurn[],
+  enabledSkillsRaw: unknown,
+  toolCallsRaw: unknown,
+): SkillTraceTurn[] => {
+  const enabled_skills = Array.isArray(enabledSkillsRaw)
+    ? enabledSkillsRaw.map((x) => String(x)).filter(Boolean)
+    : [];
+  const tool_call_names = Array.isArray(toolCallsRaw)
+    ? toolCallsRaw
+        .map((c: any) => String(c?.name || '').trim())
+        .filter(Boolean)
+    : [];
+  const next = [...(prevWindow || []), { enabled_skills, tool_call_names }];
+  return next.slice(-SKILL_TRACE_WINDOW_SIZE);
+};
+
 interface GameState {
   isPlaying: boolean;
   isLoading: boolean;
+  avgResponseMs: number;
   
   // 主角数值
   san: number;
@@ -29,6 +54,7 @@ interface GameState {
   // 故事与交互
   displayText: string;
   nextOptions: string[];
+  nextOptionsMeta: Array<{ kind?: string; disabled?: boolean; reason?: string; cost_label?: string }>;
   isEnd: boolean;
   history: Array<{turn: number, text: string, rawJson?: string, narrativeState?: Record<string, any>}>;
   wechatNotifications: Array<{sender: string, message: string}>;
@@ -60,6 +86,7 @@ interface GameState {
     ai_usage?: any;
     state_delta?: any;
   } | null;
+  skillTraceWindow: SkillTraceTurn[];
 
   // actions
   startGame: (roommates?: string[], modId?: string, maxTurns?: number) => Promise<void>;
@@ -85,6 +112,7 @@ const isTransitionChoice = (choice: string): boolean => {
 export const useGameStore = create<GameState>((set, get) => ({
   isPlaying: false,
   isLoading: false,
+  avgResponseMs: 8000,
   san: 100,
   money: 2000,
   gpa: 4.0,
@@ -104,6 +132,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   weeklySummary: null,
   displayText: '',
   nextOptions: [],
+  nextOptionsMeta: [],
   isEnd: false,
   history: [],
   wechatNotifications: [],
@@ -126,6 +155,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   })(),
   pendingChoice: null,
   turnDebug: null,
+  skillTraceWindow: [],
   phoneSourceStats: {},
   stateToolStats: { total: 0, accepted: 0, rejected: 0 },
 
@@ -133,8 +163,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startGame: async (roommates = [], modId?: string, maxTurns?: number) => {
     set({ isLoading: true, pendingChoice: null });
+    const reqStartedAt = Date.now();
     try {
       const data = await gameApi.startGame(roommates, modId || 'default', undefined, 'slot_0', maxTurns);
+      const elapsedMs = Math.max(300, Date.now() - reqStartedAt);
       set({
         currentSaveId: 'slot_0',
         isPlaying: true,
@@ -159,6 +191,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         weeklySummary: data.weekly_summary || null,
         displayText: data.display_text,
         nextOptions: data.next_options || [],
+        nextOptionsMeta: Array.isArray(data.next_options_meta) ? data.next_options_meta : [],
         isEnd: data.is_end || false,
         history: [{
           turn: data.turn,
@@ -169,6 +202,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         wechatNotifications: data.wechat_notifications || [],
         phoneSystemEnabled: data.phone_system_enabled !== false,
         eventScript: data.event_script || null
+        ,
+        avgResponseMs: (() => {
+          const prev = Number(get().avgResponseMs || 8000);
+          return Math.round(prev * 0.75 + elapsedMs * 0.25);
+        })()
         ,
         phoneSourceStats: (() => {
           const src = String(data.phone_message_source || 'none');
@@ -196,6 +234,8 @@ export const useGameStore = create<GameState>((set, get) => ({
               state_delta: data.state_delta || undefined,
             }
           : null
+        ,
+        skillTraceWindow: updateSkillTraceWindow([], data.enabled_skills, data.tool_calls_summary),
       });
     } catch (e) {
       console.error(e);
@@ -238,6 +278,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             turn: nextTurnNum || prev.turn + 1,
             displayText: newDisplayText,
             nextOptions: nextTurn ? (nextTurn.player_choices || []).map((c: any) => c.text) : [],
+            nextOptionsMeta: [],
             isEnd: nextTurn ? nextTurn.is_end : true,
             history: [...prev.history, {
               turn: prev.turn,
@@ -254,6 +295,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     
     // --- [BACKEND FALLBACK / TRANSITION] ---
     set({ isLoading: true, pendingChoice: choice });
+    const reqStartedAt = Date.now();
     try {
       const isTransition = isTransitionChoice(choice) || state.isEnd;
       const turnReq = {
@@ -273,6 +315,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       };
       
       const data = await gameApi.performTurn(turnReq, undefined, state.currentSaveId);
+      const elapsedMs = Math.max(300, Date.now() - reqStartedAt);
       set((prev) => ({
         isLoading: false,
         pendingChoice: null,
@@ -294,6 +337,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         weeklySummary: data.weekly_summary || null,
         displayText: data.display_text,
         nextOptions: data.next_options || [],
+        nextOptionsMeta: Array.isArray(data.next_options_meta) ? data.next_options_meta : [],
         isEnd: data.is_end || false,
         history: [...prev.history, {
           turn: data.turn,
@@ -305,6 +349,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         phoneSystemEnabled: data.phone_system_enabled !== false,
         isPhoneOpen: (data.phone_system_enabled === false) ? false : prev.isPhoneOpen,
         eventScript: data.event_script || null
+        ,
+        avgResponseMs: Math.round(Number(prev.avgResponseMs || 8000) * 0.75 + elapsedMs * 0.25)
         ,
         phoneSourceStats: (() => {
           const prevStats = prev.phoneSourceStats || {};
@@ -338,6 +384,12 @@ export const useGameStore = create<GameState>((set, get) => ({
               state_delta: data.state_delta || undefined,
             }
           : null
+        ,
+        skillTraceWindow: updateSkillTraceWindow(
+          prev.skillTraceWindow || [],
+          data.enabled_skills,
+          data.tool_calls_summary,
+        ),
       }));
 
       // 性能优化：如果在 transition 之后拿到了新剧本，则无需预取
@@ -420,6 +472,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               // affinity, hygiene, etc should ideally be in save too
               displayText: "存档已成功加载，您可以继续之前的进度。",
               nextOptions: ["【进入下一幕】继续当前存档"],
+              nextOptionsMeta: [],
               isEnd: false,
               history: gameState.history || [],
               wechatNotifications: []
@@ -428,6 +481,8 @@ export const useGameStore = create<GameState>((set, get) => ({
               ,
               phoneSourceStats: {},
               turnDebug: null
+              ,
+              skillTraceWindow: []
               ,
               stateToolStats: { total: 0, accepted: 0, rejected: 0 }
           });
@@ -490,9 +545,12 @@ export const useGameStore = create<GameState>((set, get) => ({
               phoneSystemEnabled: true,
               isPhoneOpen: false,
               displayText: '',
+              nextOptionsMeta: [],
               phoneSourceStats: {},
               stateToolStats: { total: 0, accepted: 0, rejected: 0 },
               turnDebug: null
+              ,
+              skillTraceWindow: []
           });
       } catch (e) {
           console.error('Failed to reset game:', e);

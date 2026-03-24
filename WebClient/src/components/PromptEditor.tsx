@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Globe, Users, ScrollText, Terminal, Sparkles, GitGraph, Zap, Image, Settings2 } from 'lucide-react';
+import { Globe, Users, ScrollText, Terminal, Sparkles, Zap, Image, Settings2 } from 'lucide-react';
 import { gameApi } from '../api/gameApi';
+import { useGameStore } from '../store/gameStore';
 
 import { EditorHeader } from './editor/EditorHeader';
 import { EditorSidebar } from './editor/EditorSidebar';
@@ -11,6 +12,7 @@ import { SceneConfigEditor } from './editor/SceneConfigEditor';
 import { CodeWorkspace } from './editor/CodeWorkspace';
 import { TimelineView } from './editor/TimelineView';
 import { TopicExplorer } from './editor/TopicExplorer';
+import { SkillCenter } from './editor/SkillCenter';
 import { EditorModals } from './editor/EditorModals';
 import { EditorGuide } from './editor/EditorGuide';
 import { CharacterDetailModal } from './editor/CharacterDetailModal';
@@ -40,8 +42,10 @@ export const PromptEditor = ({
     adminPresetTarget = 'default',
     adminPresetModId = '',
 }: PromptEditorProps) => {
+    const skillTraceWindow = useGameStore((s) => s.skillTraceWindow);
     const defaultEnabledSkills = useMemo(() => SKILL_TOGGLE_OPTIONS.map((item) => item.key), []);
     const [eventWorkbench, setEventWorkbench] = useState<'story' | 'skeleton'>('story');
+    const [characterWorkbench, setCharacterWorkbench] = useState<'roster' | 'relation'>('roster');
     const [activeCategory, setActiveCategory] = useState<Category>('char');
     const [files, setFiles] = useState<{ md: string[], csv: string[] }>({ md: [], csv: [] });
     const [selectedFile, setSelectedFile] = useState<{ type: 'md' | 'csv', name: string } | null>(null);
@@ -49,6 +53,7 @@ export const PromptEditor = ({
     const [editMode, setEditMode] = useState<'visual' | 'code'>('visual');
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [stableRoster, setStableRoster] = useState<any>(null);
+    const [relationFileContent, setRelationFileContent] = useState('');
     const [showExplorer, setShowExplorer] = useState(true);
     const [eventFilter, setEventFilter] = useState<{ chapter?: string, type?: string } | undefined>(undefined);
     const [userState, setUserState] = useState<any>(null);
@@ -292,14 +297,6 @@ export const PromptEditor = ({
             setShowExplorer(false);
             setEditMode('visual');
             setSelectedFile(null); 
-        } else if (activeCategory === 'relation') {
-            const rel = files.md.find(f => f.includes('relationship.csv'));
-            console.log('[PromptEditor] Relation category, found rel:', rel);
-            if (rel) {
-                setSelectedFile({ type: 'md', name: rel });
-                setShowExplorer(false);
-                setEditMode('visual');
-            }
         } else {
             setShowExplorer(true);
         }
@@ -392,7 +389,6 @@ export const PromptEditor = ({
         { id: 'world', name: '世界设定', icon: Globe },
         { id: 'scene', name: '场景配置', icon: Image },
         { id: 'char', name: '角色管理', icon: Users },
-        { id: 'relation', name: '人物关系', icon: GitGraph }, 
         { id: 'event', name: '剧情编排', icon: ScrollText },
         { id: 'skills', name: '系统逻辑', icon: Zap },
         { id: 'all', name: '底层文件', icon: Terminal },
@@ -404,6 +400,80 @@ export const PromptEditor = ({
         }
         return stableRoster;
     }, [fileContent, selectedFile, stableRoster]);
+
+    const skillFileMap = useMemo<Record<string, string[]>>(() => {
+        const customSkillFiles = files.md
+            .filter((f) => f.startsWith('skills/') && !f.includes('slang_chapter_') && ![
+                'skills/secret_note.md',
+                'skills/relationship_milestone.md',
+                'skills/wechat_monitor.md',
+            ].includes(f));
+        return {
+            slang_dict: [
+                'skills/slang_chapter_1.md',
+                'skills/slang_chapter_2.md',
+                'skills/slang_chapter_3.md',
+                'skills/slang_chapter_4.md',
+            ].filter((f) => files.md.includes(f)),
+            academic_world: [
+                'world/base_setting.md',
+                'world/city_setting.md',
+                'world/major_setting.md',
+                'world/academic_npcs.md',
+            ].filter((f) => files.md.includes(f)),
+            character_roster: ['characters/roster.json'].filter((f) => files.md.includes(f)),
+            relationship_matrix: ['characters/relationship.csv'].filter((f) => files.md.includes(f)),
+            secret_note: ['skills/secret_note.md'].filter((f) => files.md.includes(f)),
+            relationship_milestone: ['skills/relationship_milestone.md'].filter((f) => files.md.includes(f)),
+            user_skills: customSkillFiles,
+        };
+    }, [files.md]);
+
+    const skillItems = useMemo(() => {
+        const enabled = Array.isArray(modFeatures?.enabled_skills) ? modFeatures.enabled_skills : defaultEnabledSkills;
+        const baseSkills = SKILL_TOGGLE_OPTIONS.map((item) => ({
+            key: item.key,
+            label: item.label,
+            desc: item.desc,
+            enabled: enabled.includes(item.key),
+            files: skillFileMap[item.key] || [],
+            primaryEditFile: (() => {
+                if (item.key === 'slang_dict') return 'skills/slang_chapter_1.md';
+                if (item.key === 'academic_world') return 'world/base_setting.md';
+                if (item.key === 'character_roster') return 'characters/roster.json';
+                if (item.key === 'relationship_matrix') return 'characters/relationship.csv';
+                if (item.key === 'secret_note') return 'skills/secret_note.md';
+                if (item.key === 'relationship_milestone') return 'skills/relationship_milestone.md';
+                if (item.key === 'user_skills') return (skillFileMap[item.key] || [])[0] || '';
+                return '';
+            })(),
+            crossModuleRef: item.key === 'academic_world' || item.key === 'character_roster' || item.key === 'relationship_matrix',
+        }));
+        const phoneSkill = {
+            key: '__phone_system__',
+            label: '手机系统',
+            desc: '控制手机消息系统（tool 优先）与通知展示能力',
+            enabled: modFeatures?.phone_system_enabled !== false,
+            files: [
+                'system/mod_features.json',
+                'skills/wechat_monitor.md',
+                'system/expression_system_prompt.md',
+                'system/expression_user_prompt.md',
+                'system/expression_json_contract.md',
+            ].filter((f) => files.md.includes(f)),
+            primaryEditFile: 'system/mod_features.json',
+            crossModuleRef: true,
+        };
+        return [phoneSkill, ...baseSkills];
+    }, [modFeatures?.enabled_skills, modFeatures?.phone_system_enabled, defaultEnabledSkills, skillFileMap, files.md]);
+
+    const handleToggleSkillFromCenter = async (skillKey: string) => {
+        if (skillKey === '__phone_system__') {
+            await handleTogglePhoneSystem(!(modFeatures?.phone_system_enabled !== false));
+            return;
+        }
+        await handleToggleSkill(skillKey);
+    };
 
     const parsedScenes = useMemo(() => {
         if (selectedFile?.name === 'world/scenes.json') {
@@ -531,18 +601,38 @@ export const PromptEditor = ({
     }, [fileContent, selectedFile]);
 
     const relationCsv = useMemo(() => {
-        if (activeCategory !== 'relation' || !selectedFile?.name?.includes('relationship.csv')) {
-            return parsedCsv;
-        }
-        if (!parsedCsv || !parsedRoster) return parsedCsv;
+        if (activeCategory !== 'char') return null;
+        if (!parsedRoster || !relationFileContent) return null;
+        const lines = relationFileContent.split('\n').filter(l => l.trim());
+        if (lines.length === 0) return null;
+        const headers = lines[0]
+            .split(',')
+            .map((h, idx) => {
+                const clean = h.replace(/\r/g, '').trim();
+                return idx === 0 ? clean.replace(/^\uFEFF/, '') : clean;
+            });
+        const rows = lines.slice(1).map(line => {
+            const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+            const row: Record<string, string> = {};
+            headers.forEach((h, i) => {
+                let val = (values[i] || '').replace(/\r/g, '').trim();
+                if (val.startsWith('"') && val.endsWith('"')) {
+                    val = val.substring(1, val.length - 1);
+                }
+                row[h] = val;
+            });
+            return row;
+        });
+        const relationParsed = { headers, rows };
+        if (!relationParsed || !parsedRoster) return relationParsed;
 
         const characterNames = Object.values(parsedRoster)
             .map((c: any) => (c?.name || '').trim())
             .filter((name: string) => !!name);
 
         const rowKey = (row: Record<string, string>) => `${row['评价者'] || ''}::${row['被评价者'] || ''}`;
-        const existing = new Set(parsedCsv.rows.map(rowKey));
-        const fullRows = [...parsedCsv.rows];
+        const existing = new Set(relationParsed.rows.map(rowKey));
+        const fullRows = [...relationParsed.rows];
 
         for (const evaluator of characterNames) {
             for (const evaluatee of characterNames) {
@@ -560,12 +650,32 @@ export const PromptEditor = ({
             }
         }
 
-        const headers = parsedCsv.headers.length > 0
-            ? parsedCsv.headers
+        const finalHeaders = relationParsed.headers.length > 0
+            ? relationParsed.headers
             : ['评价者', '被评价者', '表面态度', '内心真实评价'];
 
-        return { headers, rows: fullRows };
-    }, [activeCategory, selectedFile, parsedCsv, parsedRoster]);
+        return { headers: finalHeaders, rows: fullRows };
+    }, [activeCategory, relationFileContent, parsedRoster]);
+
+    useEffect(() => {
+        const loadRelation = async () => {
+            if (activeCategory !== 'char') return;
+            const rel = files.md.find(f => f.includes('relationship.csv'));
+            if (!rel) {
+                setRelationFileContent('');
+                return;
+            }
+            try {
+                const res = await readFileContent('md', rel);
+                if (res?.status === 'success') {
+                    setRelationFileContent(res.content || '');
+                }
+            } catch {
+                setRelationFileContent('');
+            }
+        };
+        loadRelation();
+    }, [activeCategory, files.md, selectedFile?.name]);
 
     const eventSkeletonPayload = useMemo(() => {
         if (activeCategory !== 'event') return null;
@@ -780,8 +890,18 @@ export const PromptEditor = ({
         const fileName = `skills/${data.name}.md`;
         setIsLoading(true);
         try {
+            const skillId = String(data.name || 'custom_skill').trim().toLowerCase().replace(/[^a-z0-9_\\-]/g, '_');
+            const skillName = String(data.name || 'custom_skill').trim();
+            const desc = String(data.target || '').trim();
             const fullContent = `---
-target: ${data.target}
+id: ${skillId}
+name: ${skillName}
+description: ${desc || '自定义扩展技能'}
+enabled: true
+priority: 100
+when: always
+target: ${data.target || 'general'}
+tags: [custom, user]
 created_at: ${new Date().toISOString()}
 ---
 
@@ -816,6 +936,27 @@ ${data.content}`;
             ...rows.map(r => headers.map(h => r[h] || '').join(','))
         ].join('\n');
         handleSave(csvContent);
+    };
+
+    const saveRelationCsv = async (headers: string[], rows: Record<string, string>[]) => {
+        const rel = files.md.find(f => f.includes('relationship.csv'));
+        if (!rel) {
+            setMessage('未找到 relationship.csv');
+            return;
+        }
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(r => headers.map(h => r[h] || '').join(','))
+        ].join('\n');
+        try {
+            await saveFileContent('md', rel, csvContent);
+            setRelationFileContent(csvContent);
+            setMessage('关系矩阵已保存');
+            setTimeout(() => setMessage(''), 1800);
+        } catch {
+            setMessage('关系矩阵保存失败');
+            setTimeout(() => setMessage(''), 2000);
+        }
     };
 
     const editCharacterSettings = async (char: any) => {
@@ -1094,6 +1235,38 @@ ${data.content}`;
                             </div>
                         </div>
                     )}
+                    {activeCategory === 'char' && selectedFile?.name.endsWith('roster.json') && editMode === 'visual' && (
+                        <div className="mb-4 rounded-2xl border border-[var(--color-cyan-main)]/15 bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div className="text-sm font-black text-[var(--color-cyan-dark)]">角色工作台</div>
+                                <div className="text-[10px] font-bold text-slate-500 mt-1">
+                                    角色档案与关系矩阵统一入口，按页签切换编辑。
+                                </div>
+                            </div>
+                            <div className="inline-flex items-center rounded-xl border border-[var(--color-cyan-main)]/20 bg-[var(--color-cyan-light)]/30 p-1">
+                                <button
+                                    onClick={() => setCharacterWorkbench('roster')}
+                                    className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition-all ${
+                                        characterWorkbench === 'roster'
+                                            ? 'bg-[var(--color-cyan-main)] text-white'
+                                            : 'text-[var(--color-cyan-dark)] hover:bg-white'
+                                    }`}
+                                >
+                                    角色档案
+                                </button>
+                                <button
+                                    onClick={() => setCharacterWorkbench('relation')}
+                                    className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition-all ${
+                                        characterWorkbench === 'relation'
+                                            ? 'bg-[var(--color-cyan-main)] text-white'
+                                            : 'text-[var(--color-cyan-dark)] hover:bg-white'
+                                    }`}
+                                >
+                                    关系矩阵
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     {message && (
                         <div className="fixed top-24 right-10 z-[100] animate-fade-in-up">
                             <div className="bg-[var(--color-cyan-dark)]/90 backdrop-blur-xl text-white px-8 py-5 rounded-[2rem] border border-white/20 shadow-2xl shadow-cyan-900/40 flex items-center">
@@ -1114,7 +1287,17 @@ ${data.content}`;
                         </div>
                     ) : (
                         <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-[var(--color-cyan-main)]/10 overflow-hidden relative group transition-all">
-                            {(activeCategory === 'world' || activeCategory === 'skills') && !selectedFile ? (
+                            {activeCategory === 'skills' && !selectedFile ? (
+                                <SkillCenter
+                                    skills={skillItems}
+                                    skillTraceWindow={skillTraceWindow}
+                                    canEdit={canEditCurrentMod}
+                                    isSavingFeatures={isSavingFeatures}
+                                    onToggleSkill={handleToggleSkillFromCenter}
+                                    onOpenFile={handleSelectTopic}
+                                    onAddNew={canEditCurrentMod ? () => setNewItemModal({ type: 'skill', name: '', description: '' }) : undefined}
+                                />
+                            ) : (activeCategory === 'world' || activeCategory === 'skills') && !selectedFile ? (
                                 <TopicExplorer
                                     category={activeCategory as any}
                                     files={files.md}
@@ -1189,15 +1372,49 @@ ${data.content}`;
                                     canEdit={canEditCurrentMod}
                                 />
                             ) : activeCategory === 'char' && selectedFile?.name.endsWith('roster.json') && editMode === 'visual' ? (
-                                <CharacterEditor
-                                    parsedRoster={parsedRoster}
-                                    onUpdateItem={updateRosterItem}
-                                    onUploadAvatar={handleAvatarUpload}
-                                    onEditSettings={editCharacterSettings}
-                                    onAddNew={() => setNewItemModal({ type: 'char', name: '', archetype: '', description: '' })}
-                                    onDelete={(id, name) => setDeleteConfirm({ type: 'char', id, name })}
-                                    canEdit={canEditCurrentMod}
-                                />
+                                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 bg-[var(--color-cyan-light)]/10">
+                                    {characterWorkbench === 'roster' ? (
+                                    <div className="rounded-2xl border border-[var(--color-cyan-main)]/12 bg-white overflow-hidden">
+                                        <CharacterEditor
+                                            parsedRoster={parsedRoster}
+                                            onUpdateItem={updateRosterItem}
+                                            onUploadAvatar={handleAvatarUpload}
+                                            onEditSettings={editCharacterSettings}
+                                            onAddNew={() => setNewItemModal({ type: 'char', name: '', archetype: '', description: '' })}
+                                            onDelete={(id, name) => setDeleteConfirm({ type: 'char', id, name })}
+                                            canEdit={canEditCurrentMod}
+                                        />
+                                    </div>
+                                    ) : (
+                                    <div className="rounded-2xl border border-[var(--color-cyan-main)]/12 bg-white overflow-hidden">
+                                        <div className="px-5 py-4 border-b border-[var(--color-soft-border)] bg-[var(--color-cyan-light)]/20">
+                                            <div className="text-lg font-black text-[var(--color-cyan-dark)]">人物关系矩阵</div>
+                                            <div className="text-[11px] text-slate-500 font-bold mt-1">在角色工作台中独立页签维护。</div>
+                                        </div>
+                                        <RelationshipMatrix
+                                            parsedRoster={parsedRoster}
+                                            parsedCsv={relationCsv}
+                                            onUpdateRow={(rowIndex, field, value) => {
+                                                if (!relationCsv) return;
+                                                const newRows = [...relationCsv.rows];
+                                                newRows[rowIndex] = { ...newRows[rowIndex], [field]: value.replace(/,/g, '，') };
+                                                saveRelationCsv(relationCsv.headers, newRows);
+                                            }}
+                                            onAddRow={(data) => {
+                                                if (!relationCsv) return;
+                                                const newRows = [...relationCsv.rows, data];
+                                                saveRelationCsv(relationCsv.headers, newRows);
+                                            }}
+                                            onSaveAll={() => {
+                                                if (relationCsv) {
+                                                    saveRelationCsv(relationCsv.headers, relationCsv.rows);
+                                                }
+                                            }}
+                                            canEdit={canEditCurrentMod}
+                                        />
+                                    </div>
+                                    )}
+                                </div>
                             ) : activeCategory === 'event' && selectedFile?.name?.includes('timeline.json') && editMode === 'visual' ? (
                                 <TimelineView
                                     content={fileContent}
@@ -1231,30 +1448,6 @@ ${data.content}`;
                                     onBack={backToTimeline}
                                     filter={eventFilter}
                                     focusMode={selectedFile?.name?.includes('00_开局剧情.csv') ? 'opening' : 'default'}
-                                    canEdit={canEditCurrentMod}
-                                />
-                            ) : activeCategory === 'relation' && selectedFile?.name?.includes('relationship.csv') && editMode === 'visual' ? (
-                                <RelationshipMatrix
-                                    parsedRoster={parsedRoster}
-                                    parsedCsv={relationCsv}
-                                    onUpdateRow={(rowIndex, field, value) => {
-                                        if (!relationCsv) return;
-                                        const newRows = [...relationCsv.rows];
-                                        newRows[rowIndex] = { ...newRows[rowIndex], [field]: value.replace(/,/g, '，') };
-                                        saveCsv(relationCsv.headers, newRows);
-                                    }}
-                                    onAddRow={(data) => {
-                                        if (!relationCsv) return;
-                                        const newRows = [...relationCsv.rows, data];
-                                        saveCsv(relationCsv.headers, newRows);
-                                    }}
-                                    onSaveAll={() => {
-                                        if (relationCsv) {
-                                            saveCsv(relationCsv.headers, relationCsv.rows);
-                                        } else {
-                                            handleSave();
-                                        }
-                                    }}
                                     canEdit={canEditCurrentMod}
                                 />
                             ) : (

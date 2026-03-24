@@ -8,9 +8,10 @@ import { AdminStorageTab } from './admin/AdminStorageTab';
 import { AdminUsersTab } from './admin/AdminUsersTab';
 import { AdminAuditTab } from './admin/AdminAuditTab';
 import { AdminPresetEditorTab } from './admin/AdminPresetEditorTab';
+import { AdminRevisionsTab } from './admin/AdminRevisionsTab';
 
 export const AdminDashboard = () => {
-    const [activeTab, setActiveTab] = useState<'workshop' | 'preset' | 'storage' | 'users' | 'audit'>('workshop');
+    const [activeTab, setActiveTab] = useState<'workshop' | 'preset' | 'storage' | 'users' | 'audit' | 'revisions'>('workshop');
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [password, setPassword] = useState('');
     const [authError, setAuthError] = useState<string | null>(null);
@@ -27,6 +28,7 @@ export const AdminDashboard = () => {
     const [adminUserQuery, setAdminUserQuery] = useState('');
     const [adminUserPage, setAdminUserPage] = useState(1);
     const [adminUserPagination, setAdminUserPagination] = useState<any>(null);
+    const [revisionRows, setRevisionRows] = useState<any[]>([]);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [confirmDialog, setConfirmDialog] = useState<{
         open: boolean;
@@ -85,6 +87,29 @@ export const AdminDashboard = () => {
         }
     };
 
+    const loadRevisions = async () => {
+        try {
+            const [queueRes, appliedRes, rejectedRes] = await Promise.all([
+                gameApi.getAdminRevisions({ status: 'queue', limit: 80 }),
+                gameApi.getAdminRevisions({ status: 'applied', limit: 80 }),
+                gameApi.getAdminRevisions({ status: 'rejected', limit: 80 }),
+            ]);
+            const all = [
+                ...(queueRes?.data?.items || []),
+                ...(appliedRes?.data?.items || []),
+                ...(rejectedRes?.data?.items || []),
+            ];
+            setRevisionRows(all);
+        } catch (e) {
+            const status = (e as any)?.response?.status;
+            if (status === 401) {
+                localStorage.removeItem('admin_token');
+                setIsAuthenticated(false);
+                setAuthError('管理员会话已失效，请重新验证。');
+            }
+        }
+    };
+
     const loadAdminUsers = async (targetPage?: number) => {
         try {
             const page = targetPage || adminUserPage;
@@ -121,6 +146,11 @@ export const AdminDashboard = () => {
         setAdminUserPage(1);
         loadAdminUsers(1);
     }, [adminUserQuery]);
+
+    useEffect(() => {
+        if (!isAuthenticated || activeTab !== 'revisions') return;
+        loadRevisions();
+    }, [isAuthenticated, activeTab]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -216,10 +246,11 @@ export const AdminDashboard = () => {
         );
     }
 
-    const tabItems: Array<{ id: 'workshop' | 'preset' | 'storage' | 'audit' | 'users'; label: string; desc: string }> = [
+    const tabItems: Array<{ id: 'workshop' | 'preset' | 'storage' | 'audit' | 'users' | 'revisions'; label: string; desc: string }> = [
         { id: 'workshop', label: '工坊内容', desc: '公开模组管理' },
         { id: 'preset', label: '模板编辑', desc: '默认/预设编辑器' },
         { id: 'storage', label: '存储与状态', desc: '配额与快照清理' },
+        { id: 'revisions', label: '修订队列', desc: 'AI 自迭代提案审计' },
         { id: 'audit', label: '操作审计', desc: '最近管理操作' },
         { id: 'users', label: '用户管理', desc: '账号与会话概览' },
     ];
@@ -263,6 +294,41 @@ export const AdminDashboard = () => {
                     adminUserPagination={adminUserPagination}
                     setAdminUserPage={setAdminUserPage}
                     onRefresh={() => loadAdminUsers()}
+                />
+            );
+        }
+        if (activeTab === 'revisions') {
+            return (
+                <AdminRevisionsTab
+                    revisions={revisionRows}
+                    loading={loading}
+                    onRefresh={loadRevisions}
+                    onApprove={async (proposalId: string) => {
+                        await gameApi.approveAdminRevision(proposalId, '');
+                        await loadRevisions();
+                    }}
+                    onReject={async (proposalId: string) => {
+                        await gameApi.rejectAdminRevision(proposalId, '');
+                        await loadRevisions();
+                    }}
+                    onApplyMemory={async (proposalId: string) => {
+                        await gameApi.applyAdminRevisionMemory(proposalId, 10);
+                        await loadRevisions();
+                    }}
+                    onApplyDraft={async (proposalId: string) => {
+                        await gameApi.applyAdminRevisionToDraft(proposalId, '');
+                        await loadRevisions();
+                    }}
+                    onForceApplyDraft={async (proposalId: string, reason: string) => {
+                        const ok = window.confirm('该提案被质量门禁拦截，确认强制应用到草稿吗？');
+                        if (!ok) return;
+                        await gameApi.applyAdminRevisionToDraft(proposalId, `force_apply:${reason}`);
+                        await loadRevisions();
+                    }}
+                    onRollback={async (proposalId: string) => {
+                        await gameApi.rollbackAdminRevision(proposalId, '');
+                        await loadRevisions();
+                    }}
                 />
             );
         }

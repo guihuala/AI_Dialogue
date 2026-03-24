@@ -2,9 +2,9 @@ import os
 import csv
 import json
 import re
-from typing import Any, Dict
+from typing import Any, Dict, List, Tuple
 
-from src.core.config import get_user_prompts_dir, DEFAULT_PROMPTS_DIR
+from src.core.config import get_user_data_root, get_user_prompts_dir, DEFAULT_PROMPTS_DIR
 
 class PromptManager:
     def __init__(self, user_id: str = "default"):
@@ -58,18 +58,130 @@ class PromptManager:
         return {}
 
     def _skill_user_defined_loader(self, context: dict) -> str:
-        """动态加载 skills/ 目录下除系统保留文件以外的所有 .md 技能块"""
-        user_skills = []
-        if os.path.exists(self.skills_dir):
-            for file in os.listdir(self.skills_dir):
-                # 排除系统内置或专有逻辑处理的文件（如 slang_chapter_x.md）
-                if file.endswith(".md") and not file.startswith("slang_chapter_"):
-                    content = self._read_md(f"skills/{file}")
-                    if content:
-                        # 自动解析 ID 描述，通过文件名的首行或备注
-                        user_skills.append(f"【系统扩展插件: {file}】\n{content}")
-        
+        """动态加载 skills/ 目录下除系统保留文件以外的所有 .md 技能块（支持结构化元数据）"""
+        user_skills: List[str] = []
+        for item in self.get_user_skill_catalog(context):
+            if not bool(item.get("active", True)):
+                continue
+            content = item.get("content", "")
+            if not content:
+                continue
+            display_name = str(item.get("name") or item.get("file") or "custom_skill")
+            tags = item.get("tags") if isinstance(item.get("tags"), list) else []
+            tags_text = f"（{', '.join(str(x) for x in tags if str(x).strip())}）" if tags else ""
+            user_skills.append(f"【系统扩展插件: {display_name}{tags_text}】\n{content}")
+
         return "\n\n".join(user_skills) if user_skills else ""
+
+    def _parse_front_matter(self, raw: str) -> Tuple[Dict[str, Any], str]:
+        text = str(raw or "")
+        if not text.startswith("---"):
+            return {}, text
+        lines = text.splitlines()
+        if not lines or lines[0].strip() != "---":
+            return {}, text
+
+        end_idx = -1
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                end_idx = i
+                break
+        if end_idx <= 0:
+            return {}, text
+
+        meta: Dict[str, Any] = {}
+        for line in lines[1:end_idx]:
+            row = line.strip()
+            if not row or row.startswith("#") or ":" not in row:
+                continue
+            k, v = row.split(":", 1)
+            key = str(k).strip()
+            value_raw = str(v).strip()
+            if not key:
+                continue
+            meta[key] = self._parse_front_matter_value(value_raw)
+
+        body = "\n".join(lines[end_idx + 1 :]).strip()
+        return meta, body
+
+    def _parse_front_matter_value(self, value: str) -> Any:
+        s = str(value or "").strip()
+        if not s:
+            return ""
+        low = s.lower()
+        if low in {"true", "yes", "on"}:
+            return True
+        if low in {"false", "no", "off"}:
+            return False
+        if re.fullmatch(r"-?\d+", s):
+            try:
+                return int(s)
+            except Exception:
+                pass
+        if re.fullmatch(r"-?\d+\.\d+", s):
+            try:
+                return float(s)
+            except Exception:
+                pass
+        if (s.startswith("[") and s.endswith("]")) or (s.startswith("{") and s.endswith("}")):
+            try:
+                return json.loads(s)
+            except Exception:
+                pass
+        if "," in s:
+            return [x.strip() for x in s.split(",") if x.strip()]
+        return s.strip().strip('"').strip("'")
+
+    def _is_user_skill_active_for_context(self, meta: Dict[str, Any], context: Dict[str, Any]) -> bool:
+        enabled = meta.get("enabled", True)
+        if isinstance(enabled, bool) and not enabled:
+            return False
+
+        when = str(meta.get("when", "always") or "always").strip().lower()
+        if when in {"", "always"}:
+            return True
+        event_type = str(context.get("event_type", "") or context.get("event_kind", "") or "").strip().lower()
+        is_key_event = bool(context.get("system_key_resolution")) or ("key" in event_type)
+        if when == "key_event":
+            return is_key_event
+        if when == "daily_event":
+            return not is_key_event
+        if when == "transition":
+            return bool(context.get("is_transition"))
+        return True
+
+    def get_user_skill_catalog(self, context: dict = None) -> List[Dict[str, Any]]:
+        context = context or {}
+        out: List[Dict[str, Any]] = []
+        if not os.path.exists(self.skills_dir):
+            return out
+
+        for file in sorted(os.listdir(self.skills_dir)):
+            if not file.endswith(".md") or file.startswith("slang_chapter_"):
+                continue
+            raw = self._read_md(f"skills/{file}")
+            if not raw:
+                continue
+            meta, body = self._parse_front_matter(raw)
+            record = {
+                "file": file,
+                "file_path": f"skills/{file}",
+                "id": str(meta.get("id") or os.path.splitext(file)[0]).strip(),
+                "name": str(meta.get("name") or os.path.splitext(file)[0]).strip(),
+                "description": str(meta.get("description") or "").strip(),
+                "enabled": bool(meta.get("enabled", True)),
+                "priority": int(meta.get("priority", 100) or 100),
+                "target": str(meta.get("target") or "").strip(),
+                "when": str(meta.get("when") or "always").strip(),
+                "tags": meta.get("tags") if isinstance(meta.get("tags"), list) else [],
+                "meta": meta,
+                "content": body.strip(),
+            }
+            record["active"] = self._is_user_skill_active_for_context(meta, context) and bool(record["content"])
+            out.append(record)
+
+        out.sort(key=lambda x: (int(x.get("priority", 100)), str(x.get("name", ""))))
+        return out
 
     def _resolve_player_name(self) -> str:
         for _, profile in self.roster_data.items():
@@ -404,8 +516,24 @@ class PromptManager:
         except Exception:
             return {}
 
-    def get_enabled_skills(self) -> list[str]:
+    def _skill_profile_path(self) -> str:
+        return os.path.join(get_user_data_root(self.user_id), "skill_profile.json")
+
+    def get_skill_profile(self) -> Dict[str, Any]:
+        path = self._skill_profile_path()
+        if not os.path.exists(path):
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def get_enabled_skills(self, context: dict = None) -> list[str]:
+        context = context or {}
         features = self.get_mod_features()
+        profile = self.get_skill_profile()
         raw = features.get("enabled_skills")
         auto_new_skills = {"secret_note", "relationship_milestone"}
         disabled = set()
@@ -425,13 +553,57 @@ class PromptManager:
                 if name in self.skills and name not in enabled and name not in disabled:
                     enabled.append(name)
             if enabled:
-                return enabled
-        return [x for x in list(self.default_enabled_skills) if x not in disabled]
+                base_enabled = enabled
+            else:
+                base_enabled = [x for x in list(self.default_enabled_skills) if x not in disabled]
+        else:
+            base_enabled = [x for x in list(self.default_enabled_skills) if x not in disabled]
 
-    def is_phone_system_enabled(self) -> bool:
+        result = set(base_enabled)
+        # profile 全局覆盖（解耦后主入口）
+        prof_skills = profile.get("skills", {}) if isinstance(profile.get("skills", {}), dict) else {}
+        for name, item in prof_skills.items():
+            sid = str(name or "").strip()
+            if not sid or sid not in self.skills:
+                continue
+            enabled_v = bool(item.get("enabled", True)) if isinstance(item, dict) else bool(item)
+            if enabled_v:
+                result.add(sid)
+            else:
+                result.discard(sid)
+
+        # 可选：按 mod_id 覆盖
+        mod_id = str(context.get("mod_id", "") or "").strip()
+        overrides = profile.get("per_mod_overrides", {}) if isinstance(profile.get("per_mod_overrides", {}), dict) else {}
+        mod_cfg = overrides.get(mod_id, {}) if mod_id else {}
+        if isinstance(mod_cfg, dict):
+            mod_skills = mod_cfg.get("skills", {}) if isinstance(mod_cfg.get("skills", {}), dict) else {}
+            for name, item in mod_skills.items():
+                sid = str(name or "").strip()
+                if not sid or sid not in self.skills:
+                    continue
+                enabled_v = bool(item.get("enabled", True)) if isinstance(item, dict) else bool(item)
+                if enabled_v:
+                    result.add(sid)
+                else:
+                    result.discard(sid)
+        return sorted(list(result))
+
+    def is_phone_system_enabled(self, context: dict = None) -> bool:
+        context = context or {}
         features = self.get_mod_features()
+        profile = self.get_skill_profile()
         value = features.get("phone_system_enabled", features.get("wechat_system_enabled", True))
-        return bool(value)
+        enabled = bool(value)
+        global_cfg = profile.get("global", {}) if isinstance(profile.get("global", {}), dict) else {}
+        if "phone_system_enabled" in global_cfg:
+            enabled = bool(global_cfg.get("phone_system_enabled"))
+        mod_id = str(context.get("mod_id", "") or "").strip()
+        overrides = profile.get("per_mod_overrides", {}) if isinstance(profile.get("per_mod_overrides", {}), dict) else {}
+        mod_cfg = overrides.get(mod_id, {}) if mod_id else {}
+        if isinstance(mod_cfg, dict) and "phone_system_enabled" in mod_cfg:
+            enabled = bool(mod_cfg.get("phone_system_enabled"))
+        return enabled
 
     def get_expression_flavor_context(self, context: dict) -> str:
         """
@@ -442,7 +614,7 @@ class PromptManager:
         compact_ctx["prompt_budget"] = "compact"
 
         blocks = []
-        enabled = set(self.get_enabled_skills())
+        enabled = set(self.get_enabled_skills(context))
 
         if "academic_world" in enabled:
             world_text = self._skill_academic_world(compact_ctx)

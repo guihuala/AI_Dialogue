@@ -1517,6 +1517,110 @@ class GameEngine:
             result.append(f"【关键事件:{evt_id}:{cid}】{evt_title} - {attitude}{suffix}")
         return result
 
+    def _evaluate_state_require(self, require_obj, player_stats=None, system_state=None):
+        req = require_obj if isinstance(require_obj, dict) else {}
+        stats = player_stats if isinstance(player_stats, dict) else {}
+        state = system_state if isinstance(system_state, dict) else {}
+        reasons = []
+        ok = True
+
+        def _num(v, d=0.0):
+            try:
+                return float(v)
+            except Exception:
+                return float(d)
+
+        stat_key_map = {
+            "money_gte": "money",
+            "san_gte": "san",
+            "gpa_gte": "gpa",
+            "hygiene_gte": "hygiene",
+            "reputation_gte": "reputation",
+        }
+        stat_label_map = {
+            "money": "资金",
+            "san": "理智",
+            "gpa": "绩点",
+            "hygiene": "卫生",
+            "reputation": "声望",
+        }
+        for k, stat_name in stat_key_map.items():
+            if k not in req:
+                continue
+            need = _num(req.get(k), 0.0)
+            cur = _num(stats.get(stat_name), 0.0)
+            if cur + 1e-9 < need:
+                ok = False
+                reasons.append(f"{stat_label_map.get(stat_name, stat_name)}需≥{int(need) if need.is_integer() else need}")
+
+        stage_req = req.get("relationship_stage_gte")
+        if isinstance(stage_req, dict):
+            target = str(stage_req.get("target", "")).strip()
+            need_stage = str(stage_req.get("stage", "")).strip()
+            if target and need_stage:
+                order = {"陌生": 0, "普通": 1, "熟悉": 2, "亲近": 3, "暧昧": 4, "挚友": 5, "恋人": 6}
+                relations = state.get("relations", {}) if isinstance(state.get("relations", {}), dict) else {}
+                cur_stage = str((relations.get(target, {}) or {}).get("stage", "普通")).strip() or "普通"
+                if order.get(cur_stage, 1) < order.get(need_stage, 1):
+                    ok = False
+                    reasons.append(f"{target}关系阶段需≥{need_stage}")
+
+        return ok, reasons
+
+    def _format_cost_label(self, cost_obj):
+        cost = cost_obj if isinstance(cost_obj, dict) else {}
+        pieces = []
+        for key, label, is_currency in [
+            ("money", "资金", True),
+            ("san", "理智", False),
+            ("gpa", "绩点", False),
+            ("hygiene", "卫生", False),
+            ("reputation", "声望", False),
+        ]:
+            val = cost.get(key)
+            if val is None:
+                continue
+            try:
+                num = float(val)
+            except Exception:
+                continue
+            if num <= 0:
+                continue
+            if is_currency:
+                pieces.append(f"-¥{int(num) if num.is_integer() else num}")
+            else:
+                pieces.append(f"-{label}{int(num) if num.is_integer() else num}")
+        return " / ".join(pieces)
+
+    def _build_next_options_meta(self, options, daily_plan, player_stats, system_state):
+        out = []
+        key_evt = daily_plan.get("key_event", {}) if isinstance(daily_plan, dict) else {}
+        key_options = key_evt.get("options", []) if isinstance(key_evt, dict) else []
+        for opt in options if isinstance(options, list) else []:
+            text = str(opt or "").strip()
+            meta = {"kind": "normal", "disabled": False, "reason": "", "cost_label": ""}
+            m = re.match(r"^【关键事件:([^:：\]】]+):([^】\]]+)】", text)
+            if m and isinstance(key_options, list):
+                choice_id = str(m.group(2) or "").strip()
+                choice = None
+                for item in key_options:
+                    if str((item or {}).get("id", "")).strip() == choice_id:
+                        choice = item
+                        break
+                if isinstance(choice, dict):
+                    require = choice.get("require", {})
+                    ok, reasons = self._evaluate_state_require(require, player_stats=player_stats, system_state=system_state)
+                    fail_hint = str(choice.get("fail_hint", "") or "").strip()
+                    cost_label = self._format_cost_label(choice.get("cost", {}))
+                    meta = {
+                        "kind": "key_event",
+                        "disabled": not ok,
+                        "reason": fail_hint or "，".join(reasons[:2]) if (not ok and (fail_hint or reasons)) else "",
+                        "cost_label": cost_label,
+                    }
+            out.append(meta)
+        return out
+
     def _inject_system_key_options(self, options, daily_plan):
         if not isinstance(options, list):
             options = []
@@ -1815,6 +1919,56 @@ class GameEngine:
         system_daily_plan = self._build_system_daily_plan(selected_chars)
         parsed_key_choice = self._parse_system_key_choice(action_text)
         if parsed_key_choice and not is_prefetch and hasattr(self, "skeleton_engine") and hasattr(self, "system_state_mgr"):
+            current_system_state = self._get_system_state_snapshot()
+            current_stats = {
+                "money": money,
+                "san": san,
+                "gpa": gpa,
+                "hygiene": hygiene,
+                "reputation": reputation,
+            }
+            key_evt = system_daily_plan.get("key_event", {}) if isinstance(system_daily_plan, dict) else {}
+            key_opts = key_evt.get("options", []) if isinstance(key_evt, dict) else []
+            picked_choice = None
+            for item in key_opts if isinstance(key_opts, list) else []:
+                if str((item or {}).get("id", "")).strip() == str(parsed_key_choice.get("choice_id", "")).strip():
+                    picked_choice = item
+                    break
+            if isinstance(picked_choice, dict):
+                ok_req, req_reasons = self._evaluate_state_require(
+                    picked_choice.get("require", {}),
+                    player_stats=current_stats,
+                    system_state=current_system_state,
+                )
+                if not ok_req:
+                    hint = str(picked_choice.get("fail_hint", "") or "").strip()
+                    msg = hint or ("条件不足：" + "，".join(req_reasons[:2]) if req_reasons else "条件不足，暂时无法选择该项")
+                    return {
+                        "error": msg,
+                        "display_text": f"【系统提示】{msg}",
+                        "next_options": self._inject_system_key_options(
+                            self._normalize_options([], current_evt_id if isinstance(current_evt_id, str) else ""),
+                            system_daily_plan,
+                        ),
+                        "next_options_meta": self._build_next_options_meta(
+                            self._inject_system_key_options([], system_daily_plan),
+                            system_daily_plan,
+                            current_stats,
+                            current_system_state,
+                        ),
+                        "is_end": False,
+                        "current_evt_id": current_evt_id,
+                        "chapter": chapter,
+                        "turn": turn,
+                        "san": san,
+                        "money": money,
+                        "gpa": gpa,
+                        "hygiene": hygiene,
+                        "reputation": reputation,
+                        "affinity": affinity,
+                        "active_roommates": selected_chars,
+                        "player_name": player_name,
+                    }
             day = int((self._get_system_state_snapshot().get("time", {}) or {}).get("day", 1) or 1)
             settled = self.skeleton_engine.settle_key_choice(
                 day=day,
@@ -1832,6 +1986,28 @@ class GameEngine:
                     self.system_state_mgr.set_flag("last_key_choice_id", settled.get("choice_id"))
                     self.system_state_mgr.set_flag("last_key_day", day)
                 system_key_resolution = settled
+                cost_obj = settled.get("cost", {}) if isinstance(settled.get("cost", {}), dict) else {}
+                if cost_obj:
+                    try:
+                        money = max(0, float(money) - float(cost_obj.get("money", 0) or 0))
+                    except Exception:
+                        pass
+                    try:
+                        san = max(0, float(san) - float(cost_obj.get("san", 0) or 0))
+                    except Exception:
+                        pass
+                    try:
+                        gpa = max(0, float(gpa) - float(cost_obj.get("gpa", 0) or 0))
+                    except Exception:
+                        pass
+                    try:
+                        hygiene = max(0, float(hygiene) - float(cost_obj.get("hygiene", 0) or 0))
+                    except Exception:
+                        pass
+                    try:
+                        reputation = max(0, float(reputation) - float(cost_obj.get("reputation", 0) or 0))
+                    except Exception:
+                        pass
                 system_daily_plan = self._build_system_daily_plan(selected_chars)
 
         is_new_event_entry = bool(is_transition or current_evt_id == "")
@@ -2860,17 +3036,14 @@ class GameEngine:
             legacy_wechat_used = legacy_wechat_count > 0
             phone_message_source = "none"
 
-            # 手机消息优先级：tool_calls > fallback。legacy 仅统计，不再作为主通路（expression 模式）。
+            # 手机消息优先级：tool_calls > fallback。legacy 仅统计，不再作为主通路（全模式）。
             if isinstance(tool_wechat_notifications, list) and tool_wechat_notifications:
                 wechat_list = tool_wechat_notifications
                 phone_message_source = "tool"
             else:
-                if expression_only_mode_active:
-                    wechat_list = []
-                else:
-                    wechat_list = parsed_wechat_list + effect_wechat_list
-                    if wechat_list:
-                        phone_message_source = "legacy"
+                # 已完成 skill/tool 分离收口：不再消费 legacy wechat 通路。
+                # parsed/effects 中的 wechat 仅保留统计与调试用途。
+                wechat_list = []
 
             if phone_system_enabled and (not isinstance(wechat_list, list) or not wechat_list) and not is_prefetch:
                 wechat_list = self._build_wechat_fallback_notifications(
@@ -3011,6 +3184,18 @@ class GameEngine:
                 "is_end": is_end, 
                 "player_name": player_name,
                 "next_options": extracted_options, 
+                "next_options_meta": self._build_next_options_meta(
+                    extracted_options,
+                    self._build_system_daily_plan(selected_chars),
+                    {
+                        "money": money,
+                        "san": san,
+                        "gpa": gpa,
+                        "hygiene": hygiene,
+                        "reputation": reputation,
+                    },
+                    after_system_state,
+                ),
                 "wechat_notifications": valid_notifs,
                 "phone_system_enabled": phone_system_enabled,
                 "narrator_transition": parsed.get("narrator_transition", ""),

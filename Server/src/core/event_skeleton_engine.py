@@ -592,6 +592,7 @@ class EventSkeletonEngine:
             "choice_id": str(choice.get("id", "")).strip(),
             "attitude": str(choice.get("attitude", "")).strip(),
             "effects": deepcopy(choice.get("effects", {})) if isinstance(choice.get("effects"), dict) else {},
+            "cost": deepcopy(choice.get("cost", {})) if isinstance(choice.get("cost"), dict) else {},
             "is_irreversible": bool(
                 isinstance(choice.get("effects", {}), dict) and bool((choice.get("effects", {}) or {}).get("irreversible"))
             ),
@@ -680,6 +681,9 @@ class EventSkeletonEngine:
                 {
                     "id": str((item or {}).get("id", "")).strip(),
                     "attitude": str((item or {}).get("attitude", "")).strip(),
+                    "require": deepcopy((item or {}).get("require", {})) if isinstance((item or {}).get("require", {}), dict) else {},
+                    "cost": deepcopy((item or {}).get("cost", {})) if isinstance((item or {}).get("cost", {}), dict) else {},
+                    "fail_hint": str((item or {}).get("fail_hint", "")).strip(),
                     "is_irreversible": bool(
                         isinstance((item or {}).get("effects", {}), dict)
                         and bool(((item or {}).get("effects", {}) or {}).get("irreversible"))
