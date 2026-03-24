@@ -196,6 +196,7 @@ app.include_router(
         workshop_dir=WORKSHOP_DIR,
         admin_auth=admin_auth,
         require_admin=Depends(admin_auth.require_admin),
+        require_openclaw_bot=Depends(admin_auth.require_openclaw_bot),
     )
 )
 

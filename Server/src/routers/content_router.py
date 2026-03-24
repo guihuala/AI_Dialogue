@@ -111,6 +111,7 @@ def build_content_router(
             "global": {"phone_system_enabled": True},
             "skills": {},
             "per_mod_overrides": {},
+            "migration_meta": {},
         }
 
     def _normalize_skill_profile(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -162,6 +163,11 @@ def build_content_router(
                 item["skills"] = norm_rskills
             norm_overrides[mid] = item
         base["per_mod_overrides"] = norm_overrides
+        meta = src.get("migration_meta", {}) if isinstance(src.get("migration_meta", {}), dict) else {}
+        base["migration_meta"] = {
+            "mod_features_migrated": bool(meta.get("mod_features_migrated", False)),
+            "migrated_at": str(meta.get("migrated_at", "") or ""),
+        }
         base["updated_at"] = now_str()
         return base
 

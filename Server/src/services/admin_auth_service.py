@@ -14,6 +14,7 @@ load_dotenv()
 class AdminAuthManager:
     def __init__(self):
         self.password = (os.getenv("ADMIN_PASSWORD") or "").strip()
+        self.openclaw_token = (os.getenv("OPENCLAW_BOT_TOKEN") or "").strip()
         self.ttl_seconds = int(os.getenv("ADMIN_SESSION_TTL_SECONDS", "43200") or "43200")
         self._sessions: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.Lock()
@@ -78,5 +79,18 @@ class AdminAuthManager:
         session = self.get_session(x_admin_token or "")
         if not session:
             raise HTTPException(status_code=401, detail="管理员登录已失效，请重新验证")
-        return session
+        return {**session, "role": "admin", "actor_type": "admin"}
 
+    def require_openclaw_bot(self, x_openclaw_token: Optional[str] = Header(None)) -> Dict[str, Any]:
+        if not self.openclaw_token:
+            raise HTTPException(status_code=503, detail="OPENCLAW_BOT_TOKEN 未配置")
+        token = (x_openclaw_token or "").strip()
+        if not token or not hmac.compare_digest(token, self.openclaw_token):
+            raise HTTPException(status_code=401, detail="OpenClaw token 无效")
+        return {
+            "role": "openclaw_bot",
+            "actor_type": "bot",
+            "bot_id": "openclaw_bot",
+            "expires_at": "",
+            "ttl_seconds": 0,
+        }

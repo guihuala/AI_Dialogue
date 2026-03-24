@@ -361,6 +361,16 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
         return '原创';
     };
 
+    const getRecommendedSkills = (mod: any): string[] => {
+        if (Array.isArray(mod?.recommended_skills) && mod.recommended_skills.length > 0) {
+            return mod.recommended_skills.slice(0, 4);
+        }
+        if (Array.isArray(mod?.enabled_skills) && mod.enabled_skills.length > 0) {
+            return mod.enabled_skills.slice(0, 4);
+        }
+        return [];
+    };
+
     const selectedWorkshopLibraryState = useMemo(() => {
         if (!selectedWorkshopMod) return null;
 
@@ -653,6 +663,23 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                                             <p className="text-sm text-gray-500 font-semibold mb-5 line-clamp-2 min-h-[2.5rem] flex-1">
                                                 {mod.description || '无描述'}
                                             </p>
+                                            {getRecommendedSkills(mod).length > 0 && (
+                                                <div className="mb-4">
+                                                    <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]/70 mb-2">
+                                                        推荐技能
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {getRecommendedSkills(mod).map((skill: string) => (
+                                                            <span
+                                                                key={`${mod.id}-rec-${skill}`}
+                                                                className="text-[10px] bg-white text-[var(--color-cyan-dark)] px-2.5 py-1 rounded-full font-black tracking-widest uppercase border border-[var(--color-cyan-main)]/15"
+                                                            >
+                                                                {skill}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                             <div className="flex justify-between items-center text-[10px] text-gray-400 font-black mb-4 uppercase tracking-widest">
                                                 <span>{mod.isDefault ? '官方模板' : '本地模组'}</span>
                                                 <span>{mod.timestamp?.split(' ')[0] || '最近更新'}</span>
@@ -727,6 +754,23 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                                             </span>
                                         </div>
                                         <p className="text-sm text-gray-500 font-semibold mb-6 line-clamp-2 min-h-[2.5rem] flex-1">{mod.description}</p>
+                                        {getRecommendedSkills(mod).length > 0 && (
+                                            <div className="mb-4">
+                                                <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]/70 mb-2">
+                                                    推荐技能
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {getRecommendedSkills(mod).map((skill: string) => (
+                                                        <span
+                                                            key={`${mod.id}-ws-rec-${skill}`}
+                                                            className="text-[10px] bg-white text-[var(--color-cyan-dark)] px-2.5 py-1 rounded-full font-black tracking-widest uppercase border border-[var(--color-cyan-main)]/15"
+                                                        >
+                                                            {skill}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between items-center text-[10px] text-gray-400 font-black mb-4 uppercase tracking-widest">
                                             <span>作者: {mod.author}</span>
                                             <span className="flex items-center gap-1"><Download size={10} /> {mod.downloads} 下载</span>

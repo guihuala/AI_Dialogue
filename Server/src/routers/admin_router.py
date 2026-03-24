@@ -3,8 +3,10 @@ from datetime import datetime
 import json
 import os
 import shutil
+import threading
+import time
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 from src.core.config import DATA_ROOT
@@ -75,10 +77,14 @@ def build_admin_router(
     workshop_dir: str,
     admin_auth,
     require_admin,
+    require_openclaw_bot=None,
 ):
     router = APIRouter()
     accounts_by_id_dir = os.path.join(DATA_ROOT, "accounts", "by_id")
     accounts_sessions_dir = os.path.join(DATA_ROOT, "accounts", "sessions")
+    openclaw_rpm_limit = max(1, int(os.getenv("OPENCLAW_RPM_LIMIT", "60") or 60))
+    _openclaw_rate_lock = threading.Lock()
+    _openclaw_rate_hits: Dict[str, List[float]] = {}
 
     def _library_file_path(user_id: str, item_id: str) -> str:
         return os.path.join(get_user_library_dir(user_id), f"{item_id}.json")
@@ -211,6 +217,25 @@ def build_admin_router(
             "require_reviewed_for_pass": False,
             "allowed_types": ["daily", "key"],
         }
+
+    def _require_ops_actor(admin_session: Dict[str, Any], x_openclaw_token: str = Header(None)) -> Dict[str, Any]:
+        if isinstance(admin_session, dict):
+            return admin_session
+        if require_openclaw_bot is not None:
+            return admin_auth.require_openclaw_bot(x_openclaw_token)
+        raise HTTPException(status_code=401, detail="需要管理员或 OpenClaw 运营凭证")
+
+    def _enforce_openclaw_rate_limit(action: str) -> None:
+        now = time.time()
+        window = 60.0
+        key = str(action or "default")
+        with _openclaw_rate_lock:
+            rows = _openclaw_rate_hits.get(key, [])
+            rows = [ts for ts in rows if (now - ts) <= window]
+            if len(rows) >= openclaw_rpm_limit:
+                raise HTTPException(status_code=429, detail=f"openclaw rate limited: {openclaw_rpm_limit}/min")
+            rows.append(now)
+            _openclaw_rate_hits[key] = rows
 
     def _normalize_skeleton_rules(raw: Dict[str, Any]) -> Dict[str, Any]:
         base = _default_skeleton_rules()
@@ -1044,6 +1069,68 @@ def build_admin_router(
         lim = max(1, min(int(limit or 50), 200))
         return {"status": "success", "data": {"items": rows[:lim], "count": len(rows)}}
 
+    @router.get("/api/openclaw/session")
+    def openclaw_session(openclaw_session: Dict[str, Any] = require_openclaw_bot):
+        if not isinstance(openclaw_session, dict):
+            raise HTTPException(status_code=401, detail="OpenClaw token 无效")
+        return {"status": "success", "data": openclaw_session}
+
+    @router.get("/api/openclaw/revisions")
+    def list_revisions_for_openclaw(
+        status: str = "queue",
+        limit: int = 50,
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+        user_id: str = get_user_id,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("list_revisions")
+        s = str(status or "queue").strip()
+        if s not in {"queue", "applied", "rejected"}:
+            s = "queue"
+        d = _revisions_dir(user_id, s)
+        if not os.path.exists(d):
+            return {"status": "success", "data": {"items": [], "count": 0}}
+        rows: List[Dict[str, Any]] = []
+        for fn in os.listdir(d):
+            if not fn.endswith(".json"):
+                continue
+            path = os.path.join(d, fn)
+            try:
+                row = _read_json(path)
+            except Exception:
+                continue
+            rows.append(
+                {
+                    "proposal_id": str(row.get("proposal_id", "") or "").strip() or fn[:-5],
+                    "created_at": str(row.get("created_at", "")),
+                    "status": str(row.get("status", s)),
+                    "target_mod_id": str(row.get("target_mod_id", "")),
+                    "summary": str(row.get("summary", "")),
+                    "risk_level": str(row.get("risk_level", "medium")),
+                    "changes_count": len(row.get("changes", []) if isinstance(row.get("changes", []), list) else []),
+                    "memory_candidates_count": len(row.get("memory_candidates", []) if isinstance(row.get("memory_candidates", []), list) else []),
+                    "quality_score": int(row.get("quality_score", 0) or 0),
+                    "priority": str(row.get("priority", "medium") or "medium"),
+                    "validator": row.get("validator", {}) if isinstance(row.get("validator", {}), dict) else {},
+                }
+            )
+        rows.sort(key=lambda x: str(x.get("created_at", "")), reverse=True)
+        lim = max(1, min(int(limit or 50), 200))
+        return {"status": "success", "data": {"items": rows[:lim], "count": len(rows)}}
+
+    @router.get("/api/openclaw/revisions/{proposal_id}")
+    def get_revision_detail_for_openclaw(
+        proposal_id: str,
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+        user_id: str = get_user_id,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("get_revision_detail")
+        st, _, data = _load_revision(user_id, proposal_id)
+        if not st:
+            raise HTTPException(status_code=404, detail="proposal not found")
+        return {"status": "success", "data": data, "bucket": st}
+
     @router.get("/api/admin/revisions/{proposal_id}")
     def get_revision_detail(
         proposal_id: str,
@@ -1090,6 +1177,72 @@ def build_admin_router(
         data["rejected_note"] = str(req.note or "")
         _move_revision(user_id, st, "rejected", proposal_id, data)
         append_audit_log(user_id, "agent_revision_reject", "ok", proposal_id, {"note": req.note or ""})
+        return {"status": "success", "data": {"proposal_id": proposal_id, "status": "rejected"}}
+
+    @router.post("/api/openclaw/revisions/{proposal_id}/approve")
+    def approve_revision_for_openclaw(
+        proposal_id: str,
+        req: RevisionDecisionReq,
+        x_request_id: str = Header(None),
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+        user_id: str = get_user_id,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("approve_revision")
+        st, _, data = _load_revision(user_id, proposal_id)
+        if not st:
+            raise HTTPException(status_code=404, detail="proposal not found")
+        data["status"] = "approved"
+        data["approved_at"] = datetime.now().isoformat(timespec="seconds")
+        data["approved_note"] = str(req.note or "")
+        data["approved_by"] = "openclaw_bot"
+        data["request_id"] = str(x_request_id or "").strip()
+        _move_revision(user_id, st, "applied", proposal_id, data)
+        append_audit_log(
+            user_id,
+            "openclaw_revision_approve",
+            "ok",
+            proposal_id,
+            {
+                "note": req.note or "",
+                "actor_type": "bot",
+                "actor_id": "openclaw_bot",
+                "request_id": str(x_request_id or "").strip(),
+            },
+        )
+        return {"status": "success", "data": {"proposal_id": proposal_id, "status": "approved"}}
+
+    @router.post("/api/openclaw/revisions/{proposal_id}/reject")
+    def reject_revision_for_openclaw(
+        proposal_id: str,
+        req: RevisionDecisionReq,
+        x_request_id: str = Header(None),
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+        user_id: str = get_user_id,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("reject_revision")
+        st, _, data = _load_revision(user_id, proposal_id)
+        if not st:
+            raise HTTPException(status_code=404, detail="proposal not found")
+        data["status"] = "rejected"
+        data["rejected_at"] = datetime.now().isoformat(timespec="seconds")
+        data["rejected_note"] = str(req.note or "")
+        data["rejected_by"] = "openclaw_bot"
+        data["request_id"] = str(x_request_id or "").strip()
+        _move_revision(user_id, st, "rejected", proposal_id, data)
+        append_audit_log(
+            user_id,
+            "openclaw_revision_reject",
+            "ok",
+            proposal_id,
+            {
+                "note": req.note or "",
+                "actor_type": "bot",
+                "actor_id": "openclaw_bot",
+                "request_id": str(x_request_id or "").strip(),
+            },
+        )
         return {"status": "success", "data": {"proposal_id": proposal_id, "status": "rejected"}}
 
     @router.post("/api/admin/revisions/{proposal_id}/apply_memory")

@@ -584,6 +584,7 @@ export const PromptEditor = ({
                 : { version: 1, global: {}, skills: {}, per_mod_overrides: {} };
             nextProfile.global = typeof nextProfile.global === 'object' && nextProfile.global ? { ...nextProfile.global } : {};
             nextProfile.skills = typeof nextProfile.skills === 'object' && nextProfile.skills ? { ...nextProfile.skills } : {};
+            nextProfile.migration_meta = typeof nextProfile.migration_meta === 'object' && nextProfile.migration_meta ? { ...nextProfile.migration_meta } : {};
             nextProfile.global.phone_system_enabled = parsed?.phone_system_enabled !== false;
             const enabledSet = new Set(enabledSkills.map((x: any) => String(x || '')));
             defaultEnabledSkills.forEach((key) => {
@@ -593,6 +594,8 @@ export const PromptEditor = ({
                     priority: Number(nextProfile.skills[key]?.priority || 100),
                 };
             });
+            nextProfile.migration_meta.mod_features_migrated = true;
+            nextProfile.migration_meta.migrated_at = new Date().toISOString();
             const saved = await gameApi.saveSkillProfile(nextProfile);
             await resolveSkillFromProfile(saved?.data || nextProfile, userState);
             setMessage('已迁移旧版开关到 skill profile');
@@ -603,6 +606,10 @@ export const PromptEditor = ({
             setTimeout(() => setMessage(''), 3000);
         }
     };
+
+    const skillProfileMigrated = useMemo(() => {
+        return Boolean(skillProfile?.migration_meta?.mod_features_migrated);
+    }, [skillProfile]);
 
     const handleToggleRecommendedSkill = (skillKey: string) => {
         const current = Array.isArray(recommendedSkills) ? recommendedSkills : defaultEnabledSkills;
@@ -1531,11 +1538,11 @@ ${data.content}`;
                                                         {!adminPresetMode && (
                                                             <button
                                                                 onClick={handleMigrateSkillProfile}
-                                                                disabled={isMigratingSkillProfile || isSavingFeatures}
+                                                                disabled={isMigratingSkillProfile || isSavingFeatures || skillProfileMigrated}
                                                                 className="px-2.5 py-1 rounded-md text-[10px] font-black transition-all shrink-0 bg-indigo-50 text-indigo-700 border border-indigo-200 disabled:opacity-60"
                                                                 title="将旧版 system/mod_features.json 开关迁移到 skill profile"
                                                             >
-                                                                {isMigratingSkillProfile ? '迁移中…' : '迁移旧开关'}
+                                                                {isMigratingSkillProfile ? '迁移中…' : (skillProfileMigrated ? '已迁移' : '迁移旧开关')}
                                                             </button>
                                                         )}
                                                         <button
