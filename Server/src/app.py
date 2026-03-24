@@ -5,6 +5,7 @@ from typing import Dict, Any
 import os
 import sys
 import concurrent.futures
+from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 
 # Avoid noisy HuggingFace tokenizers fork-parallelism warning in multi-worker/background contexts.
@@ -117,6 +118,79 @@ if os.path.exists(STATIC_DIR):
 WORKSHOP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "workshop")
 if not os.path.exists(WORKSHOP_DIR):
     os.makedirs(WORKSHOP_DIR)
+
+
+def _load_default_mod_content() -> Dict[str, Dict[str, str]]:
+    md_bucket: Dict[str, str] = {}
+    csv_bucket: Dict[str, str] = {}
+
+    if os.path.exists(DEFAULT_PROMPTS_DIR):
+        for root, _, files in os.walk(DEFAULT_PROMPTS_DIR):
+            for fn in files:
+                if not fn.endswith((".md", ".json", ".csv")):
+                    continue
+                path = os.path.join(root, fn)
+                rel = os.path.relpath(path, DEFAULT_PROMPTS_DIR).replace("\\", "/")
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        md_bucket[rel] = f.read()
+                except Exception:
+                    continue
+
+    if os.path.exists(DEFAULT_EVENTS_DIR):
+        for root, _, files in os.walk(DEFAULT_EVENTS_DIR):
+            for fn in files:
+                if not fn.endswith((".csv", ".json")):
+                    continue
+                path = os.path.join(root, fn)
+                rel = os.path.relpath(path, DEFAULT_EVENTS_DIR).replace("\\", "/")
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        csv_bucket[rel] = f.read()
+                except Exception:
+                    continue
+
+    return {"md": md_bucket, "csv": csv_bucket}
+
+
+def _ensure_official_default_mod_seeded() -> None:
+    target_path = os.path.join(WORKSHOP_DIR, "official_star_campus_v1.json")
+    if os.path.exists(target_path):
+        return
+
+    content = _load_default_mod_content()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    record = {
+        "id": "official_star_campus_v1",
+        "name": "官方默认·镜海传媒学院（都市悬疑）",
+        "description": "官方默认内容模板，适合首次体验与模组二创。",
+        "author": "official",
+        "owner_user_id": "default",
+        "source_type": "official",
+        "visibility": "public",
+        "content": content,
+        "tags": ["官方", "默认", "校园"],
+        "downloads": 0,
+        "version": 1,
+        "created_at": now_str,
+        "updated_at": now_str,
+        "timestamp": now_str,
+    }
+    record["manifest"] = build_manifest(
+        mod_id=record["id"],
+        name=record["name"],
+        author=record["author"],
+        source="workshop",
+        content=record["content"],
+        version=record["version"],
+    )
+    with open(target_path, "w", encoding="utf-8") as f:
+        import json
+
+        json.dump(record, f, ensure_ascii=False, indent=2)
+
+
+_ensure_official_default_mod_seeded()
 
 # ==========================================
 # 模块化路由注册

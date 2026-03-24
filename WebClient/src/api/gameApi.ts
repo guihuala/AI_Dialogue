@@ -1,12 +1,5 @@
 import axios from 'axios';
-
-const rawApiBase = String(import.meta.env.VITE_API_BASE_URL || '').trim();
-const normalizedApiBase = rawApiBase
-  ? rawApiBase.replace(/\/+$/, '')
-  : 'http://127.0.0.1:8000/api';
-const API_BASE = /\/api$/i.test(normalizedApiBase)
-  ? normalizedApiBase
-  : `${normalizedApiBase}/api`;
+import { API_BASE } from './apiBase';
 
 const apiClient = axios.create({
   baseURL: API_BASE,

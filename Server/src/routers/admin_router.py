@@ -59,6 +59,42 @@ class RevisionApplyMemoryReq(BaseModel):
     limit: int = 10
 
 
+class OpenClawBatchRevisionReq(BaseModel):
+    proposal_ids: List[str]
+    note: str = ""
+
+
+class OpenClawChangeItem(BaseModel):
+    file: str
+    reason: str = ""
+    content_after: str = ""
+    patch_text: str = ""
+
+
+class OpenClawMemoryCandidate(BaseModel):
+    content: str
+    importance: int = 6
+    tags: List[str] = []
+
+
+class OpenClawModProposeReq(BaseModel):
+    target_mod_id: str = ""
+    name: str = ""
+    description: str = ""
+    summary: str = ""
+    risk_level: str = "medium"
+    changes: List[OpenClawChangeItem] = []
+    memory_candidates: List[OpenClawMemoryCandidate] = []
+
+
+class OpenClawContentProposeReq(BaseModel):
+    target_mod_id: str = ""
+    summary: str = ""
+    risk_level: str = "medium"
+    changes: List[OpenClawChangeItem]
+    memory_candidates: List[OpenClawMemoryCandidate] = []
+
+
 def build_admin_router(
     *,
     get_user_id,
@@ -107,6 +143,21 @@ def build_admin_router(
             if os.path.exists(p):
                 return st, p, _read_json(p)
         return "", "", {}
+
+    def _revision_summary_row(row: Dict[str, Any], fallback_status: str, fallback_id: str) -> Dict[str, Any]:
+        return {
+            "proposal_id": str(row.get("proposal_id", "") or "").strip() or fallback_id,
+            "created_at": str(row.get("created_at", "")),
+            "status": str(row.get("status", fallback_status)),
+            "target_mod_id": str(row.get("target_mod_id", "")),
+            "summary": str(row.get("summary", "")),
+            "risk_level": str(row.get("risk_level", "medium")),
+            "changes_count": len(row.get("changes", []) if isinstance(row.get("changes", []), list) else []),
+            "memory_candidates_count": len(row.get("memory_candidates", []) if isinstance(row.get("memory_candidates", []), list) else []),
+            "quality_score": int(row.get("quality_score", 0) or 0),
+            "priority": str(row.get("priority", "medium") or "medium"),
+            "validator": row.get("validator", {}) if isinstance(row.get("validator", {}), dict) else {},
+        }
 
     def _save_revision(user_id: str, status: str, proposal_id: str, data: Dict[str, Any]) -> str:
         p = _revision_path(user_id, status, proposal_id)
@@ -236,6 +287,85 @@ def build_admin_router(
                 raise HTTPException(status_code=429, detail=f"openclaw rate limited: {openclaw_rpm_limit}/min")
             rows.append(now)
             _openclaw_rate_hits[key] = rows
+
+    def _sanitize_openclaw_changes(changes: List[OpenClawChangeItem], *, allowed_prefixes: tuple[str, ...]) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
+        for ch in list(changes or [])[:30]:
+            try:
+                file_name = str(ch.file or "").strip()
+            except Exception:
+                file_name = ""
+            if not file_name or not file_name.startswith(allowed_prefixes):
+                continue
+            out.append(
+                {
+                    "file": file_name,
+                    "op": "update",
+                    "reason": str(getattr(ch, "reason", "") or "").strip()[:400],
+                    "content_after": str(getattr(ch, "content_after", "") or ""),
+                    "patch_text": str(getattr(ch, "patch_text", "") or "").strip()[:4000],
+                }
+            )
+        return out
+
+    def _sanitize_openclaw_memories(items: List[OpenClawMemoryCandidate]) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
+        for item in list(items or [])[:20]:
+            try:
+                content = str(item.content or "").strip()
+            except Exception:
+                content = ""
+            if not content:
+                continue
+            try:
+                importance = int(getattr(item, "importance", 6) or 6)
+            except Exception:
+                importance = 6
+            importance = max(1, min(10, importance))
+            raw_tags = getattr(item, "tags", [])
+            tags = [str(t).strip() for t in (raw_tags if isinstance(raw_tags, list) else []) if str(t).strip()][:8]
+            out.append({"content": content[:300], "importance": importance, "tags": tags})
+        return out
+
+    def _new_openclaw_proposal_id() -> str:
+        return f"ocrev-{datetime.now().strftime('%Y%m%d%H%M%S')}-{int(time.time() * 1000) % 100000:05d}"
+
+    def _create_openclaw_revision(
+        *,
+        user_id: str,
+        target_mod_id: str,
+        summary: str,
+        risk_level: str,
+        changes: List[Dict[str, Any]],
+        memory_candidates: List[Dict[str, Any]],
+        extra_payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        proposal_id = _new_openclaw_proposal_id()
+        now_iso = datetime.now().isoformat(timespec="seconds")
+        data = {
+            "proposal_id": proposal_id,
+            "created_at": now_iso,
+            "status": "queue",
+            "source": "openclaw_bot",
+            "target_mod_id": str(target_mod_id or "").strip() or "default",
+            "summary": str(summary or "").strip()[:1000],
+            "risk_level": (str(risk_level or "medium").strip().lower() or "medium"),
+            "changes": list(changes or [])[:30],
+            "memory_candidates": list(memory_candidates or [])[:20],
+            "quality_score": 70 if len(changes or []) > 0 else 55,
+            "priority": "medium",
+            "validator": {
+                "schema_ok": bool(changes),
+                "policy_ok": True,
+                "blocked_rules": [],
+                "source": "openclaw_manual",
+            },
+            "bot_payload": extra_payload or {},
+        }
+        if data["risk_level"] not in {"low", "medium", "high"}:
+            data["risk_level"] = "medium"
+        _save_revision(user_id, "queue", proposal_id, data)
+        return data
 
     def _normalize_skeleton_rules(raw: Dict[str, Any]) -> Dict[str, Any]:
         base = _default_skeleton_rules()
@@ -1099,24 +1229,47 @@ def build_admin_router(
                 row = _read_json(path)
             except Exception:
                 continue
-            rows.append(
-                {
-                    "proposal_id": str(row.get("proposal_id", "") or "").strip() or fn[:-5],
-                    "created_at": str(row.get("created_at", "")),
-                    "status": str(row.get("status", s)),
-                    "target_mod_id": str(row.get("target_mod_id", "")),
-                    "summary": str(row.get("summary", "")),
-                    "risk_level": str(row.get("risk_level", "medium")),
-                    "changes_count": len(row.get("changes", []) if isinstance(row.get("changes", []), list) else []),
-                    "memory_candidates_count": len(row.get("memory_candidates", []) if isinstance(row.get("memory_candidates", []), list) else []),
-                    "quality_score": int(row.get("quality_score", 0) or 0),
-                    "priority": str(row.get("priority", "medium") or "medium"),
-                    "validator": row.get("validator", {}) if isinstance(row.get("validator", {}), dict) else {},
-                }
-            )
+            rows.append(_revision_summary_row(row, s, fn[:-5]))
         rows.sort(key=lambda x: str(x.get("created_at", "")), reverse=True)
         lim = max(1, min(int(limit or 50), 200))
         return {"status": "success", "data": {"items": rows[:lim], "count": len(rows)}}
+
+    @router.get("/api/openclaw/revisions/stats")
+    def openclaw_revision_stats(
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+        user_id: str = get_user_id,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("revision_stats")
+        by_status: Dict[str, int] = {"queue": 0, "applied": 0, "rejected": 0}
+        by_risk: Dict[str, int] = {}
+        by_priority: Dict[str, int] = {}
+        for st in ["queue", "applied", "rejected"]:
+            d = _revisions_dir(user_id, st)
+            if not os.path.exists(d):
+                continue
+            for fn in os.listdir(d):
+                if not fn.endswith(".json"):
+                    continue
+                path = os.path.join(d, fn)
+                try:
+                    row = _read_json(path)
+                except Exception:
+                    continue
+                by_status[st] = by_status.get(st, 0) + 1
+                risk = str(row.get("risk_level", "medium") or "medium")
+                pri = str(row.get("priority", "medium") or "medium")
+                by_risk[risk] = int(by_risk.get(risk, 0) or 0) + 1
+                by_priority[pri] = int(by_priority.get(pri, 0) or 0) + 1
+        return {
+            "status": "success",
+            "data": {
+                "by_status": by_status,
+                "by_risk": by_risk,
+                "by_priority": by_priority,
+                "total": sum(by_status.values()),
+            },
+        }
 
     @router.get("/api/openclaw/revisions/{proposal_id}")
     def get_revision_detail_for_openclaw(
@@ -1244,6 +1397,442 @@ def build_admin_router(
             },
         )
         return {"status": "success", "data": {"proposal_id": proposal_id, "status": "rejected"}}
+
+    @router.post("/api/openclaw/revisions/batch_approve")
+    def approve_revisions_batch_for_openclaw(
+        req: OpenClawBatchRevisionReq,
+        x_request_id: str = Header(None),
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+        user_id: str = get_user_id,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("batch_approve")
+        ids = [str(x).strip() for x in (req.proposal_ids or []) if str(x).strip()]
+        ids = ids[:50]
+        if not ids:
+            raise HTTPException(status_code=400, detail="proposal_ids 不能为空")
+        approved: List[str] = []
+        skipped: List[Dict[str, str]] = []
+        now_iso = datetime.now().isoformat(timespec="seconds")
+        for proposal_id in ids:
+            st, _, data = _load_revision(user_id, proposal_id)
+            if not st:
+                skipped.append({"proposal_id": proposal_id, "reason": "not_found"})
+                continue
+            if st != "queue":
+                skipped.append({"proposal_id": proposal_id, "reason": f"not_queue:{st}"})
+                continue
+            data["status"] = "approved"
+            data["approved_at"] = now_iso
+            data["approved_note"] = str(req.note or "")
+            data["approved_by"] = "openclaw_bot"
+            data["request_id"] = str(x_request_id or "").strip()
+            _move_revision(user_id, st, "applied", proposal_id, data)
+            approved.append(proposal_id)
+        append_audit_log(
+            user_id,
+            "openclaw_revision_batch_approve",
+            "ok",
+            f"approved={len(approved)}",
+            {
+                "approved_ids": approved,
+                "skipped_count": len(skipped),
+                "actor_type": "bot",
+                "actor_id": "openclaw_bot",
+                "request_id": str(x_request_id or "").strip(),
+            },
+        )
+        return {"status": "success", "data": {"approved": approved, "skipped": skipped}}
+
+    @router.post("/api/openclaw/revisions/batch_reject")
+    def reject_revisions_batch_for_openclaw(
+        req: OpenClawBatchRevisionReq,
+        x_request_id: str = Header(None),
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+        user_id: str = get_user_id,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("batch_reject")
+        ids = [str(x).strip() for x in (req.proposal_ids or []) if str(x).strip()]
+        ids = ids[:50]
+        if not ids:
+            raise HTTPException(status_code=400, detail="proposal_ids 不能为空")
+        rejected: List[str] = []
+        skipped: List[Dict[str, str]] = []
+        now_iso = datetime.now().isoformat(timespec="seconds")
+        for proposal_id in ids:
+            st, _, data = _load_revision(user_id, proposal_id)
+            if not st:
+                skipped.append({"proposal_id": proposal_id, "reason": "not_found"})
+                continue
+            if st != "queue":
+                skipped.append({"proposal_id": proposal_id, "reason": f"not_queue:{st}"})
+                continue
+            data["status"] = "rejected"
+            data["rejected_at"] = now_iso
+            data["rejected_note"] = str(req.note or "")
+            data["rejected_by"] = "openclaw_bot"
+            data["request_id"] = str(x_request_id or "").strip()
+            _move_revision(user_id, st, "rejected", proposal_id, data)
+            rejected.append(proposal_id)
+        append_audit_log(
+            user_id,
+            "openclaw_revision_batch_reject",
+            "ok",
+            f"rejected={len(rejected)}",
+            {
+                "rejected_ids": rejected,
+                "skipped_count": len(skipped),
+                "actor_type": "bot",
+                "actor_id": "openclaw_bot",
+                "request_id": str(x_request_id or "").strip(),
+            },
+        )
+        return {"status": "success", "data": {"rejected": rejected, "skipped": skipped}}
+
+    @router.get("/api/openclaw/mods")
+    def list_mods_for_openclaw(
+        q: str = "",
+        source_type: str = "",
+        limit: int = 100,
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("mods_list")
+        rows: List[Dict[str, Any]] = []
+        if not os.path.exists(workshop_dir):
+            return {"status": "success", "data": {"items": [], "count": 0}}
+        qv = str(q or "").strip().lower()
+        sv = str(source_type or "").strip().lower()
+        for file_name in sorted(os.listdir(workshop_dir), reverse=True):
+            if not file_name.endswith(".json"):
+                continue
+            path = os.path.join(workshop_dir, file_name)
+            try:
+                data = _read_json(path)
+            except Exception:
+                continue
+            mod_id = str(data.get("id", file_name[:-5]) or file_name[:-5])
+            name = str(data.get("name", "") or "")
+            desc = str(data.get("description", "") or "")
+            stype = str(data.get("source_type", "") or "")
+            if sv and stype.lower() != sv:
+                continue
+            if qv and qv not in (f"{mod_id} {name} {desc}".lower()):
+                continue
+            rows.append(
+                {
+                    "id": mod_id,
+                    "name": name,
+                    "description": desc,
+                    "author": str(data.get("author", "") or ""),
+                    "source_type": stype,
+                    "visibility": str(data.get("visibility", "") or ""),
+                    "version": int(data.get("version", 1) or 1),
+                    "updated_at": str(data.get("updated_at", "") or data.get("timestamp", "")),
+                    "tags": data.get("tags", []) if isinstance(data.get("tags", []), list) else [],
+                }
+            )
+        lim = max(1, min(int(limit or 100), 300))
+        return {"status": "success", "data": {"items": rows[:lim], "count": len(rows)}}
+
+    @router.get("/api/openclaw/mods/{mod_id}")
+    def get_mod_detail_for_openclaw(
+        mod_id: str,
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("mods_detail")
+        path = _workshop_file_path(mod_id)
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail="mod not found")
+        data = _read_json(path)
+        content = data.get("content", {}) if isinstance(data.get("content", {}), dict) else {}
+        md_files = list((content.get("md", {}) or {}).keys())
+        csv_files = list((content.get("csv", {}) or {}).keys())
+        return {
+            "status": "success",
+            "data": {
+                "id": str(data.get("id", mod_id) or mod_id),
+                "name": str(data.get("name", "") or ""),
+                "description": str(data.get("description", "") or ""),
+                "author": str(data.get("author", "") or ""),
+                "source_type": str(data.get("source_type", "") or ""),
+                "visibility": str(data.get("visibility", "") or ""),
+                "version": int(data.get("version", 1) or 1),
+                "updated_at": str(data.get("updated_at", "") or data.get("timestamp", "")),
+                "tags": data.get("tags", []) if isinstance(data.get("tags", []), list) else [],
+                "files": {"md": sorted(md_files), "csv": sorted(csv_files)},
+                "manifest": data.get("manifest", {}) if isinstance(data.get("manifest", {}), dict) else {},
+            },
+        }
+
+    @router.post("/api/openclaw/mods/propose")
+    def openclaw_mods_propose(
+        req: OpenClawModProposeReq,
+        x_request_id: str = Header(None),
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+        user_id: str = get_user_id,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("mods_propose")
+        target_mod_id = str(req.target_mod_id or "").strip() or "default"
+        summary = str(req.summary or "").strip() or f"OpenClaw 模组提案：{target_mod_id}"
+        changes = _sanitize_openclaw_changes(req.changes, allowed_prefixes=("prompts/", "events/"))
+        memories = _sanitize_openclaw_memories(req.memory_candidates)
+        proposal = _create_openclaw_revision(
+            user_id=user_id,
+            target_mod_id=target_mod_id,
+            summary=summary,
+            risk_level=req.risk_level,
+            changes=changes,
+            memory_candidates=memories,
+            extra_payload={
+                "type": "mod_propose",
+                "name": str(req.name or "").strip(),
+                "description": str(req.description or "").strip(),
+                "request_id": str(x_request_id or "").strip(),
+            },
+        )
+        append_audit_log(
+            user_id,
+            "openclaw_mods_propose",
+            "ok",
+            target_mod_id,
+            {"proposal_id": proposal.get("proposal_id"), "changes_count": len(changes), "request_id": str(x_request_id or "").strip()},
+        )
+        return {"status": "success", "data": {"proposal_id": proposal.get("proposal_id"), "status": "queue"}}
+
+    @router.put("/api/openclaw/mods/{mod_id}/propose")
+    def openclaw_mod_update_propose(
+        mod_id: str,
+        req: OpenClawModProposeReq,
+        x_request_id: str = Header(None),
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+        user_id: str = get_user_id,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("mods_update_propose")
+        target_mod_id = str(mod_id or "").strip() or str(req.target_mod_id or "").strip() or "default"
+        summary = str(req.summary or "").strip() or f"OpenClaw 模组更新提案：{target_mod_id}"
+        changes = _sanitize_openclaw_changes(req.changes, allowed_prefixes=("prompts/", "events/"))
+        memories = _sanitize_openclaw_memories(req.memory_candidates)
+        proposal = _create_openclaw_revision(
+            user_id=user_id,
+            target_mod_id=target_mod_id,
+            summary=summary,
+            risk_level=req.risk_level,
+            changes=changes,
+            memory_candidates=memories,
+            extra_payload={
+                "type": "mod_update_propose",
+                "name": str(req.name or "").strip(),
+                "description": str(req.description or "").strip(),
+                "request_id": str(x_request_id or "").strip(),
+            },
+        )
+        append_audit_log(
+            user_id,
+            "openclaw_mods_update_propose",
+            "ok",
+            target_mod_id,
+            {"proposal_id": proposal.get("proposal_id"), "changes_count": len(changes), "request_id": str(x_request_id or "").strip()},
+        )
+        return {"status": "success", "data": {"proposal_id": proposal.get("proposal_id"), "status": "queue"}}
+
+    @router.get("/api/openclaw/skills")
+    def list_skills_for_openclaw(
+        active_only: bool = False,
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+        user_id: str = get_user_id,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("skills_list")
+        engine = get_engine(user_id)
+        pm = getattr(engine, "pm", None) if engine else None
+        items: List[Dict[str, Any]] = []
+        if pm is not None and hasattr(pm, "get_user_skill_catalog"):
+            try:
+                rows = pm.get_user_skill_catalog({}) or []
+                for row in rows:
+                    item = {
+                        "id": str(row.get("id", "")),
+                        "name": str(row.get("name", "")),
+                        "description": str(row.get("description", "")),
+                        "file_path": str(row.get("file_path", "")),
+                        "enabled": bool(row.get("enabled", True)),
+                        "when": str(row.get("when", "always")),
+                        "target": str(row.get("target", "")),
+                        "priority": int(row.get("priority", 100) or 100),
+                        "tags": row.get("tags") if isinstance(row.get("tags"), list) else [],
+                        "active": bool(row.get("active", True)),
+                    }
+                    if active_only and not item["active"]:
+                        continue
+                    items.append(item)
+            except Exception:
+                items = []
+        return {"status": "success", "data": {"count": len(items), "items": items}}
+
+    @router.get("/api/openclaw/events")
+    def list_events_for_openclaw(
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+        user_id: str = get_user_id,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("events_list")
+        editor_content = _load_editor_content(user_id)
+        csv_files_set = set()
+        for d in [default_events_dir]:
+            if os.path.exists(d):
+                for root, _, files in os.walk(d):
+                    for file in files:
+                        if file.endswith((".csv", ".json")):
+                            rel_path = os.path.relpath(os.path.join(root, file), d).replace("\\", "/")
+                            csv_files_set.add(rel_path)
+        for rel_path in (editor_content.get("csv", {}) or {}).keys():
+            csv_files_set.add(str(rel_path).replace("\\", "/"))
+        rows = []
+        for name in sorted(csv_files_set):
+            ext = "json" if name.lower().endswith(".json") else "csv"
+            rows.append({"name": name, "type": ext})
+        return {"status": "success", "data": {"count": len(rows), "items": rows}}
+
+    @router.post("/api/openclaw/skills/propose")
+    def openclaw_skills_propose(
+        req: OpenClawContentProposeReq,
+        x_request_id: str = Header(None),
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+        user_id: str = get_user_id,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("skills_propose")
+        target_mod_id = str(req.target_mod_id or "").strip() or "default"
+        changes = _sanitize_openclaw_changes(req.changes, allowed_prefixes=("prompts/skills/",))
+        if not changes:
+            raise HTTPException(status_code=400, detail="skills/propose 至少需要 1 条 prompts/skills/ 变更")
+        memories = _sanitize_openclaw_memories(req.memory_candidates)
+        proposal = _create_openclaw_revision(
+            user_id=user_id,
+            target_mod_id=target_mod_id,
+            summary=str(req.summary or "").strip() or "OpenClaw 技能提案",
+            risk_level=req.risk_level,
+            changes=changes,
+            memory_candidates=memories,
+            extra_payload={"type": "skills_propose", "request_id": str(x_request_id or "").strip()},
+        )
+        append_audit_log(
+            user_id,
+            "openclaw_skills_propose",
+            "ok",
+            target_mod_id,
+            {"proposal_id": proposal.get("proposal_id"), "changes_count": len(changes), "request_id": str(x_request_id or "").strip()},
+        )
+        return {"status": "success", "data": {"proposal_id": proposal.get("proposal_id"), "status": "queue"}}
+
+    @router.post("/api/openclaw/events/propose")
+    def openclaw_events_propose(
+        req: OpenClawContentProposeReq,
+        x_request_id: str = Header(None),
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+        user_id: str = get_user_id,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("events_propose")
+        target_mod_id = str(req.target_mod_id or "").strip() or "default"
+        changes = _sanitize_openclaw_changes(req.changes, allowed_prefixes=("events/",))
+        if not changes:
+            raise HTTPException(status_code=400, detail="events/propose 至少需要 1 条 events/ 变更")
+        memories = _sanitize_openclaw_memories(req.memory_candidates)
+        proposal = _create_openclaw_revision(
+            user_id=user_id,
+            target_mod_id=target_mod_id,
+            summary=str(req.summary or "").strip() or "OpenClaw 事件提案",
+            risk_level=req.risk_level,
+            changes=changes,
+            memory_candidates=memories,
+            extra_payload={"type": "events_propose", "request_id": str(x_request_id or "").strip()},
+        )
+        append_audit_log(
+            user_id,
+            "openclaw_events_propose",
+            "ok",
+            target_mod_id,
+            {"proposal_id": proposal.get("proposal_id"), "changes_count": len(changes), "request_id": str(x_request_id or "").strip()},
+        )
+        return {"status": "success", "data": {"proposal_id": proposal.get("proposal_id"), "status": "queue"}}
+
+    @router.get("/api/openclaw/users/stats")
+    def openclaw_users_stats(
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("users_stats")
+        total_accounts = 0
+        total_linked_visitors = 0
+        if os.path.exists(accounts_by_id_dir):
+            for file_name in os.listdir(accounts_by_id_dir):
+                if not file_name.endswith(".json"):
+                    continue
+                file_path = os.path.join(accounts_by_id_dir, file_name)
+                try:
+                    account = _read_json(file_path)
+                except Exception:
+                    continue
+                if account.get("account_id"):
+                    total_accounts += 1
+                    total_linked_visitors += len(list(account.get("linked_visitor_ids", []) or []))
+        active_sessions = 0
+        now = datetime.now()
+        if os.path.exists(accounts_sessions_dir):
+            for file_name in os.listdir(accounts_sessions_dir):
+                if not file_name.endswith(".json"):
+                    continue
+                file_path = os.path.join(accounts_sessions_dir, file_name)
+                try:
+                    session = _read_json(file_path)
+                    expires_at = datetime.fromisoformat(str(session.get("expires_at", "") or ""))
+                except Exception:
+                    continue
+                if expires_at > now:
+                    active_sessions += 1
+        return {
+            "status": "success",
+            "data": {
+                "total_accounts": total_accounts,
+                "active_sessions": active_sessions,
+                "total_linked_visitors": total_linked_visitors,
+            },
+        }
+
+    @router.get("/api/openclaw/system/status")
+    def openclaw_system_status(
+        openclaw_session: Dict[str, Any] = require_openclaw_bot,
+        user_id: str = get_user_id,
+    ):
+        _ = openclaw_session
+        _enforce_openclaw_rate_limit("system_status")
+        storage = {}
+        try:
+            from src.services.state_service import get_storage_quota_data
+            storage = get_storage_quota_data(user_id)
+        except Exception:
+            storage = {}
+        queue_count = 0
+        queue_dir = _revisions_dir(user_id, "queue")
+        if os.path.exists(queue_dir):
+            queue_count = len([fn for fn in os.listdir(queue_dir) if fn.endswith(".json")])
+        return {
+            "status": "success",
+            "data": {
+                "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "openclaw_rpm_limit": openclaw_rpm_limit,
+                "revision_queue_count": queue_count,
+                "storage": storage,
+                "workshop_dir_exists": os.path.exists(workshop_dir),
+                "accounts_dir_exists": os.path.exists(accounts_by_id_dir),
+            },
+        }
 
     @router.post("/api/admin/revisions/{proposal_id}/apply_memory")
     def apply_revision_memory(

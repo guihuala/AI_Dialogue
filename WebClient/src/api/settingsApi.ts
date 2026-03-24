@@ -1,7 +1,7 @@
 import axios from 'axios';
+import { API_BASE } from './apiBase';
 
-// 使用与 gameApi 相同的基础地址
-const API_BASE_URL = 'http://127.0.0.1:8000/api/system';
+const API_BASE_URL = `${API_BASE}/system`;
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL
