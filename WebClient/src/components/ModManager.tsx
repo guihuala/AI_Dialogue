@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Layers, Cloud, BookOpen, Trash2, Download, Plus, RefreshCw, X, Check, Search, Edit3 } from 'lucide-react';
+import { Cloud, BookOpen, Trash2, Download, Plus, RefreshCw, X, Check, Search, Edit3 } from 'lucide-react';
 import { gameApi } from '../api/gameApi';
 import { ConfirmDialog } from './common/ConfirmDialog';
 
@@ -423,15 +423,7 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                 </div>
             )}
 
-            {/* Header Area */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-5">
-                <div>
-                    <h2 className="text-3xl font-black text-[var(--color-cyan-dark)] flex items-center tracking-tight">
-                        <Layers className="mr-3 text-[var(--color-cyan-main)]" size={32} />
-                        模组中心
-                    </h2>
-                </div>
-
                 <div className="flex items-center gap-4 w-full md:w-auto">
                     {/* Tab Switcher */}
                     <div className="flex bg-[var(--color-cyan-light)]/35 p-1 rounded-2xl border border-[var(--color-cyan-main)]/10">
@@ -641,7 +633,7 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-8">
                                 {workshopMods.length === 0 ? (
                                     <div className="col-span-full py-20 text-center text-gray-400 font-bold text-sm">
-                                        工坊空空如也，快去发布第一个模组吧！
+                                        工坊空空如也
                                     </div>
                                 ) : (
                                     workshopMods.map(mod => (
@@ -719,7 +711,7 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                                     type="text"
                                     value={saveName}
                                     onChange={e => setSaveName(e.target.value)}
-                                    placeholder="起个好听的名字..."
+                                    placeholder="起个名字..."
                                     className="w-full border-2 border-[var(--color-cyan-main)]/10 bg-[var(--color-cyan-light)]/10 rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-[var(--color-cyan-main)] transition-all"
                                 />
                             </div>
@@ -877,12 +869,12 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
 
                         <div className={`mb-8 rounded-2xl border p-5 ${canPublishWorkshopMods ? 'border-emerald-200 bg-emerald-50/70' : 'border-amber-200 bg-amber-50/80'}`}>
                             <div className={`text-[10px] font-black uppercase tracking-widest mb-3 ${canPublishWorkshopMods ? 'text-emerald-700' : 'text-amber-700'}`}>
-                                身份说明
+                                身份
                             </div>
                             <p className={`text-sm font-semibold leading-7 ${canPublishWorkshopMods ? 'text-emerald-800' : 'text-[var(--color-cyan-dark)]/70'}`}>
                                 {canPublishWorkshopMods
-                                    ? '你当前已登录正式账户。可以下载这个模组到本地库，也可以在编辑器里继续维护并公开自己的作品。'
-                                    : '你当前是访客模式。可以下载这个模组到本地库并继续游玩，但如果想把自己的模组公开到工坊，需要先登录正式账户。'}
+                                    ? '当前已登陆。可以下载这个模组到本地库，也可以在编辑器里继续维护并公开自己的作品。'
+                                    : '当前是访客模式。可以下载这个模组到本地库并继续游玩，但是如果想把自己的模组公开到工坊，需要先登录正式账户。'}
                             </p>
                         </div>
 

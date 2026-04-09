@@ -1,16 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { settingsApi, SystemSettings } from '../api/settingsApi';
 import { gameApi } from '../api/gameApi';
 import { useGameStore } from '../store/gameStore';
-import { Settings, Save, RefreshCcw, Server, Thermometer, Database, Type, Trash2, Milestone } from 'lucide-react';
+import { RefreshCcw, Server, Thermometer, Database, Type, Trash2 } from 'lucide-react';
 import { ConfirmDialog } from './common/ConfirmDialog';
 
 const AI_PRESETS = [
-    { name: 'DeepSeek (深度求索)', url: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'] },
-    { name: 'SiliconFlow (硅基流动)', url: 'https://api.siliconflow.cn/v1', models: ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1', 'Qwen/Qwen2.5-72B-Instruct', 'THUDM/glm-4-9b-chat'] },
+    { name: 'DeepSeek', url: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'] },
+    { name: 'SiliconFlow', url: 'https://api.siliconflow.cn/v1', models: ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1', 'Qwen/Qwen2.5-72B-Instruct', 'THUDM/glm-4-9b-chat'] },
     { name: 'OpenAI', url: 'https://api.openai.com/v1', models: ['gpt-4o-mini', 'gpt-4o'] },
-    { name: 'ZhiPu (智谱清言)', url: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-plus', 'glm-4-flash'] },
-    { name: 'Ollama (本地推理)', url: 'http://localhost:11434/v1', models: ['qwen2.5:7b', 'llama3:8b', 'deepseek-r1:7b'] }
+    { name: 'ZhiPu', url: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-plus', 'glm-4-flash'] },
+    { name: 'Ollama', url: 'http://localhost:11434/v1', models: ['qwen2.5:7b', 'llama3:8b', 'deepseek-r1:7b'] }
 ];
 
 const TEMP_MIN = 0.2;
@@ -23,6 +23,8 @@ const STABLE_TOKENS_MIN = 700;
 const STABLE_TOKENS_MAX = 1200;
 
 export const SettingsPanel = () => {
+    const didHydrateRef = useRef(false);
+    const toastTimerRef = useRef<number | null>(null);
     const [settings, setSettings] = useState<SystemSettings>({
         base_url: '',
         api_key: '',
@@ -36,8 +38,7 @@ export const SettingsPanel = () => {
         turn_debug: false
     });
     const [isLoading, setIsLoading] = useState(true);
-    const [isSaving, setIsSaving] = useState(false);
-    const [message, setMessage] = useState('');
+    const [toast, setToast] = useState<{ text: string; tone: 'error' | 'success' } | null>(null);
     const [activeTab, setActiveTab] = useState<'ai' | 'preferences' | 'memory'>('ai');
     const [confirmDialog, setConfirmDialog] = useState<{
         open: boolean;
@@ -53,12 +54,18 @@ export const SettingsPanel = () => {
 
     // Store values
     const {
-        audioVolume, setAudioVolume,
-        isMuted, setMuted,
         uiTransparency, setUiTransparency,
         resetGame,
         setTypewriterSpeed
     } = useGameStore();
+
+    const showToast = (text: string, tone: 'error' | 'success') => {
+        setToast({ text, tone });
+        if (toastTimerRef.current) {
+            window.clearTimeout(toastTimerRef.current);
+        }
+        toastTimerRef.current = window.setTimeout(() => setToast(null), tone === 'error' ? 3200 : 1800);
+    };
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -73,12 +80,51 @@ export const SettingsPanel = () => {
                 }
             } catch (err) {
                 console.error('Failed to fetch settings:', err);
-                setMessage('读取设置失败。请检查后端是否正常运行。');
+                showToast('读取设置失败。请检查后端是否正常运行。', 'error');
             } finally {
                 setIsLoading(false);
             }
         };
         fetchSettings();
+    }, []);
+
+    useEffect(() => {
+        if (isLoading) return;
+        if (!didHydrateRef.current) {
+            didHydrateRef.current = true;
+            return;
+        }
+
+        const timer = window.setTimeout(async () => {
+            try {
+                const safeSettings = {
+                    ...settings,
+                    temperature: settings.stability_mode === 'stable'
+                        ? Math.max(STABLE_TEMP_MIN, Math.min(STABLE_TEMP_MAX, settings.temperature))
+                        : Math.max(TEMP_MIN, Math.min(TEMP_MAX, settings.temperature)),
+                    max_tokens: settings.stability_mode === 'stable'
+                        ? Math.max(STABLE_TOKENS_MIN, Math.min(STABLE_TOKENS_MAX, settings.max_tokens))
+                        : Math.max(TOKENS_MIN, Math.min(TOKENS_MAX, settings.max_tokens))
+                };
+                await settingsApi.updateSettings(safeSettings);
+                setSettings(safeSettings);
+                setTypewriterSpeed(safeSettings.typewriter_speed);
+                showToast('已自动保存', 'success');
+            } catch (error) {
+                console.error('Failed to auto-save settings:', error);
+                showToast('保存失败，请重试。', 'error');
+            }
+        }, 700);
+
+        return () => window.clearTimeout(timer);
+    }, [settings, isLoading, setTypewriterSpeed]);
+
+    useEffect(() => {
+        return () => {
+            if (toastTimerRef.current) {
+                window.clearTimeout(toastTimerRef.current);
+            }
+        };
     }, []);
 
     useEffect(() => {
@@ -114,32 +160,6 @@ export const SettingsPanel = () => {
         });
     };
 
-    const handleSave = async () => {
-        setIsSaving(true);
-        setMessage('');
-        try {
-            const safeSettings = {
-                ...settings,
-                temperature: settings.stability_mode === 'stable'
-                    ? Math.max(STABLE_TEMP_MIN, Math.min(STABLE_TEMP_MAX, settings.temperature))
-                    : Math.max(TEMP_MIN, Math.min(TEMP_MAX, settings.temperature)),
-                max_tokens: settings.stability_mode === 'stable'
-                    ? Math.max(STABLE_TOKENS_MIN, Math.min(STABLE_TOKENS_MAX, settings.max_tokens))
-                    : Math.max(TOKENS_MIN, Math.min(TOKENS_MAX, settings.max_tokens))
-            };
-            await settingsApi.updateSettings(safeSettings);
-            setSettings(safeSettings);
-            setTypewriterSpeed(safeSettings.typewriter_speed);
-            setMessage('设置保存成功！');
-            setTimeout(() => setMessage(''), 3000);
-        } catch (error) {
-            console.error('Failed to save settings:', error);
-            setMessage('保存失败，请重试。');
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
     if (isLoading) {
         return (
             <div className="flex-1 flex items-center justify-center h-full">
@@ -149,54 +169,45 @@ export const SettingsPanel = () => {
     }
 
     return (
-        <div className="flex-1 flex flex-col h-full relative p-8">
-            <div className="flex items-center justify-between mb-8 border-b border-[var(--color-cyan-main)]/15 pb-4">
-                <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 rounded-xl bg-[var(--color-cyan-main)] text-white flex items-center justify-center shadow-lg shadow-cyan-main/30">
-                        <Settings size={28} />
-                    </div>
-                    <div>
-                        <h2 className="text-2xl font-black text-[var(--color-cyan-dark)] tracking-tight">系统设置</h2>
-                        <p className="text-sm font-bold text-[var(--color-cyan-dark)]/55">调整模型、偏好和记忆检索。</p>
+        <div className="flex-1 flex flex-col h-full relative p-5 md:p-6">
+            {toast && (
+                <div className="pointer-events-none fixed right-6 top-24 z-[120] animate-fade-in-up">
+                    <div className={`rounded-2xl px-4 py-3 text-sm font-black shadow-xl backdrop-blur-xl ${toast.tone === 'error' ? 'bg-red-100/95 text-red-600 border border-red-200/80' : 'bg-white/92 text-[var(--color-cyan-dark)] border border-[var(--color-cyan-main)]/10'}`}>
+                        {toast.text}
                     </div>
                 </div>
-                {message && (
-                    <div className={`px-4 py-2 rounded-lg font-bold text-sm ${message.includes('失败') ? 'bg-red-100 text-red-600' : 'bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)]'}`}>
-                        {message}
-                    </div>
-                )}
-            </div>
+            )}
 
             {/* Tab Header */}
-            <div className="flex space-x-2 mb-8 bg-[var(--color-cyan-light)]/30 p-1 rounded-2xl w-fit">
+            <div className="flex space-x-2 mb-6 bg-[var(--color-cyan-light)]/30 p-1 rounded-xl w-fit">
                 <button
                     onClick={() => setActiveTab('ai')}
-                    className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all ${activeTab === 'ai' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
+                    className={`px-5 py-2 rounded-lg font-black text-sm transition-all ${activeTab === 'ai' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
                 >
                     AI网关
                 </button>
                 <button
                     onClick={() => setActiveTab('preferences')}
-                    className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all ${activeTab === 'preferences' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
+                    className={`px-5 py-2 rounded-lg font-black text-sm transition-all ${activeTab === 'preferences' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
                 >
                     偏好设置
                 </button>
                 <button
                     onClick={() => setActiveTab('memory')}
-                    className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all ${activeTab === 'memory' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
+                    className={`px-5 py-2 rounded-lg font-black text-sm transition-all ${activeTab === 'memory' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
                 >
                     记忆片段
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-4 space-y-6">
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
                 {activeTab === 'ai' ? (
-                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col h-full overflow-hidden">
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col h-full">
                         {/* Main Interaction Area: Sidebar + Detail */}
-                        <div className="flex flex-col lg:flex-row gap-6 flex-1 overflow-hidden min-h-0">
+                        <div className="flex flex-col lg:flex-row gap-4 flex-1 overflow-hidden min-h-0">
                             {/* Left: Provider Selection Sidebar */}
-                            <div className="lg:w-1/3 flex flex-col space-y-3 overflow-y-auto pr-2 custom-scrollbar">
-                                <div className="px-2 mb-2 text-sm font-black text-[var(--color-cyan-main)]">推荐服务商</div>
+                            <div className="lg:w-1/3 flex flex-col space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+                                <div className="px-2 mb-2 text-sm font-black text-[var(--color-cyan-main)]">服务商</div>
                                 {AI_PRESETS.map((preset) => (
                                     <button
                                         key={preset.name}
@@ -207,12 +218,12 @@ export const SettingsPanel = () => {
                                                 model_name: preset.models[0]
                                             }));
                                         }}
-                                        className={`group relative p-4 rounded-2xl border transition-all text-left flex items-start space-x-4 ${settings.base_url === preset.url
+                                        className={`group relative p-3 rounded-xl border transition-all text-left flex items-start space-x-3 ${settings.base_url === preset.url
                                             ? 'bg-white border-[var(--color-cyan-main)] shadow-md'
                                             : 'bg-white/40 border-[var(--color-cyan-main)]/8 hover:border-[var(--color-cyan-main)]/30 hover:bg-white/60'
                                             }`}
                                     >
-                                        <div className={`p-2.5 rounded-xl transition-colors ${settings.base_url === preset.url
+                                        <div className={`p-2 rounded-lg transition-colors ${settings.base_url === preset.url
                                             ? 'bg-[var(--color-cyan-main)] text-white'
                                             : 'bg-white text-[var(--color-cyan-dark)]/40 group-hover:text-[var(--color-cyan-main)] group-hover:bg-white/80 border border-[var(--color-cyan-main)]/10'
                                             }`}>
@@ -230,15 +241,15 @@ export const SettingsPanel = () => {
                             </div>
 
                             {/* Right: Configuration Form */}
-                            <div className="lg:w-2/3 flex flex-col space-y-6 overflow-y-auto pr-2 custom-scrollbar">
+                            <div className="lg:w-2/3 flex flex-col space-y-4 pr-1 min-h-0 overflow-y-auto custom-scrollbar">
                                 {/* Base Config Card */}
-                                <div className="bg-white p-6 rounded-[2rem] border border-[var(--color-cyan-main)]/10 shadow-sm space-y-6">
+                                <div className="bg-white/72 p-4 rounded-xl border border-[var(--color-cyan-main)]/10 shadow-sm space-y-4">
                                     <div className="flex items-center space-x-3 mb-2">
                                         <Database size={18} className="text-[var(--color-cyan-main)]" />
-                                        <span className="text-sm font-black text-[var(--color-cyan-dark)]">接口参数</span>
+                                        <span className="text-sm font-black text-[var(--color-cyan-dark)]">参数</span>
                                     </div>
 
-                                    <div className="space-y-4">
+                                    <div className="space-y-3">
                                         <div className="group">
                                             <label className="block text-xs font-black text-[var(--color-cyan-dark)]/40 mb-2 ml-1">网关</label>
                                             <div className="relative">
@@ -246,7 +257,7 @@ export const SettingsPanel = () => {
                                                     type="text"
                                                     value={settings.base_url}
                                                     onChange={(e) => setSettings({ ...settings, base_url: e.target.value })}
-                                                    className="w-full bg-[var(--color-cyan-light)]/30 text-[var(--color-cyan-dark)] font-bold p-3.5 rounded-xl border-2 border-transparent focus:border-[var(--color-cyan-main)]/30 focus:bg-white outline-none transition-all pr-12"
+                                                    className="w-full bg-[var(--color-cyan-light)]/30 text-[var(--color-cyan-dark)] font-bold p-3 rounded-lg border border-transparent focus:border-[var(--color-cyan-main)]/30 focus:bg-white outline-none transition-all pr-12"
                                                     placeholder="https://..."
                                                 />
                                                 <RefreshCcw className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--color-cyan-dark)]/20 group-hover:text-[var(--color-cyan-main)]/40 transition-colors" size={16} />
@@ -255,12 +266,12 @@ export const SettingsPanel = () => {
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
-                                                <label className="block text-[10px] font-black text-[var(--color-cyan-dark)]/40 uppercase mb-2 ml-1">默认模型</label>
+                                                <label className="block text-xs font-black text-[var(--color-cyan-dark)]/40 mb-2 ml-1">默认模型</label>
                                                 {settings.base_url && AI_PRESETS.find(p => p.url === settings.base_url) ? (
                                                     <select
                                                         value={settings.model_name}
                                                         onChange={(e) => setSettings(s => ({ ...s, model_name: e.target.value }))}
-                                                        className="w-full bg-white text-[var(--color-cyan-dark)] font-black p-3.5 rounded-xl border-2 border-[var(--color-cyan-main)]/10 focus:border-[var(--color-cyan-main)] outline-none transition-all appearance-none cursor-pointer"
+                                                        className="w-full bg-white text-[var(--color-cyan-dark)] font-black p-3 rounded-lg border border-[var(--color-cyan-main)]/10 focus:border-[var(--color-cyan-main)] outline-none transition-all appearance-none cursor-pointer"
                                                     >
                                                         {AI_PRESETS.find(p => p.url === settings.base_url)?.models.map(m => (
                                                             <option key={m} value={m}>{m}</option>
@@ -271,19 +282,19 @@ export const SettingsPanel = () => {
                                                         type="text"
                                                         value={settings.model_name}
                                                         onChange={(e) => setSettings({ ...settings, model_name: e.target.value })}
-                                                        className="w-full bg-[var(--color-cyan-light)]/30 text-[var(--color-cyan-dark)] font-bold p-3.5 rounded-xl border-2 border-transparent focus:border-[var(--color-cyan-main)]/30 focus:bg-white outline-none transition-all"
+                                                        className="w-full bg-[var(--color-cyan-light)]/30 text-[var(--color-cyan-dark)] font-bold p-3 rounded-lg border border-transparent focus:border-[var(--color-cyan-main)]/30 focus:bg-white outline-none transition-all"
                                                         placeholder="例如: gpt-4"
                                                     />
                                                 )}
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-[var(--color-cyan-dark)]/40 uppercase mb-2 ml-1">通信密钥</label>
+                                                <label className="block text-xs font-black text-[var(--color-cyan-dark)]/40 mb-2 ml-1">API</label>
                                                 <input
                                                     type="password"
                                                     value={settings.api_key}
                                                     onChange={(e) => setSettings({ ...settings, api_key: e.target.value })}
                                                     placeholder="已加密保护"
-                                                    className="w-full bg-[var(--color-cyan-light)]/30 text-[var(--color-cyan-dark)] font-bold p-3.5 rounded-xl border-2 border-transparent focus:border-[var(--color-cyan-main)]/30 focus:bg-white outline-none transition-all"
+                                                    className="w-full bg-[var(--color-cyan-light)]/30 text-[var(--color-cyan-dark)] font-bold p-3 rounded-lg border border-transparent focus:border-[var(--color-cyan-main)]/30 focus:bg-white outline-none transition-all"
                                                 />
                                             </div>
                                         </div>
@@ -291,24 +302,23 @@ export const SettingsPanel = () => {
                                 </div>
 
                                 {/* Advanced Tuning Card */}
-                                <div className="bg-white/60 backdrop-blur-sm p-6 rounded-[2rem] border border-[var(--color-cyan-main)]/10 shadow-sm space-y-6">
+                                <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-[var(--color-cyan-main)]/10 shadow-sm space-y-4">
                                     <div className="flex items-center space-x-3 mb-2">
                                         <Thermometer size={18} className="text-[var(--color-yellow-main)]" />
                                         <span className="text-sm font-black text-[var(--color-cyan-dark)]">高级参数</span>
                                     </div>
 
-                                    <div className="space-y-8 pl-1">
+                                    <div className="space-y-6">
                                         <div>
                                             <div className="flex justify-between items-center mb-4">
                                                 <div className="flex flex-col">
                                                     <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">性能模式</span>
-                                                    <span className="text-xs font-bold text-[var(--color-cyan-dark)]/40">调整响应速度与剧情质量的平衡</span>
                                                 </div>
                                             </div>
                                             <select
                                                 value={settings.latency_mode}
                                                 onChange={(e) => setSettings({ ...settings, latency_mode: e.target.value as any })}
-                                                className="w-full bg-white text-[var(--color-cyan-dark)] font-black p-3.5 rounded-xl border-2 border-[var(--color-cyan-main)]/10 focus:border-[var(--color-cyan-main)] outline-none transition-all appearance-none cursor-pointer"
+                                                className="w-full bg-white text-[var(--color-cyan-dark)] font-black p-3 rounded-lg border border-[var(--color-cyan-main)]/10 focus:border-[var(--color-cyan-main)] outline-none transition-all appearance-none cursor-pointer"
                                             >
                                                 <option value="balanced">均衡模式（推荐）</option>
                                                 <option value="fast">极速模式（优先速度）</option>
@@ -316,12 +326,12 @@ export const SettingsPanel = () => {
                                             </select>
                                         </div>
 
-                                        <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white px-4 py-3">
+                                        <div className="rounded-lg border border-[var(--color-cyan-main)]/10 bg-white px-3 py-3">
                                             <div className="flex items-center justify-between gap-3">
                                                 <div className="flex flex-col">
                                                     <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">回合调试面板</span>
-                                                    <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">
-                                                        开启后返回每回合 timings 与 prompt 规模，用于定位卡顿来源
+                                                    <span className="text-xs font-bold text-[var(--color-cyan-dark)]/40">
+                                                        开启后返回每回合timings与prompt规模
                                                     </span>
                                                 </div>
                                                 <button
@@ -344,18 +354,17 @@ export const SettingsPanel = () => {
                                             <div className="flex justify-between items-center mb-4">
                                                 <div className="flex flex-col">
                                                     <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">对话架构</span>
-                                                    <span className="text-xs font-bold text-[var(--color-cyan-dark)]/40">选择单一 DM 或多 Agent 模式</span>
                                                 </div>
                                             </div>
                                             <select
                                                 value={settings.dialogue_mode}
                                                 onChange={(e) => setSettings({ ...settings, dialogue_mode: e.target.value as any })}
-                                                className="w-full bg-white text-[var(--color-cyan-dark)] font-black p-3.5 rounded-xl border-2 border-[var(--color-cyan-main)]/10 focus:border-[var(--color-cyan-main)] outline-none transition-all appearance-none cursor-pointer"
+                                                className="w-full bg-white text-[var(--color-cyan-dark)] font-black p-3 rounded-lg border border-[var(--color-cyan-main)]/10 focus:border-[var(--color-cyan-main)] outline-none transition-all appearance-none cursor-pointer"
                                             >
-                                                <option value="single_dm">单一DM统筹（推荐稳定）</option>
-                                                <option value="hybrid">Hybrid 预生成分支（推荐提速实验）</option>
-                                                <option value="tree_only">Tree Only 分支树（极实验）</option>
-                                                <option value="npc_dm">NPC-DM 多Agent（更慢，偏实验）</option>
+                                                <option value="single_dm">单一DM统筹（稳定）</option>
+                                                <option value="hybrid">Hybrid 预生成分支（实验）</option>
+                                                <option value="tree_only">Tree Only 分支树（实验）</option>
+                                                <option value="npc_dm">NPC-DM 多Agent（慢，偏实验）</option>
                                             </select>
                                         </div>
 
@@ -363,26 +372,22 @@ export const SettingsPanel = () => {
                                             <div className="flex justify-between items-center mb-4">
                                                 <div className="flex flex-col">
                                                     <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">输出稳定性</span>
-                                                    <span className="text-xs font-bold text-[var(--color-cyan-dark)]/40">稳定模式更稳，自由模式更灵活。</span>
                                                 </div>
                                             </div>
                                             <select
                                                 value={settings.stability_mode}
                                                 onChange={(e) => setSettings({ ...settings, stability_mode: e.target.value as any })}
-                                                className="w-full bg-white text-[var(--color-cyan-dark)] font-black p-3.5 rounded-xl border-2 border-[var(--color-cyan-main)]/10 focus:border-[var(--color-cyan-main)] outline-none transition-all appearance-none cursor-pointer"
+                                                className="w-full bg-white text-[var(--color-cyan-dark)] font-black p-3 rounded-lg border border-[var(--color-cyan-main)]/10 focus:border-[var(--color-cyan-main)] outline-none transition-all appearance-none cursor-pointer"
                                             >
                                                 <option value="stable">Stable（推荐）</option>
-                                                <option value="balanced">Balanced（更自由）</option>
+                                                <option value="balanced">Balanced</option>
                                             </select>
                                         </div>
 
                                         <div>
                                             <div className="flex justify-between items-center mb-4">
                                                 <div className="flex flex-col">
-                                                    <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">采样温度</span>
-                                                    <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">
-                                                        {settings.stability_mode === 'stable' ? '推荐 0.3-0.8。' : '推荐 0.2-1.2。'}
-                                                    </span>
+                                                    <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">Temperature</span>
                                                 </div>
                                                 <span className="font-black text-[var(--color-yellow-main)] bg-[var(--color-cyan-dark)] px-3 py-1 rounded-lg text-xs tabular-nums">
                                                     {settings.temperature.toFixed(1)}
@@ -402,10 +407,7 @@ export const SettingsPanel = () => {
                                         <div>
                                             <div className="flex justify-between items-center mb-4">
                                                 <div className="flex flex-col">
-                                                    <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">单次最大 Token</span>
-                                                    <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">
-                                                        {settings.stability_mode === 'stable' ? '推荐 700-1200。' : '推荐 300-2000。'}
-                                                    </span>
+                                                    <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">单次最大Token</span>
                                                 </div>
                                                 <div className="flex items-center space-x-2">
                                                     <span className="font-black text-[var(--color-cyan-main)] text-sm">{settings.max_tokens}</span>
@@ -427,73 +429,21 @@ export const SettingsPanel = () => {
                             </div>
                         </div>
 
-                        {/* Sticky Action Bar */}
-                        <div className="mt-8 pt-6 border-t border-[var(--color-cyan-main)]/10 flex items-center justify-end bg-white/40 sticky bottom-0 backdrop-blur-sm -mx-2 px-2 pb-2">
-                            <button
-                                onClick={handleSave}
-                                disabled={isSaving}
-                                className="flex items-center px-10 py-4 bg-[var(--color-cyan-main)] text-white font-black rounded-2xl shadow-xl shadow-[var(--color-cyan-main)]/30 hover:bg-[var(--color-cyan-dark)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100 text-sm"
-                            >
-                                {isSaving ? <RefreshCcw className="animate-spin mr-3" size={18} /> : <Save className="mr-3" size={18} />}
-                                {isSaving ? '正在应用配置...' : '保存并应用设置'}
-                            </button>
-                        </div>
                     </div>
                 ) : activeTab === 'preferences' ? (
-                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
-                        {/* Audio Settings Content... */}
-                        {/* (Internal content omitted for brevity, keeping structure) */}
-                        <div className="bg-white p-6 rounded-[2rem] border border-[var(--color-cyan-main)]/10 shadow-sm">
-                            <div className="flex items-center space-x-3 mb-6">
-                                <div className="p-2 bg-[var(--color-cyan-light)] rounded-xl text-[var(--color-cyan-main)]">
-                                    <Milestone size={20} />
-                                </div>
-                                <h3 className="text-lg font-black text-[var(--color-cyan-dark)]">音视频偏好</h3>
-                            </div>
-
-                            <div className="space-y-6">
-                                <div className="flex flex-col">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <label className="text-sm font-black text-[var(--color-cyan-dark)]/60">主音量</label>
-                                        <span className="font-black text-[var(--color-cyan-main)]">{audioVolume}%</span>
-                                    </div>
-                                    <input
-                                        type="range"
-                                        min="0" max="100"
-                                        value={audioVolume}
-                                        onChange={(e) => setAudioVolume(parseInt(e.target.value))}
-                                        className="w-full h-2 bg-[var(--color-cyan-main)]/10 rounded-lg appearance-none cursor-pointer accent-[var(--color-cyan-main)]"
-                                    />
-                                </div>
-
-                                <div className="flex items-center justify-between p-4 bg-[var(--color-cyan-light)]/30 rounded-2xl">
-                                    <div>
-                                        <p className="font-black text-[var(--color-cyan-dark)] text-sm">静音模式</p>
-                                        <p className="text-xs font-bold text-[var(--color-cyan-dark)]/40">关闭环境音效与背景音乐</p>
-                                    </div>
-                                    <button
-                                        onClick={() => setMuted(!isMuted)}
-                                        className={`w-14 h-8 rounded-full transition-all relative ${isMuted ? 'bg-red-500' : 'bg-[var(--color-cyan-main)]'}`}
-                                    >
-                                        <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all shadow-sm ${isMuted ? 'left-7' : 'left-1'}`} />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* UI Settings */}
-                        <div className="bg-white p-6 rounded-[2rem] border border-[var(--color-cyan-main)]/10 shadow-sm">
-                            <div className="flex items-center space-x-3 mb-6">
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-4">
+                        <div className="bg-white/78 p-4 rounded-xl border border-[var(--color-cyan-main)]/10 shadow-sm">
+                            <div className="flex items-center space-x-3 mb-4">
                                 <div className="p-2 bg-[var(--color-cyan-light)] rounded-xl text-[var(--color-cyan-main)]">
                                     <Type size={20} />
                                 </div>
-                                <h3 className="text-lg font-black text-[var(--color-cyan-dark)]">显示与文本</h3>
+                                <h3 className="text-lg font-black text-[var(--color-cyan-dark)]">文本</h3>
                             </div>
 
-                            <div className="space-y-6">
-                                <div className="flex flex-col">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <label className="text-sm font-black text-[var(--color-cyan-dark)]/60">打字机速度</label>
+                            <div className="space-y-5">
+                                <div>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="text-sm font-black text-[var(--color-cyan-dark)]/70">打字机速度</label>
                                         <span className="font-black text-[var(--color-cyan-main)]">{settings.typewriter_speed}ms</span>
                                     </div>
                                     <input
@@ -505,9 +455,9 @@ export const SettingsPanel = () => {
                                     />
                                 </div>
 
-                                <div className="flex flex-col">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <label className="text-sm font-black text-[var(--color-cyan-dark)]/60">界面透明度</label>
+                                <div>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="text-sm font-black text-[var(--color-cyan-dark)]/70">界面透明度</label>
                                         <span className="font-black text-[var(--color-cyan-main)]">{uiTransparency}%</span>
                                     </div>
                                     <input
@@ -521,8 +471,7 @@ export const SettingsPanel = () => {
                             </div>
                         </div>
 
-                        {/* Dangerous Zone */}
-                        <div className="bg-red-50/50 p-6 rounded-[2rem] border border-red-100 shadow-sm">
+                        <div className="bg-red-50/50 p-4 rounded-xl border border-red-100 shadow-sm">
                             <div className="flex items-center space-x-3 mb-4 text-red-600">
                                 <Trash2 size={20} />
                                 <h3 className="text-lg font-black">危险区域</h3>
@@ -542,7 +491,7 @@ export const SettingsPanel = () => {
                                         }
                                     });
                                 }}
-                                className="w-full py-4 bg-white border-2 border-red-200 hover:bg-red-500 hover:border-red-500 hover:text-white text-red-500 font-black rounded-2xl transition-all shadow-sm flex items-center justify-center space-x-2 text-sm uppercase tracking-widest"
+                                className="w-full py-3 bg-white border border-red-200 hover:bg-red-500 hover:border-red-500 hover:text-white text-red-500 font-black rounded-xl transition-all shadow-sm flex items-center justify-center space-x-2 text-sm"
                             >
                                 <RefreshCcw size={18} />
                                 <span>重置记忆与进度</span>
@@ -552,10 +501,10 @@ export const SettingsPanel = () => {
                 ) : (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col h-full">
                         {/* Memory Control Hub */}
-                        <div className="flex items-center justify-between mb-8">
-                            <div className="flex items-center space-x-6">
-                                <div className="bg-white/60 p-4 rounded-2xl border-2 border-[var(--color-cyan-main)]/10">
-                                    <label className="block text-[9px] font-black text-[var(--color-cyan-dark)]/40 uppercase mb-2">角色筛选 Character</label>
+                        <div className="flex items-center justify-between mb-5">
+                            <div className="flex items-center space-x-3">
+                                <div className="bg-white/60 p-3 rounded-lg border border-[var(--color-cyan-main)]/10">
+                                    <label className="block text-xs font-black text-[var(--color-cyan-dark)]/40 mb-2">角色筛选</label>
                                     <select 
                                         value={memoryFilter.char}
                                         onChange={(e) => setMemoryFilter({...memoryFilter, char: e.target.value})}
@@ -565,48 +514,48 @@ export const SettingsPanel = () => {
                                         {active_roommates.map(name => <option key={name} value={name}>{name}</option>)}
                                     </select>
                                 </div>
-                                <div className="bg-white/60 p-4 rounded-2xl border-2 border-[var(--color-cyan-main)]/10">
-                                    <label className="block text-[9px] font-black text-[var(--color-cyan-dark)]/40 uppercase mb-2">记忆类型 Concept</label>
+                                <div className="bg-white/60 p-3 rounded-lg border border-[var(--color-cyan-main)]/10">
+                                    <label className="block text-xs font-black text-[var(--color-cyan-dark)]/40 mb-2">记忆类型</label>
                                     <select 
                                         value={memoryFilter.type}
                                         onChange={(e) => setMemoryFilter({...memoryFilter, type: e.target.value})}
                                         className="bg-transparent text-xs font-bold text-[var(--color-cyan-dark)] outline-none min-w-[120px]"
                                     >
                                         <option value="">全部类型</option>
-                                        <option value="lore">固定设定 (Lore)</option>
-                                        <option value="observation">观测记录 (Obs)</option>
-                                        <option value="action">行为历史 (Act)</option>
+                                        <option value="lore">固定设定</option>
+                                        <option value="observation">观测记录</option>
+                                        <option value="action">行为历史</option>
                                     </select>
                                 </div>
                             </div>
                             <div className="text-right">
-                                <p className="text-[10px] font-black text-[var(--color-cyan-dark)] uppercase">当前检索范围</p>
-                                <p className="text-[14px] font-black text-[var(--color-cyan-main)] uppercase">{currentSaveId || 'NEW GAME'}</p>
+                                <p className="text-xs font-black text-[var(--color-cyan-dark)]">当前检索范围</p>
+                                <p className="text-[14px] font-black text-[var(--color-cyan-main)]">{currentSaveId || '新游戏'}</p>
                             </div>
                         </div>
 
                         {/* Memory Flow Area */}
-                        <div className="flex-1 space-y-4 overflow-y-auto custom-scrollbar pr-2 pb-10">
+                        <div className="flex-1 space-y-3 overflow-y-auto custom-scrollbar pr-1 pb-8">
                             {memories.length === 0 ? (
-                                <div className="h-60 flex flex-col items-center justify-center border-4 border-dashed border-[var(--color-cyan-main)]/10 rounded-3xl text-[var(--color-cyan-dark)]/20">
+                                <div className="h-56 flex flex-col items-center justify-center border-2 border-dashed border-[var(--color-cyan-main)]/10 rounded-xl text-[var(--color-cyan-dark)]/20">
                                     <Database size={48} className="mb-4 opacity-20" />
-                                    <span className="text-xs font-black uppercase tracking-widest">暂时没有符合条件的记忆碎片</span>
-                                    <span className="text-[9px] font-bold mt-1 opacity-50">进行对话或在剧情中选择选项将产生新的记忆</span>
+                                    <span className="text-sm font-black">暂时没有符合条件的记忆</span>
+                                    <span className="text-xs font-bold mt-1 opacity-50">进行对话或推进剧情后会产生新的记忆。</span>
                                 </div>
                             ) : (
                                 memories.map((m) => (
-                                    <div key={m.id} className="group bg-white/60 hover:bg-white p-5 rounded-2xl border-2 border-[var(--color-cyan-main)]/10 hover:border-[var(--color-cyan-main)]/30 transition-all shadow-sm hover:shadow-md relative overflow-hidden">
+                                    <div key={m.id} className="group bg-white/60 hover:bg-white p-4 rounded-lg border border-[var(--color-cyan-main)]/10 hover:border-[var(--color-cyan-main)]/30 transition-all shadow-sm hover:shadow-md relative overflow-hidden">
                                         <div className="flex justify-between items-start mb-3">
                                             <div className="flex items-center space-x-3">
-                                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${
+                                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
                                                     m.metadata?.type === 'lore' ? 'bg-purple-100 text-purple-600' :
                                                     m.metadata?.type === 'observation' ? 'bg-blue-100 text-blue-600' :
                                                     'bg-green-100 text-green-600'
                                                 }`}>
-                                                    {m.metadata?.type || 'Unknown'}
+                                                    {m.metadata?.type || 'unknown'}
                                                 </span>
-                                                <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/30 tabular-nums">
-                                                    {m.metadata?.timestamp ? new Date(m.metadata.timestamp).toLocaleString() : 'DATALINK_ESTABLISHED'}
+                                                <span className="text-[10px] font-bold text-[var(--color-cyan-dark)]/30 tabular-nums">
+                                                    {m.metadata?.timestamp ? new Date(m.metadata.timestamp).toLocaleString() : '无时间'}
                                                 </span>
                                             </div>
                                             <button 
@@ -619,8 +568,6 @@ export const SettingsPanel = () => {
                                         <p className="text-xs font-bold text-[var(--color-cyan-dark)] leading-relaxed">
                                             {m.content}
                                         </p>
-                                        {/* Decorative logic lines */}
-                                        <div className="absolute left-0 bottom-0 h-1 bg-gradient-to-r from-[var(--color-cyan-main)] to-transparent w-full opacity-0 group-hover:opacity-40 transition-all"></div>
                                     </div>
                                 ))
                             )}

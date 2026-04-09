@@ -1332,7 +1332,7 @@ ${data.content}`;
     return (
         <>
         <div
-            className="flex-1 flex flex-col h-full bg-[var(--color-cyan-light)]/40 backdrop-blur-3xl rounded-3xl border border-white/50 shadow-2xl animate-fade-in relative transition-all duration-700 overflow-hidden"
+            className="flex-1 flex flex-col h-full bg-[var(--color-cyan-light)]/40 animate-fade-in relative transition-all duration-700 overflow-hidden"
         >
             <EditorHeader
                 sidebarCollapsed={sidebarCollapsed}

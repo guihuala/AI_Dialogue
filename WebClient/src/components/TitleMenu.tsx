@@ -10,7 +10,7 @@ interface TitleMenuProps {
 
 export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnouncement }: TitleMenuProps) => {
     return (
-        <div className="flex-1 flex flex-col items-center justify-center relative min-h-[500px] h-full w-full animate-fade-in group overflow-hidden rounded-[2.5rem] bg-[var(--color-cyan-light)]/35 border border-[var(--color-cyan-main)]/15 shadow-[0_20px_50px_rgba(0,188,212,0.08)]">
+        <div className="flex-1 flex flex-col items-center justify-center relative min-h-[500px] h-full w-full animate-fade-in group overflow-hidden bg-[var(--color-cyan-light)]/35">
 
             {/* Warm/Light Background Layer */}
             <div className="absolute inset-0 z-0">
@@ -47,7 +47,7 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
             </div>
 
             {/* Center Logo & Actions (Cyan + Yellow) */}
-            <div className="relative z-10 flex flex-col items-start max-w-2xl w-full mr-auto ml-[6%] md:ml-[8%]">
+            <div className="relative z-10 flex flex-col items-start max-w-2xl w-full mr-auto ml-[6%] md:ml-[8%] py-8 md:py-10">
                 <div className="text-left mb-14 space-y-8">
                     <div className="flex flex-col items-start">
                         <h1 className="flex flex-col items-start gap-2">

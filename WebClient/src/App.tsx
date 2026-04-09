@@ -127,7 +127,7 @@ function App() {
           />
         )}
 
-        <div className={`flex-1 relative flex flex-col items-stretch justify-center w-full h-full custom-scrollbar transition-all duration-500 ${activeTab === 'game' ? (showUI ? 'p-4 md:px-4 md:py-6 overflow-hidden' : 'p-0 overflow-hidden') : 'p-4 md:px-8 md:py-8 pb-20 overflow-auto'}`}>
+        <div className={`flex-1 relative flex flex-col items-stretch justify-center w-full h-full custom-scrollbar transition-all duration-500 ${activeTab === 'game' ? 'p-0 overflow-hidden' : 'p-4 md:px-8 md:py-8 pb-20 overflow-auto'}`}>
           {activeTab === 'game' && <GameView onTabChange={setActiveTabWithRoute} />}
           {activeTab === 'mods' && <ModManager onTabChange={setActiveTabWithRoute} />}
           {activeTab === 'workshop' && <ModManager onTabChange={setActiveTabWithRoute} />}

@@ -66,7 +66,6 @@ export const SaveSelection = ({ onNewGame, onLoadGame, onBack }: SaveSelectionPr
                         </div>
                         <div>
                             <h3 className="text-2xl font-black text-[var(--color-cyan-dark)]">开启新游戏</h3>
-                            <p className="mt-2 text-sm text-[var(--color-cyan-dark)]/60">重新选择舍友和起始设定。</p>
                         </div>
                         <div className="text-sm font-black text-[var(--color-cyan-dark)] bg-[var(--color-cyan-light)] px-4 py-2 rounded-full group-hover:bg-[var(--color-yellow-main)] transition-all">
                             选择舍友并进入宿舍

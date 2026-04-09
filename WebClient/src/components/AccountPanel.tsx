@@ -253,26 +253,15 @@ export const AccountPanel = () => {
     };
 
     return (
-        <div className="flex-1 flex flex-col h-full relative p-8">
-            <div className="flex items-center justify-between mb-8 border-b border-[var(--color-cyan-main)]/15 pb-4">
-                <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 rounded-xl bg-[var(--color-cyan-main)] text-white flex items-center justify-center shadow-lg shadow-cyan-main/30">
-                        <UserRound size={28} />
-                    </div>
-                    <div>
-                        <h2 className="text-2xl font-black text-[var(--color-cyan-dark)] tracking-tight">账户中心</h2>
-                        <p className="text-sm font-bold text-[var(--color-cyan-dark)]/55">管理登录状态与数据绑定。</p>
-                    </div>
+        <div className="flex-1 flex flex-col h-full relative p-5 md:p-6">
+            {message && (
+                <div className={`mb-4 ml-auto w-fit px-4 py-2 rounded-lg font-bold text-sm ${message.includes('失败') ? 'bg-red-100 text-red-600' : 'bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)]'}`}>
+                    {message}
                 </div>
-                {message && (
-                    <div className={`px-4 py-2 rounded-lg font-bold text-sm ${message.includes('失败') ? 'bg-red-100 text-red-600' : 'bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)]'}`}>
-                        {message}
-                    </div>
-                )}
-            </div>
+            )}
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-4 space-y-8">
-                <div className="bg-white/72 p-6 rounded-[2rem] border border-[var(--color-cyan-main)]/10 shadow-sm">
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-5">
+                <div className="mx-auto w-full max-w-3xl bg-white/72 p-4 rounded-xl border border-[var(--color-cyan-main)]/10 shadow-sm">
                     <div className="flex items-center space-x-3 mb-6">
                         <div className="p-2 bg-[var(--color-cyan-light)] rounded-xl text-[var(--color-cyan-main)]">
                             <UserRound size={20} />
@@ -291,8 +280,8 @@ export const AccountPanel = () => {
                             正在读取账户状态...
                         </div>
                     ) : accountInfo?.auth_mode === 'account' && accountInfo?.account ? (
-                        <div className="space-y-6">
-                            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-5">
+                        <div className="space-y-4">
+                            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
                                 <div className="text-xs font-black text-emerald-600">已登录</div>
                                 <div className="mt-2 text-xl font-black text-[var(--color-cyan-dark)]">
                                     {accountInfo.account.username}
@@ -305,7 +294,7 @@ export const AccountPanel = () => {
                                 </div>
                             </div>
 
-                            <div className="rounded-2xl border border-[var(--color-cyan-main)]/10 bg-white p-5">
+                            <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white/82 p-4">
                                 <div className="text-sm font-black text-[var(--color-cyan-main)]">当前权限</div>
                                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {capabilityEntries.map((item) => {
@@ -313,7 +302,7 @@ export const AccountPanel = () => {
                                         return (
                                             <div
                                                 key={item.key}
-                                                className={`rounded-2xl border p-4 ${enabled ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/60'}`}
+                                                className={`rounded-lg border p-3 ${enabled ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/60'}`}
                                             >
                                                 <div className="flex items-center justify-between gap-3">
                                                     <div className="text-sm font-black text-[var(--color-cyan-dark)]">{item.label}</div>
@@ -330,8 +319,8 @@ export const AccountPanel = () => {
                                 </div>
                             </div>
 
-                            <div className="rounded-2xl border-2 border-[var(--color-cyan-main)]/10 bg-white p-5">
-                                <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">安全设置</div>
+                            <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white/82 p-4">
+                                <div className="text-sm font-black text-[var(--color-cyan-main)]">安全设置</div>
                                 <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <input
                                         type="password"
@@ -359,7 +348,7 @@ export const AccountPanel = () => {
                                     <button
                                         onClick={handleChangePassword}
                                         disabled={accountActionLoading !== '' && accountActionLoading !== 'password'}
-                                        className="inline-flex items-center gap-2 rounded-2xl bg-[var(--color-cyan-main)] px-5 py-3 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-[var(--color-cyan-dark)] disabled:opacity-50"
+                                        className="inline-flex items-center gap-2 rounded-xl bg-[var(--color-cyan-main)] px-4 py-2.5 text-sm font-black text-white transition-all hover:bg-[var(--color-cyan-dark)] disabled:opacity-50"
                                     >
                                         {accountActionLoading === 'password' ? <RefreshCcw className="animate-spin" size={14} /> : <LogIn size={14} />}
                                         修改密码
@@ -367,7 +356,7 @@ export const AccountPanel = () => {
                                     <button
                                         onClick={handleBindCurrentVisitor}
                                         disabled={accountActionLoading !== '' && accountActionLoading !== 'bind'}
-                                        className="inline-flex items-center gap-2 rounded-2xl border-2 border-[var(--color-cyan-main)]/20 bg-white px-5 py-3 text-xs font-black uppercase tracking-widest text-[var(--color-cyan-main)] transition-all hover:bg-[var(--color-cyan-light)] disabled:opacity-50"
+                                        className="inline-flex items-center gap-2 rounded-xl border border-[var(--color-cyan-main)]/20 bg-white px-4 py-2.5 text-sm font-black text-[var(--color-cyan-main)] transition-all hover:bg-[var(--color-cyan-light)] disabled:opacity-50"
                                     >
                                         {accountActionLoading === 'bind' ? <RefreshCcw className="animate-spin" size={14} /> : <UserPlus size={14} />}
                                         绑定当前访客数据
@@ -375,7 +364,7 @@ export const AccountPanel = () => {
                                     <button
                                         onClick={handleAccountLogout}
                                         disabled={accountActionLoading === 'logout'}
-                                        className="inline-flex items-center gap-2 rounded-2xl bg-red-500 px-5 py-3 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-red-600 disabled:opacity-50"
+                                        className="inline-flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-black text-white transition-all hover:bg-red-600 disabled:opacity-50"
                                     >
                                         {accountActionLoading === 'logout' ? <RefreshCcw className="animate-spin" size={14} /> : <LogOut size={14} />}
                                         退出登录
@@ -383,14 +372,14 @@ export const AccountPanel = () => {
                                 </div>
                             </div>
 
-                            <div className="rounded-2xl border-2 border-[var(--color-cyan-main)]/10 bg-white p-5">
-                                <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">访客绑定预览</div>
+                            <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white/82 p-4">
+                                <div className="text-sm font-black text-[var(--color-cyan-main)]">访客绑定预览</div>
                                 <div className="mt-2 text-xs font-bold text-[var(--color-cyan-dark)]/55">
                                     在正式绑定前，先看看当前访客身份里大概有哪些内容，以及是否可能与账户现有文件重名。
                                 </div>
                                 <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div className="rounded-2xl bg-[var(--color-cyan-light)]/20 p-4">
-                                        <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">当前访客</div>
+                                    <div className="rounded-lg bg-[var(--color-cyan-light)]/20 p-3">
+                                        <div className="text-xs font-black text-[var(--color-cyan-main)]">当前访客</div>
                                         <div className="mt-2 text-sm font-black text-[var(--color-cyan-dark)]">
                                             {bindingPreview?.visitor_id || '无可绑定访客'}
                                         </div>
@@ -401,8 +390,8 @@ export const AccountPanel = () => {
                                             模组：{bindingPreview?.visitor_summary?.library_items || 0}，存档：{bindingPreview?.visitor_summary?.save_files || 0}
                                         </div>
                                     </div>
-                                    <div className="rounded-2xl bg-[var(--color-cyan-light)]/20 p-4">
-                                        <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">账户现有内容</div>
+                                    <div className="rounded-lg bg-[var(--color-cyan-light)]/20 p-3">
+                                        <div className="text-xs font-black text-[var(--color-cyan-main)]">账户现有内容</div>
                                         <div className="mt-2 text-sm font-black text-[var(--color-cyan-dark)]">
                                             {accountInfo.account.username}
                                         </div>
@@ -413,8 +402,8 @@ export const AccountPanel = () => {
                                             模组：{bindingPreview?.account_summary?.library_items || 0}，存档：{bindingPreview?.account_summary?.save_files || 0}
                                         </div>
                                     </div>
-                                    <div className="rounded-2xl bg-amber-50/70 p-4 border border-amber-100">
-                                        <div className="text-[10px] font-black uppercase tracking-widest text-amber-600">冲突提示</div>
+                                    <div className="rounded-lg bg-amber-50/70 p-3 border border-amber-100">
+                                        <div className="text-xs font-black text-amber-600">冲突提示</div>
                                         <div className="mt-2 text-sm font-black text-[var(--color-cyan-dark)]">
                                             {bindingPreview?.conflicts?.count || 0} 个潜在重名文件
                                         </div>
@@ -433,38 +422,38 @@ export const AccountPanel = () => {
                                     </div>
                                 )}
                                 <div className="mt-4 flex flex-wrap items-center gap-3">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">冲突处理策略</span>
+                                    <span className="text-xs font-black text-[var(--color-cyan-main)]">冲突处理策略</span>
                                     <button
                                         onClick={() => setBindStrategy('keep_account')}
-                                        className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${bindStrategy === 'keep_account' ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]' : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'}`}
+                                        className={`px-3 py-1 rounded-full text-xs font-black border ${bindStrategy === 'keep_account' ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]' : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'}`}
                                     >
                                         保留账户已有内容
                                     </button>
                                     <button
                                         onClick={() => setBindStrategy('overwrite_with_visitor')}
-                                        className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${bindStrategy === 'overwrite_with_visitor' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200'}`}
+                                        className={`px-3 py-1 rounded-full text-xs font-black border ${bindStrategy === 'overwrite_with_visitor' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200'}`}
                                     >
                                         用访客内容覆盖冲突
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                                <div className="rounded-2xl border-2 border-[var(--color-cyan-main)]/10 bg-white p-5">
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white/82 p-4">
                                     <div className="flex items-center justify-between gap-3">
                                         <div className="flex items-center gap-2">
                                             <div className="rounded-xl bg-[var(--color-cyan-light)] p-2 text-[var(--color-cyan-main)]">
                                                 <Laptop size={16} />
                                             </div>
                                             <div>
-                                                <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">会话管理</div>
+                                                <div className="text-xs font-black text-[var(--color-cyan-main)]">会话管理</div>
                                                 <div className="text-xs font-bold text-[var(--color-cyan-dark)]/50">查看当前登录状态，并可退出其他设备</div>
                                             </div>
                                         </div>
                                         <button
                                             onClick={handleLogoutOthers}
                                             disabled={accountActionLoading !== '' && accountActionLoading !== 'sessions'}
-                                            className="inline-flex items-center gap-2 rounded-2xl border-2 border-[var(--color-cyan-main)]/20 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] transition-all hover:bg-[var(--color-cyan-light)] disabled:opacity-50"
+                                            className="inline-flex items-center gap-2 rounded-xl border border-[var(--color-cyan-main)]/20 bg-white px-4 py-2 text-xs font-black text-[var(--color-cyan-main)] transition-all hover:bg-[var(--color-cyan-light)] disabled:opacity-50"
                                         >
                                             {accountActionLoading === 'sessions' ? <RefreshCcw className="animate-spin" size={12} /> : <Shield size={12} />}
                                             退出其他设备
@@ -474,7 +463,7 @@ export const AccountPanel = () => {
                                         {sessions.length > 0 ? sessions.map((session) => (
                                             <div
                                                 key={session.session_id}
-                                                className={`rounded-2xl border p-4 ${session.is_current ? 'border-emerald-200 bg-emerald-50/60' : 'border-[var(--color-cyan-main)]/10 bg-[var(--color-cyan-light)]/15'}`}
+                                                className={`rounded-lg border p-3 ${session.is_current ? 'border-emerald-200 bg-emerald-50/60' : 'border-[var(--color-cyan-main)]/10 bg-[var(--color-cyan-light)]/15'}`}
                                             >
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div>
@@ -492,7 +481,7 @@ export const AccountPanel = () => {
                                                         <button
                                                             onClick={() => handleRevokeSession(session.session_id)}
                                                             disabled={accountActionLoading === 'sessions'}
-                                                            className="rounded-xl border border-red-200 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-500 transition-all hover:bg-red-50 disabled:opacity-50"
+                                                            className="rounded-lg border border-red-200 px-3 py-2 text-xs font-black text-red-500 transition-all hover:bg-red-50 disabled:opacity-50"
                                                         >
                                                             移除
                                                         </button>
@@ -507,22 +496,22 @@ export const AccountPanel = () => {
                                     </div>
                                 </div>
 
-                                <div className="rounded-2xl border-2 border-[var(--color-cyan-main)]/10 bg-white p-5">
+                                <div className="rounded-xl border border-[var(--color-cyan-main)]/10 bg-white/82 p-4">
                                     <div className="flex items-center gap-2">
                                         <div className="rounded-xl bg-[var(--color-cyan-light)] p-2 text-[var(--color-cyan-main)]">
                                             <History size={16} />
                                         </div>
                                         <div>
-                                            <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">最近活动</div>
+                                            <div className="text-xs font-black text-[var(--color-cyan-main)]">最近活动</div>
                                             <div className="text-xs font-bold text-[var(--color-cyan-dark)]/50">最近账户与内容相关操作记录</div>
                                         </div>
                                     </div>
                                     <div className="mt-4 space-y-3">
                                         {auditRows.length > 0 ? auditRows.map((row, index) => (
-                                            <div key={`${row.ts || 'row'}-${index}`} className="rounded-2xl border border-[var(--color-cyan-main)]/10 bg-[var(--color-cyan-light)]/10 p-4">
+                                            <div key={`${row.ts || 'row'}-${index}`} className="rounded-lg border border-[var(--color-cyan-main)]/10 bg-[var(--color-cyan-light)]/10 p-3">
                                                 <div className="flex items-center justify-between gap-3">
                                                     <div className="text-sm font-black text-[var(--color-cyan-dark)]">{row.action || 'unknown_action'}</div>
-                                                    <div className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${row.status === 'ok' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-500'}`}>
+                                                    <div className={`rounded-full px-2.5 py-1 text-xs font-black ${row.status === 'ok' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-500'}`}>
                                                         {row.status || 'unknown'}
                                                     </div>
                                                 </div>
@@ -543,12 +532,12 @@ export const AccountPanel = () => {
                             </div>
                         </div>
                     ) : (
-                        <div className="space-y-6">
-                            <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-5 text-sm font-bold text-[var(--color-cyan-dark)]/70 leading-relaxed">
+                        <div className="mx-auto flex w-full max-w-lg flex-col items-center space-y-5">
+                            <div className="w-full rounded-xl border border-amber-100 bg-amber-50/70 p-4 text-sm font-bold text-[var(--color-cyan-dark)]/70 leading-relaxed">
                                 当前仍在使用访客模式。建议注册正式账户来稳定绑定存档、模组和工坊作品。
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="w-full space-y-4">
                                 <div>
                                     <label className="block text-xs font-black text-[var(--color-cyan-dark)]/40 mb-2 ml-1">用户名</label>
                                     <input
@@ -571,7 +560,7 @@ export const AccountPanel = () => {
                                 </div>
                             </div>
 
-                            <label className="flex items-center gap-3 rounded-2xl bg-[var(--color-cyan-light)]/30 px-4 py-3 text-sm font-bold text-[var(--color-cyan-dark)]">
+                            <label className="flex w-full items-center gap-3 rounded-2xl bg-[var(--color-cyan-light)]/30 px-4 py-3 text-sm font-bold text-[var(--color-cyan-dark)]">
                                 <input
                                     type="checkbox"
                                     checked={accountForm.bindCurrentVisitor}
@@ -581,7 +570,7 @@ export const AccountPanel = () => {
                                 注册时绑定当前访客数据
                             </label>
 
-                            <div className="flex flex-wrap gap-3">
+                            <div className="flex flex-wrap justify-center gap-3">
                                 <button
                                     onClick={handleAccountRegister}
                                     disabled={accountActionLoading !== ''}

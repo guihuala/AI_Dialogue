@@ -1,4 +1,4 @@
-import { Layout, Sparkles, Eye, Code, UploadCloud, Save, HelpCircle } from 'lucide-react';
+import { Layout, Eye, Code, UploadCloud, Save, HelpCircle } from 'lucide-react';
 
 interface EditorHeaderProps {
     sidebarCollapsed: boolean;
@@ -40,7 +40,7 @@ export const EditorHeader = ({
     onShowGuide
 }: EditorHeaderProps) => {
     return (
-        <div className="flex items-center justify-between px-8 py-6 bg-white/40 border-b border-white/20 shrink-0">
+        <div className="flex items-center justify-between px-8 py-5 bg-white/40 border-b border-white/20 shrink-0">
             <div className="flex items-center space-x-4">
                 <button
                     onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -49,45 +49,40 @@ export const EditorHeader = ({
                 >
                     <Layout size={20} className={sidebarCollapsed ? "rotate-180" : ""} />
                 </button>
-                <div>
-                    <h2 className="text-xl font-black text-[var(--color-cyan-dark)] tracking-tight flex items-center">
-                        内容编辑器 <span className="ml-3 px-2 py-0.5 bg-[var(--color-cyan-light)] rounded-full border border-[var(--color-cyan-main)]/20 text-[8px] text-[var(--color-cyan-main)] font-black tracking-widest">v2.1</span>
-                    </h2>
-                    <div className="flex items-center mt-1 space-x-2 text-[8px] font-black uppercase tracking-wider text-[var(--color-cyan-main)]">
-                        <Sparkles size={10} className="text-[var(--color-yellow-main)]" />
-                        <span>内容中枢</span>
+                {(activeSourceLabel || activeModLabel || contextHint || statusNotice) && (
+                    <div className="flex flex-col">
+                        {(activeSourceLabel || activeModLabel || contextHint) && (
+                            <div className="flex flex-wrap gap-2 items-center">
+                                {activeSourceLabel && (
+                                    <span className="px-2 py-1 rounded-full bg-white/80 border border-[var(--color-cyan-main)]/15 text-[10px] font-black text-[var(--color-cyan-dark)]">
+                                        当前来源：{activeSourceLabel}
+                                    </span>
+                                )}
+                                {activeModLabel && (
+                                    <span className="px-2 py-1 rounded-full bg-[var(--color-cyan-light)]/70 border border-[var(--color-cyan-main)]/15 text-[10px] font-black text-[var(--color-cyan-main)]">
+                                        当前模组：{activeModLabel}
+                                    </span>
+                                )}
+                                {contextHint && (
+                                    <span className="text-[10px] font-bold text-[var(--color-cyan-dark)]/55">
+                                        {contextHint}
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                        {statusNotice && (
+                            <div
+                                className={`mt-2 inline-flex max-w-2xl items-center rounded-2xl border px-3 py-2 text-[10px] font-black leading-5 ${
+                                    statusNoticeTone === 'warning'
+                                        ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                        : 'border-[var(--color-cyan-main)]/15 bg-white/85 text-[var(--color-cyan-dark)]'
+                                }`}
+                            >
+                                {statusNotice}
+                            </div>
+                        )}
                     </div>
-                    {(activeSourceLabel || activeModLabel || contextHint) && (
-                        <div className="mt-3 flex flex-wrap gap-2 items-center">
-                            {activeSourceLabel && (
-                                <span className="px-2 py-1 rounded-full bg-white/80 border border-[var(--color-cyan-main)]/15 text-[10px] font-black text-[var(--color-cyan-dark)]">
-                                    当前来源：{activeSourceLabel}
-                                </span>
-                            )}
-                            {activeModLabel && (
-                                <span className="px-2 py-1 rounded-full bg-[var(--color-cyan-light)]/70 border border-[var(--color-cyan-main)]/15 text-[10px] font-black text-[var(--color-cyan-main)]">
-                                    当前模组：{activeModLabel}
-                                </span>
-                            )}
-                            {contextHint && (
-                                <span className="text-[10px] font-bold text-[var(--color-cyan-dark)]/55">
-                                    {contextHint}
-                                </span>
-                            )}
-                        </div>
-                    )}
-                    {statusNotice && (
-                        <div
-                            className={`mt-3 inline-flex max-w-2xl items-center rounded-2xl border px-3 py-2 text-[10px] font-black leading-5 ${
-                                statusNoticeTone === 'warning'
-                                    ? 'border-amber-200 bg-amber-50 text-amber-700'
-                                    : 'border-[var(--color-cyan-main)]/15 bg-white/85 text-[var(--color-cyan-dark)]'
-                            }`}
-                        >
-                            {statusNotice}
-                        </div>
-                    )}
-                </div>
+                )}
             </div>
 
             <div className="flex space-x-4 items-center scale-90 md:scale-100">
