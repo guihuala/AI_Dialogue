@@ -95,7 +95,32 @@ def get_user_id(identity: Dict[str, Any] = Depends(account_auth.get_identity)):
 def get_engine(user_id: str) -> GameEngine:
     """Get or create a GameEngine for a specific user"""
     if user_id not in engines:
-        engines[user_id] = GameEngine(user_id)
+        engine = GameEngine(user_id)
+        state = read_user_state(user_id)
+        llm_settings = state.get("llm_settings", {}) if isinstance(state, dict) else {}
+        if isinstance(llm_settings, dict) and llm_settings:
+            engine.llm.update_config(
+                api_key=llm_settings.get("api_key"),
+                base_url=llm_settings.get("base_url"),
+                model=llm_settings.get("model_name"),
+            )
+            try:
+                engine.llm.temperature = _clamp(float(llm_settings.get("temperature", engine.llm.temperature)), TEMP_MIN, TEMP_MAX)
+            except Exception:
+                pass
+            try:
+                engine.llm.max_tokens = int(_clamp(int(llm_settings.get("max_tokens", engine.llm.max_tokens)), TOKENS_MIN, TOKENS_MAX))
+            except Exception:
+                pass
+            try:
+                engine.llm.typewriter_speed = int(llm_settings.get("typewriter_speed", engine.llm.typewriter_speed))
+            except Exception:
+                pass
+            engine.latency_mode = str(llm_settings.get("latency_mode", engine.latency_mode) or engine.latency_mode)
+            engine.dialogue_mode = str(llm_settings.get("dialogue_mode", engine.dialogue_mode) or engine.dialogue_mode)
+            engine.stability_mode = str(llm_settings.get("stability_mode", engine.stability_mode) or engine.stability_mode)
+            engine.profile_turns = bool(llm_settings.get("turn_debug", engine.profile_turns))
+        engines[user_id] = engine
     return engines[user_id]
 
 
@@ -235,6 +260,8 @@ app.include_router(
     build_system_router(
         get_user_id=Depends(get_user_id),
         get_engine=get_engine,
+        read_user_state=read_user_state,
+        write_user_state=write_user_state,
         clamp=_clamp,
         temp_min=TEMP_MIN,
         temp_max=TEMP_MAX,

@@ -41,6 +41,7 @@ interface GameState {
   chapter: number;
   turn: number;
   current_evt_id: string;
+  currentEventName: string;
   current_scene: string;
   player_name: string;
   active_roommates: string[];
@@ -121,6 +122,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   chapter: 1,
   turn: 0,
   current_evt_id: '',
+  currentEventName: '',
   current_scene: '宿舍',
   player_name: '陆陈安然',
   active_roommates: [],
@@ -180,6 +182,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         chapter: data.chapter,
         turn: data.turn,
         current_evt_id: data.current_evt_id,
+        currentEventName: data.event_name || '',
         current_scene: data.current_scene || '宿舍',
         player_name: data.player_name || '陆陈安然',
         active_roommates: data.active_roommates || roommates,
@@ -327,6 +330,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         chapter: data.chapter,
         turn: data.turn,
         current_evt_id: data.current_evt_id,
+        currentEventName: data.event_name || '',
         current_scene: data.current_scene || prev.current_scene || '宿舍',
         player_name: data.player_name || prev.player_name || '陆陈安然',
         affinity: data.affinity,
@@ -461,6 +465,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               chapter: gameState.chapter,
               turn: gameState.turn,
               current_evt_id: gameState.current_evt_id,
+              currentEventName: gameState.event_name || '',
               current_scene: gameState.current_scene || '宿舍',
               player_name: gameState.player_name || '陆陈安然',
               active_roommates: gameState.active_roommates,
@@ -533,6 +538,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               chapter: 1,
               turn: 0,
               current_evt_id: '',
+              currentEventName: '',
               current_scene: '宿舍',
               player_name: '陆陈安然',
               narrativeState: {},

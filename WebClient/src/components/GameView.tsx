@@ -6,6 +6,7 @@ import { GameSetup } from './GameSetup';
 import { SaveSelection } from './SaveSelection';
 
 import { AttributeNotifications } from './game/AttributeNotifications';
+import { EventBanner } from './game/EventBanner';
 import { ScenePortraits } from './game/ScenePortraits';
 import { HistoryPanel } from './game/HistoryPanel';
 import { GameUIControls } from './game/GameUIControls';
@@ -40,6 +41,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         prefetch,
         pendingChoice,
         current_evt_id,
+        currentEventName,
         current_scene,
         resetGame,
         active_roommates,
@@ -65,6 +67,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
     const [isTyping, setIsTyping] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
     const [showSceneTransition, setShowSceneTransition] = useState(false);
+    const [showEventBanner, setShowEventBanner] = useState(false);
     const [showBackConfirm, setShowBackConfirm] = useState(false);
     const [showAnnouncement, setShowAnnouncement] = useState(false);
     const [showDebugPanel, setShowDebugPanel] = useState(false);
@@ -78,6 +81,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
     const [sceneCatalog, setSceneCatalog] = useState<any>({ default_image: '/assets/backgrounds/宿舍.jpg', scenes: [] });
     const dragMetaRef = useRef<{ panel: 'debug' | 'relation'; dx: number; dy: number } | null>(null);
     const prevEventIdRef = useRef<string>('');
+    const prevBannerEventIdRef = useRef<string>('');
 
     // Notifications system
     const [notifications, setNotifications] = useState<{ msg: string; id: number }[]>([]);
@@ -131,6 +135,17 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         setShowSceneTransition(true);
         const timer = setTimeout(() => setShowSceneTransition(false), 700);
         return () => clearTimeout(timer);
+    }, [current_evt_id]);
+
+    useEffect(() => {
+        if (!current_evt_id) return;
+        const prev = prevBannerEventIdRef.current;
+        prevBannerEventIdRef.current = current_evt_id;
+        if (prev === current_evt_id) return;
+
+        setShowEventBanner(true);
+        const timer = window.setTimeout(() => setShowEventBanner(false), 1800);
+        return () => window.clearTimeout(timer);
     }, [current_evt_id]);
 
     useEffect(() => {
@@ -544,10 +559,12 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
             { id: '苏', names: ['苏浅', '浅浅', '苏'] },
         ];
 
+        const orderedPortraits = selectedRoommates
+            .map((roommate) => portraitMapping.find((item) => item.names.includes(roommate)))
+            .filter((item, index, arr): item is NonNullable<typeof item> => !!item && arr.findIndex((candidate) => candidate?.id === item.id) === index);
+
         let presentChars: any[] = [];
-        for (const c of portraitMapping.filter((item) =>
-            item.names.some((name) => selectedRoommates.includes(name))
-        )) {
+        for (const c of orderedPortraits) {
             let isPresent = false;
             let isSpeaking = false;
             let highestMentionIdx = -1;
@@ -567,7 +584,12 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
 
         const actualSpeaker = [...presentChars].filter(c => c.isSpeaking).sort((a, b) => b.lastMentionIdx - a.lastMentionIdx)[0];
         if (actualSpeaker) presentChars.forEach(c => { if (c.id !== actualSpeaker.id) c.isSpeaking = false; });
-        return presentChars.sort((a, b) => b.lastMentionIdx - a.lastMentionIdx).slice(0, 4);
+        return presentChars.slice(0, 4);
+    };
+
+    const formatEventBannerTitle = (rawName?: string) => {
+        const name = String(rawName || '').trim();
+        return name;
     };
 
     const parseMarktext = (text: string) => {
@@ -617,6 +639,10 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
             </div>
 
             <AttributeNotifications notifications={notifications} />
+            <EventBanner
+                title={formatEventBannerTitle(currentEventName)}
+                visible={showEventBanner || showSceneTransition}
+            />
 
             {!!turnDebug && (
                 <div

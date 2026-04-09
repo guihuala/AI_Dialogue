@@ -2099,6 +2099,7 @@ class GameEngine:
                         "is_end": first_turn.get("is_end", False),
                         "player_name": player_name,
                         "event_id": next_evt.id,
+                        "event_name": next_evt.name,
                         "turn": 1,
                         "event_script": cached_script, # Return full script to frontend
                         "narrative_state": self._get_narrative_state_snapshot(),
@@ -3181,6 +3182,7 @@ class GameEngine:
                 "active_roommates": selected_chars,
                 "current_scene": parsed.get("current_scene", "宿舍"),
                 "current_evt_id": next_evt.id,
+                "event_name": next_evt.name,
                 "is_end": is_end, 
                 "player_name": player_name,
                 "next_options": extracted_options, 

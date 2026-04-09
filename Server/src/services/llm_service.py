@@ -22,20 +22,24 @@ class LLMService:
             "total_tokens": None,
         }
 
-    def update_config(self, api_key: str, base_url: str, model: str):
-        if not api_key:
-            api_key = os.getenv("DEEPSEEK_API_KEY") or "dummy"
-        if not base_url:
-            base_url = "https://api.deepseek.com/v1"
-        if not model:
-            model = "deepseek-chat"
-            
-        if api_key != self.api_key or base_url != self.base_url:
-            self.api_key = api_key
-            self.base_url = base_url
+    def update_config(self, api_key: Optional[str] = None, base_url: Optional[str] = None, model: Optional[str] = None):
+        next_api_key = str(api_key).strip() if api_key is not None else ""
+        next_base_url = str(base_url).strip() if base_url is not None else ""
+        next_model = str(model).strip() if model is not None else ""
+
+        resolved_api_key = next_api_key or self.api_key or os.getenv("DEEPSEEK_API_KEY") or "dummy"
+        resolved_base_url = next_base_url or self.base_url or "https://api.deepseek.com/v1"
+        resolved_model = next_model or self.model or "deepseek-chat"
+
+        if resolved_api_key != self.api_key or resolved_base_url != self.base_url:
+            self.api_key = resolved_api_key
+            self.base_url = resolved_base_url
             self.client = OpenAI(base_url=self.base_url, api_key=self.api_key)
             self.async_client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
-        self.model = model
+        else:
+            self.api_key = resolved_api_key
+            self.base_url = resolved_base_url
+        self.model = resolved_model
 
     def has_usable_config(self) -> bool:
         return bool(

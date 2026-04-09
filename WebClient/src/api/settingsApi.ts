@@ -66,7 +66,7 @@ export const settingsApi = {
         throw lastError || new Error('保存系统设置失败');
     },
 
-    validateSettings: async (): Promise<void> => {
+    validateSettings: async (): Promise<{ message: string }> => {
         const candidates = [
             `${API_BASE}/system/settings/validate`,
             `/api/system/settings/validate`,
@@ -76,7 +76,9 @@ export const settingsApi = {
         for (const url of candidates) {
             try {
                 const res = await axios.get(url, { headers: buildAuthHeaders() });
-                if (res?.data?.status === 'success') return;
+                if (res?.data?.status === 'success') {
+                    return { message: String(res?.data?.message || '配置有效') };
+                }
             } catch (e) {
                 lastError = e;
             }

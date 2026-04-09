@@ -413,7 +413,7 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
     };
 
     return (
-        <div className="flex-1 flex flex-col h-full p-6 relative animate-fade-in-up">
+        <div className="flex-1 flex flex-col h-full p-4 md:p-4 relative animate-fade-in-up">
             {/* Toast Notification */}
             {toast && (
                 <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 bg-white border-2 border-[var(--color-cyan-main)]/20 rounded-full shadow-xl text-sm font-black text-[var(--color-cyan-dark)] animate-fade-in-up">
@@ -421,7 +421,7 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                 </div>
             )}
 
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-5">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4">
                 <div className="flex items-center gap-4 w-full md:w-auto">
                     {/* Tab Switcher */}
                     <div className="flex bg-[var(--color-cyan-light)]/35 p-1 rounded-2xl border border-[var(--color-cyan-main)]/10">

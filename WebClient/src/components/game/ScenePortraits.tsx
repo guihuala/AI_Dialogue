@@ -35,8 +35,8 @@ export const ScenePortraits = ({ charactersInScene }: ScenePortraitsProps) => {
               alt={char.id}
               className={`max-h-[105vh] max-w-none w-auto transform transition-all duration-700 origin-bottom object-contain ${
                 char.isSpeaking || charactersInScene.length === 1
-                ? 'scale-[0.9] translate-y-28 z-20 brightness-100 saturate-100 blur-none'
-                : 'scale-[0.85] translate-y-36 z-10 brightness-[0.55] saturate-[0.75] blur-[1px]'
+                ? 'scale-[0.87] translate-y-32 z-20 brightness-100 saturate-100 blur-none drop-shadow-[0_0_28px_rgba(255,255,255,0.28)]'
+                : 'scale-[0.87] translate-y-32 z-10 brightness-[0.58] saturate-[0.8] blur-[1px]'
               }`}
               style={{ height: 'auto' }}
             />

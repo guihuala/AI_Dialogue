@@ -104,6 +104,8 @@ export const SettingsPanel = () => {
     });
     const [isLoading, setIsLoading] = useState(true);
     const [toast, setToast] = useState<{ text: string; tone: 'error' | 'success' } | null>(null);
+    const [validationState, setValidationState] = useState<'idle' | 'checking' | 'success' | 'error'>('idle');
+    const [validationMessage, setValidationMessage] = useState('尚未校验');
     const [activeTab, setActiveTab] = useState<'ai' | 'preferences' | 'memory'>('ai');
     const [confirmDialog, setConfirmDialog] = useState<{
         open: boolean;
@@ -142,6 +144,9 @@ export const SettingsPanel = () => {
                         stability_mode: data.stability_mode || 'stable',
                         turn_debug: !!data.turn_debug
                     });
+                    const hasApiConfig = Boolean(String(data.api_key || '').trim() && String(data.base_url || '').trim() && String(data.model_name || '').trim());
+                    setValidationState(hasApiConfig ? 'idle' : 'error');
+                    setValidationMessage(hasApiConfig ? '已保存，建议测试连接' : '当前还没有完成模型配置');
                 }
             } catch (err) {
                 console.error('Failed to fetch settings:', err);
@@ -174,6 +179,8 @@ export const SettingsPanel = () => {
                 await settingsApi.updateSettings(safeSettings);
                 setSettings(safeSettings);
                 setTypewriterSpeed(safeSettings.typewriter_speed);
+                setValidationState('idle');
+                setValidationMessage('已保存，建议测试连接');
                 showToast('已自动保存', 'success');
             } catch (error) {
                 console.error('Failed to auto-save settings:', error);
@@ -183,6 +190,12 @@ export const SettingsPanel = () => {
 
         return () => window.clearTimeout(timer);
     }, [settings, isLoading, setTypewriterSpeed]);
+
+    useEffect(() => {
+        if (isLoading) return;
+        setValidationState('idle');
+        setValidationMessage('已修改，等待自动保存');
+    }, [isLoading, settings.api_key, settings.base_url, settings.model_name]);
 
     useEffect(() => {
         return () => {
@@ -225,6 +238,22 @@ export const SettingsPanel = () => {
         });
     };
 
+    const handleValidateSettings = async () => {
+        setValidationState('checking');
+        setValidationMessage('正在测试连接...');
+        try {
+            const result = await settingsApi.validateSettings();
+            setValidationState('success');
+            setValidationMessage(result.message || '配置有效');
+            showToast('模型配置可用', 'success');
+        } catch (error: any) {
+            const detail = String(error?.response?.data?.detail || error?.message || '').trim();
+            setValidationState('error');
+            setValidationMessage(detail || '配置无效，请检查网关、模型和 API Key');
+            showToast(detail || '配置校验失败', 'error');
+        }
+    };
+
     if (isLoading) {
         return (
             <div className="flex-1 flex items-center justify-center h-full">
@@ -234,7 +263,7 @@ export const SettingsPanel = () => {
     }
 
     return (
-        <div className="flex-1 flex flex-col h-full relative p-5 md:p-6">
+        <div className="flex-1 flex flex-col h-full relative p-4 md:p-4">
             {toast && (
                 <div className="pointer-events-none fixed right-6 top-24 z-[120] animate-fade-in-up">
                     <div className={`rounded-2xl px-4 py-3 text-sm font-black shadow-xl backdrop-blur-xl ${toast.tone === 'error' ? 'bg-red-100/95 text-red-600 border border-red-200/80' : 'bg-white/92 text-[var(--color-cyan-dark)] border border-[var(--color-cyan-main)]/10'}`}>
@@ -244,7 +273,7 @@ export const SettingsPanel = () => {
             )}
 
             {/* Tab Header */}
-            <div className="flex space-x-2 mb-6 bg-[var(--color-cyan-light)]/30 p-1 rounded-xl w-fit">
+            <div className="flex space-x-2 mb-4 bg-[var(--color-cyan-light)]/30 p-1 rounded-xl w-fit">
                 <button
                     onClick={() => setActiveTab('ai')}
                     className={`px-5 py-2 rounded-lg font-black text-sm transition-all ${activeTab === 'ai' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
@@ -265,11 +294,11 @@ export const SettingsPanel = () => {
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-3">
                 {activeTab === 'ai' ? (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col h-full min-h-0">
                         {/* Main Interaction Area: Sidebar + Detail */}
-                        <div className="flex flex-col lg:flex-row gap-4 flex-1 h-full overflow-hidden min-h-0">
+                        <div className="flex flex-col lg:flex-row gap-3 flex-1 h-full overflow-hidden min-h-0">
                             {/* Left: Provider Selection Sidebar */}
                             <div className="lg:w-1/3 h-full min-h-0 flex flex-col space-y-2 overflow-y-auto pr-1 custom-scrollbar">
                                 <div className="px-2 mb-2 text-sm font-black text-[var(--color-cyan-main)]">服务商</div>
@@ -304,12 +333,21 @@ export const SettingsPanel = () => {
                             </div>
 
                             {/* Right: Configuration Form */}
-                            <div className="lg:w-2/3 h-full min-h-0 flex flex-col space-y-4 pr-1 overflow-y-auto custom-scrollbar">
+                            <div className="lg:w-2/3 h-full min-h-0 flex flex-col space-y-3 pr-1 overflow-y-auto custom-scrollbar">
                                 {/* Base Config Card */}
                                 <div className="bg-white/72 p-4 rounded-xl border border-[var(--color-cyan-main)]/10 shadow-sm space-y-4">
-                                    <div className="flex items-center space-x-3 mb-2">
-                                        <Database size={18} className="text-[var(--color-cyan-main)]" />
-                                        <span className="text-sm font-black text-[var(--color-cyan-dark)]">参数</span>
+                                    <div className="flex items-center justify-between gap-3 mb-2">
+                                        <div className="flex items-center space-x-3">
+                                            <Database size={18} className="text-[var(--color-cyan-main)]" />
+                                            <span className="text-sm font-black text-[var(--color-cyan-dark)]">参数</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handleValidateSettings}
+                                            className="rounded-lg border border-[var(--color-cyan-main)]/15 bg-white px-3 py-2 text-xs font-black text-[var(--color-cyan-main)] transition-colors hover:bg-[var(--color-cyan-light)]/30"
+                                        >
+                                            {validationState === 'checking' ? '测试中...' : '测试连接'}
+                                        </button>
                                     </div>
 
                                     <div className="space-y-3">
@@ -361,6 +399,16 @@ export const SettingsPanel = () => {
                                                 />
                                             </div>
                                         </div>
+                                    </div>
+
+                                    <div className={`rounded-lg px-3 py-2 text-xs font-bold ${
+                                        validationState === 'success'
+                                            ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                                            : validationState === 'error'
+                                                ? 'bg-red-50 text-red-600 border border-red-100'
+                                                : 'bg-[var(--color-cyan-light)]/25 text-[var(--color-cyan-dark)]/65 border border-[var(--color-cyan-main)]/8'
+                                    }`}>
+                                        当前状态：{validationMessage}
                                     </div>
                                 </div>
 

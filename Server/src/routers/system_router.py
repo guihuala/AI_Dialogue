@@ -34,6 +34,8 @@ def build_system_router(
     *,
     get_user_id,
     get_engine: Callable[[str], Any],
+    read_user_state: Callable[[str], Dict[str, Any]],
+    write_user_state: Callable[[str, Dict[str, Any]], None],
     clamp: Callable[[Any, Any, Any], Any],
     temp_min: float,
     temp_max: float,
@@ -100,6 +102,20 @@ def build_system_router(
             current_model = req.model_name if req.model_name else engine.llm.model
 
             engine.llm.update_config(api_key=current_api, base_url=current_url, model=current_model)
+            state = read_user_state(user_id)
+            state["llm_settings"] = {
+                "api_key": engine.llm.api_key or "",
+                "base_url": engine.llm.base_url or "",
+                "model_name": engine.llm.model or "",
+                "temperature": clamp(float(getattr(engine.llm, "temperature", 0.7)), temp_min, temp_max),
+                "max_tokens": int(clamp(int(getattr(engine.llm, "max_tokens", 800)), tokens_min, tokens_max)),
+                "typewriter_speed": getattr(engine.llm, "typewriter_speed", 30),
+                "latency_mode": getattr(engine, "latency_mode", "balanced"),
+                "dialogue_mode": getattr(engine, "dialogue_mode", "single_dm"),
+                "stability_mode": getattr(engine, "stability_mode", "stable"),
+                "turn_debug": bool(getattr(engine, "profile_turns", False)),
+            }
+            write_user_state(user_id, state)
 
         return {"status": "success", "message": "大模型配置已更新"}
 
