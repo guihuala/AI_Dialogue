@@ -43,12 +43,12 @@ export const Header = ({ onMenuClick, onAccountClick, activeTab, isSidebarOpen }
 
   const getTitle = () => {
     switch (activeTab) {
-      case 'game': return '当前游戏';
+      case 'game': return '主界面';
       case 'workshop': return '创意工坊';
-      case 'mods': return '本地模组';
-      case 'account': return '账户中心';
-      case 'editor': return '本地编撰区';
-      case 'settings': return '系统设置';
+      case 'mods': return '模组';
+      case 'account': return '用户';
+      case 'editor': return '编辑';
+      case 'settings': return '设置';
       default: return '';
     }
   };
@@ -68,7 +68,6 @@ export const Header = ({ onMenuClick, onAccountClick, activeTab, isSidebarOpen }
           </button>
         )}
         <div className="flex flex-col">
-          <span className="text-[9px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.4em] mb-1">Dorm Diary</span>
           <h2 className="text-xl font-black text-[var(--color-cyan-dark)] tracking-tight truncate">
             {getTitle()}
           </h2>

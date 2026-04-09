@@ -1,4 +1,4 @@
-import { X, Github } from 'lucide-react';
+import { Github } from 'lucide-react';
 import { PROJECT_CONFIG } from '../../config';
 
 interface SidebarProps {
@@ -34,15 +34,6 @@ export const Sidebar = ({
 
       {/* Sidebar Content */}
       <aside className={`fixed inset-y-0 left-0 w-64 flex flex-col transition-transform duration-500 ease-in-out shadow-2xl z-[1300] shrink-0 bg-[var(--color-cyan-main)] text-white ${(isOpen && showUI) ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="h-20 flex items-center justify-between px-6 border-b border-white/10 shrink-0 bg-[var(--color-cyan-dark)]/20">
-          <span className="text-xl font-black tracking-tight text-white flex flex-col">
-            <span className="text-[var(--color-yellow-main)] text-xs uppercase tracking-[0.3em] mb-1">Dorm Life</span>
-            宿舍日志 <span className="text-[10px] text-white/50 font-bold">Project Memories</span>
-          </span>
-          <button onClick={onClose} className="text-white hover:text-[var(--color-yellow-main)] transition-colors">
-            <X size={24} />
-          </button>
-        </div>
         <nav className="flex-1 py-8 overflow-y-auto space-y-3 custom-scrollbar px-3">
           {tabs.map((tab) => (
             <div

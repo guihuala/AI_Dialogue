@@ -253,15 +253,15 @@ export const AccountPanel = () => {
     };
 
     return (
-        <div className="flex-1 flex flex-col h-full bg-white/80 backdrop-blur-md rounded-2xl border-2 border-[var(--color-cyan-main)]/20 shadow-xl overflow-hidden relative p-8">
-            <div className="flex items-center justify-between mb-8 border-b-2 border-[var(--color-cyan-main)]/20 pb-4">
+        <div className="flex-1 flex flex-col h-full relative p-8">
+            <div className="flex items-center justify-between mb-8 border-b border-[var(--color-cyan-main)]/15 pb-4">
                 <div className="flex items-center space-x-4">
                     <div className="w-12 h-12 rounded-xl bg-[var(--color-cyan-main)] text-white flex items-center justify-center shadow-lg shadow-cyan-main/30">
                         <UserRound size={28} />
                     </div>
                     <div>
-                        <h2 className="text-2xl font-black text-[var(--color-cyan-dark)] tracking-wider">账户中心</h2>
-                        <p className="text-sm font-bold text-[var(--color-cyan-dark)]/60">管理登录状态与数据绑定</p>
+                        <h2 className="text-2xl font-black text-[var(--color-cyan-dark)] tracking-tight">账户中心</h2>
+                        <p className="text-sm font-bold text-[var(--color-cyan-dark)]/55">管理登录状态与数据绑定。</p>
                     </div>
                 </div>
                 {message && (
@@ -272,14 +272,14 @@ export const AccountPanel = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-4 space-y-8">
-                <div className="bg-white p-6 rounded-3xl border-2 border-[var(--color-cyan-main)]/10 shadow-sm">
+                <div className="bg-white/72 p-6 rounded-[2rem] border border-[var(--color-cyan-main)]/10 shadow-sm">
                     <div className="flex items-center space-x-3 mb-6">
                         <div className="p-2 bg-[var(--color-cyan-light)] rounded-xl text-[var(--color-cyan-main)]">
                             <UserRound size={20} />
                         </div>
                         <div>
-                            <h3 className="text-lg font-black text-[var(--color-cyan-dark)] uppercase">账户状态</h3>
-                            <p className="text-[10px] font-bold text-[var(--color-cyan-dark)]/40 uppercase">
+                            <h3 className="text-lg font-black text-[var(--color-cyan-dark)]">账户状态</h3>
+                            <p className="text-xs font-bold text-[var(--color-cyan-dark)]/40">
                                 {accountInfo?.auth_mode === 'account' ? '当前已绑定正式账户' : '当前为访客模式'}
                             </p>
                         </div>
@@ -292,39 +292,21 @@ export const AccountPanel = () => {
                         </div>
                     ) : accountInfo?.auth_mode === 'account' && accountInfo?.account ? (
                         <div className="space-y-6">
-                            <div className="rounded-2xl border-2 border-emerald-100 bg-emerald-50/60 p-5">
-                                <div className="text-[10px] font-black uppercase tracking-widest text-emerald-600">已登录</div>
+                            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-5">
+                                <div className="text-xs font-black text-emerald-600">已登录</div>
                                 <div className="mt-2 text-xl font-black text-[var(--color-cyan-dark)]">
                                     {accountInfo.account.username}
                                 </div>
-                                <div className="mt-2 text-xs font-bold text-[var(--color-cyan-dark)]/60">
+                                <div className="mt-2 text-sm font-bold text-[var(--color-cyan-dark)]/60">
                                     账户 ID：{accountInfo.account.account_id}
                                 </div>
-                                <div className="mt-1 text-xs font-bold text-[var(--color-cyan-dark)]/50">
+                                <div className="mt-1 text-sm font-bold text-[var(--color-cyan-dark)]/50">
                                     已绑定访客记录：{(accountInfo.account.linked_visitor_ids || []).length} 个
                                 </div>
-                                {accountInfo.account.created_at && (
-                                    <div className="mt-1 text-xs font-bold text-[var(--color-cyan-dark)]/50">
-                                        创建时间：{accountInfo.account.created_at}
-                                    </div>
-                                )}
-                                {accountInfo.account.updated_at && (
-                                    <div className="mt-1 text-xs font-bold text-[var(--color-cyan-dark)]/50">
-                                        最近更新：{accountInfo.account.updated_at}
-                                    </div>
-                                )}
-                                {accountInfo.visitor_id && (
-                                    <div className="mt-1 text-xs font-bold text-[var(--color-cyan-dark)]/50">
-                                        当前访客标识：{accountInfo.visitor_id}
-                                    </div>
-                                )}
                             </div>
 
-                            <div className="rounded-2xl border-2 border-[var(--color-cyan-main)]/10 bg-white p-5">
-                                <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]">当前权限范围</div>
-                                <div className="mt-2 text-xs font-bold text-[var(--color-cyan-dark)]/55">
-                                    这部分用来直接说明当前身份能做什么，避免规则只藏在接口报错里。
-                                </div>
+                            <div className="rounded-2xl border border-[var(--color-cyan-main)]/10 bg-white p-5">
+                                <div className="text-sm font-black text-[var(--color-cyan-main)]">当前权限</div>
                                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {capabilityEntries.map((item) => {
                                         const enabled = !!accountInfo?.capabilities?.[item.key];
@@ -335,7 +317,7 @@ export const AccountPanel = () => {
                                             >
                                                 <div className="flex items-center justify-between gap-3">
                                                     <div className="text-sm font-black text-[var(--color-cyan-dark)]">{item.label}</div>
-                                                    <div className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${enabled ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-700'}`}>
+                                                    <div className={`rounded-full px-2.5 py-1 text-xs font-black ${enabled ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-700'}`}>
                                                         {enabled ? '可用' : '需登录'}
                                                     </div>
                                                 </div>
@@ -562,23 +544,23 @@ export const AccountPanel = () => {
                         </div>
                     ) : (
                         <div className="space-y-6">
-                            <div className="rounded-2xl border-2 border-amber-100 bg-amber-50/70 p-5 text-sm font-bold text-[var(--color-cyan-dark)]/70 leading-relaxed">
-                                当前仍在使用访客模式。浏览器如果清除本地数据，可能会和原来的访客身份断开。建议注册一个正式账户来稳定绑定你的存档、模组和工坊作品。
+                            <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-5 text-sm font-bold text-[var(--color-cyan-dark)]/70 leading-relaxed">
+                                当前仍在使用访客模式。建议注册正式账户来稳定绑定存档、模组和工坊作品。
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-[10px] font-black text-[var(--color-cyan-dark)]/40 uppercase mb-2 ml-1">用户名</label>
+                                    <label className="block text-xs font-black text-[var(--color-cyan-dark)]/40 mb-2 ml-1">用户名</label>
                                     <input
                                         type="text"
                                         value={accountForm.username}
                                         onChange={(e) => setAccountForm({ ...accountForm, username: e.target.value })}
                                         className="w-full bg-[var(--color-cyan-light)]/30 text-[var(--color-cyan-dark)] font-bold p-3.5 rounded-xl border-2 border-transparent focus:border-[var(--color-cyan-main)]/30 focus:bg-white outline-none transition-all"
-                                        placeholder="3-32 位字母/数字/下划线"
+                                        placeholder="3-32 位字母、数字或下划线"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black text-[var(--color-cyan-dark)]/40 uppercase mb-2 ml-1">密码</label>
+                                    <label className="block text-xs font-black text-[var(--color-cyan-dark)]/40 mb-2 ml-1">密码</label>
                                     <input
                                         type="password"
                                         value={accountForm.password}
@@ -603,7 +585,7 @@ export const AccountPanel = () => {
                                 <button
                                     onClick={handleAccountRegister}
                                     disabled={accountActionLoading !== ''}
-                                    className="inline-flex items-center gap-2 rounded-2xl bg-[var(--color-cyan-main)] px-5 py-3 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-[var(--color-cyan-dark)] disabled:opacity-50"
+                                    className="inline-flex items-center gap-2 rounded-2xl bg-[var(--color-cyan-main)] px-5 py-3 text-sm font-black text-white transition-all hover:bg-[var(--color-cyan-dark)] disabled:opacity-50"
                                 >
                                     {accountActionLoading === 'register' ? <RefreshCcw className="animate-spin" size={14} /> : <UserPlus size={14} />}
                                     注册并登录
@@ -611,7 +593,7 @@ export const AccountPanel = () => {
                                 <button
                                     onClick={handleAccountLogin}
                                     disabled={accountActionLoading !== ''}
-                                    className="inline-flex items-center gap-2 rounded-2xl border-2 border-[var(--color-cyan-main)]/20 bg-white px-5 py-3 text-xs font-black uppercase tracking-widest text-[var(--color-cyan-main)] transition-all hover:bg-[var(--color-cyan-light)] disabled:opacity-50"
+                                    className="inline-flex items-center gap-2 rounded-2xl border border-[var(--color-cyan-main)]/20 bg-white px-5 py-3 text-sm font-black text-[var(--color-cyan-main)] transition-all hover:bg-[var(--color-cyan-light)] disabled:opacity-50"
                                 >
                                     {accountActionLoading === 'login' ? <RefreshCcw className="animate-spin" size={14} /> : <LogIn size={14} />}
                                     登录已有账户

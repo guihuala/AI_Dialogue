@@ -10,7 +10,7 @@ interface TitleMenuProps {
 
 export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnouncement }: TitleMenuProps) => {
     return (
-        <div className="flex-1 flex flex-col items-center justify-center relative min-h-[500px] h-full w-full animate-fade-in group overflow-hidden rounded-[2.5rem] bg-[var(--color-cyan-light)]/30 border-2 border-[var(--color-cyan-main)]/20 shadow-[0_20px_50px_rgba(0,188,212,0.1)]">
+        <div className="flex-1 flex flex-col items-center justify-center relative min-h-[500px] h-full w-full animate-fade-in group overflow-hidden rounded-[2.5rem] bg-[var(--color-cyan-light)]/35 border border-[var(--color-cyan-main)]/15 shadow-[0_20px_50px_rgba(0,188,212,0.08)]">
 
             {/* Warm/Light Background Layer */}
             <div className="absolute inset-0 z-0">
@@ -48,7 +48,7 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
 
             {/* Center Logo & Actions (Cyan + Yellow) */}
             <div className="relative z-10 flex flex-col items-start max-w-2xl w-full mr-auto ml-[6%] md:ml-[8%]">
-                <div className="text-left mb-16 space-y-8">
+                <div className="text-left mb-14 space-y-8">
                     <div className="flex flex-col items-start">
                         <h1 className="flex flex-col items-start gap-2">
                             <span className="text-7xl md:text-8xl font-black text-[var(--color-cyan-dark)] tracking-tighter drop-shadow-sm">
@@ -58,42 +58,39 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
                                 ARCHIVES
                             </span>
                         </h1>
-                        <p className="mt-8 text-sm font-black text-[var(--color-cyan-main)]/60 tracking-[1em] uppercase">
-                            大 学 档 案
-                        </p>
                     </div>
                 </div>
 
-                <div className="flex flex-col space-y-10 w-80 animate-slide-up-fade" style={{ animationDelay: '0.2s' }}>
+                <div className="flex flex-col space-y-8 w-80 animate-slide-up-fade" style={{ animationDelay: '0.2s' }}>
                     <button
                         onClick={onStart}
-                        className="group relative px-6 py-10 bg-[var(--color-cyan-dark)] text-white rounded-[2.5rem] font-black tracking-[0.6em] uppercase transition-all shadow-2xl hover:-translate-y-2 active:translate-y-0 flex items-center justify-center text-2xl overflow-hidden hover:bg-[var(--color-cyan-main)]"
+                        className="group relative px-6 py-8 bg-[var(--color-cyan-dark)] text-white rounded-[2rem] font-black transition-all shadow-2xl hover:-translate-y-2 active:translate-y-0 flex items-center justify-center text-2xl overflow-hidden hover:bg-[var(--color-cyan-main)]"
                     >
                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-shimmer" />
                         开始游戏
                     </button>
 
-                    <div className="grid grid-cols-2 gap-5">
+                    <div className="grid grid-cols-2 gap-4">
                         <button
                             onClick={onWorkshop}
-                            className="flex flex-col items-center justify-center py-7 glass-panel hover:bg-white text-[var(--color-cyan-dark)] rounded-[2rem] transition-all group hover:-translate-y-1 shadow-sm border-white/60"
+                            className="flex flex-col items-center justify-center gap-2 py-6 bg-white/78 hover:bg-white text-[var(--color-cyan-dark)] rounded-[1.6rem] transition-all group hover:-translate-y-1 border border-white/70"
                         >
-                            <Cloud className="mb-2 text-[var(--color-cyan-main)] group-hover:scale-110 transition-transform" size={24} />
-                            <span className="text-[10px] font-black tracking-widest uppercase">创意工坊</span>
+                            <Cloud className="text-[var(--color-cyan-main)] group-hover:scale-110 transition-transform" size={24} />
+                            <span className="text-sm font-black">创意工坊</span>
                         </button>
                         <button
                             onClick={onEditor}
-                            className="flex flex-col items-center justify-center py-7 glass-panel hover:bg-white text-[var(--color-cyan-dark)] rounded-[2rem] transition-all group hover:-translate-y-1 shadow-sm border-white/60"
+                            className="flex flex-col items-center justify-center gap-2 py-6 bg-white/78 hover:bg-white text-[var(--color-cyan-dark)] rounded-[1.6rem] transition-all group hover:-translate-y-1 border border-white/70"
                         >
-                            <BookOpen className="mb-2 text-[var(--color-cyan-main)] group-hover:scale-110 transition-transform" size={24} />
-                            <span className="text-[10px] font-black tracking-widest uppercase">编写模组</span>
+                            <BookOpen className="text-[var(--color-cyan-main)] group-hover:scale-110 transition-transform" size={24} />
+                            <span className="text-sm font-black">模组编辑</span>
                         </button>
                     </div>
 
                     <div className="self-start flex items-center gap-3">
                         <button
                             onClick={onAnnouncement}
-                            className="px-6 py-2.5 glass-panel text-[var(--color-yellow-main)]/90 hover:text-[var(--color-cyan-dark)] font-black text-[10px] tracking-[0.35em] uppercase transition-all flex items-center rounded-full hover:bg-white border-white/40 shadow-sm"
+                            className="px-5 py-3 bg-[var(--color-yellow-main)]/92 text-[var(--color-cyan-dark)] hover:bg-[var(--color-yellow-main)] rounded-full transition-all flex items-center text-sm font-black shadow-sm"
                         >
                             <Bell size={14} className="mr-3" />
                             查看公告
@@ -101,17 +98,13 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
 
                         <button
                             onClick={onSettings}
-                            className="px-8 py-2.5 glass-panel text-[var(--color-cyan-main)]/60 hover:text-[var(--color-cyan-dark)] font-black text-[10px] tracking-[0.5em] uppercase transition-all flex items-center rounded-full hover:bg-white border-white/40 shadow-sm"
+                            className="px-5 py-3 bg-white/75 text-[var(--color-cyan-dark)] hover:bg-white font-black text-sm transition-all flex items-center rounded-full border border-white/70"
                         >
                             <Settings size={14} className="mr-3 group-hover:rotate-45 transition-transform" />
-                            设置中心
+                            设置
                         </button>
                     </div>
                 </div>
-            </div>
-
-            <div className="absolute bottom-2 font-black text-[10px] text-[var(--color-cyan-main)]/20 tracking-[1em] uppercase select-none z-20">
-                Mokukeki 2026
             </div>
         </div>
     );

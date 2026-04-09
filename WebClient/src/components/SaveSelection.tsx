@@ -30,16 +30,16 @@ export const SaveSelection = ({ onNewGame, onLoadGame, onBack }: SaveSelectionPr
 
     if (isLoading) {
         return (
-            <div className="flex-1 flex flex-col items-center justify-center p-12 bg-white/80 backdrop-blur-md rounded-3xl border-2 border-[var(--color-cyan-main)]/20 shadow-xl min-h-[500px]">
+            <div className="flex-1 flex flex-col items-center justify-center p-12 bg-white/82 backdrop-blur-md rounded-[2rem] border border-[var(--color-cyan-main)]/15 shadow-xl min-h-[500px]">
                 <RefreshCcw className="animate-spin text-[var(--color-cyan-main)] mb-4" size={48} />
-                <p className="text-sm font-black text-[var(--color-cyan-main)] tracking-widest uppercase animate-pulse">正在扫描存档...</p>
+                <p className="text-base font-black text-[var(--color-cyan-main)] animate-pulse">正在扫描存档...</p>
             </div>
         );
     }
 
     return (
-        <div className="flex-1 flex flex-col h-full bg-white/80 backdrop-blur-md rounded-3xl border-2 border-[var(--color-cyan-main)]/10 shadow-2xl overflow-hidden animate-fade-in-up p-8">
-            <div className="flex items-center justify-between mb-12 border-b-2 border-dashed border-[var(--color-cyan-main)]/10 pb-6">
+        <div className="flex-1 flex flex-col h-full bg-white/82 backdrop-blur-md rounded-[2rem] border border-[var(--color-cyan-main)]/12 shadow-2xl overflow-hidden animate-fade-in-up p-8">
+            <div className="flex items-center justify-between mb-10 border-b border-[var(--color-cyan-main)]/10 pb-5">
                 <div className="flex items-center">
                     <button
                         onClick={onBack}
@@ -49,26 +49,26 @@ export const SaveSelection = ({ onNewGame, onLoadGame, onBack }: SaveSelectionPr
                     </button>
                     <div>
                         <h2 className="text-3xl font-black text-[var(--color-cyan-dark)] tracking-tight">选择存档</h2>
-                        <p className="text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.3em]">选择存档或开启全新游戏</p>
+                        <p className="mt-1 text-sm text-[var(--color-cyan-dark)]/60">继续上一次进度，或者直接开启新的一局。</p>
                     </div>
                 </div>
             </div>
 
             <div className="flex-1 flex flex-col items-center justify-center">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-8 w-full max-w-6xl">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 w-full max-w-6xl">
                     {/* New Game Option */}
                     <div
                         onClick={onNewGame}
-                        className="group relative p-8 rounded-[2.5rem] border-4 border-dashed border-[var(--color-cyan-main)]/30 hover:border-[var(--color-cyan-main)] bg-white/40 hover:bg-white hover:shadow-2xl hover:shadow-cyan-500/10 transition-all cursor-pointer flex flex-col items-center justify-center text-center space-y-6 h-96"
+                        className="group relative p-8 rounded-[2rem] border-2 border-dashed border-[var(--color-cyan-main)]/30 hover:border-[var(--color-cyan-main)] bg-white/55 hover:bg-white transition-all cursor-pointer flex flex-col items-center justify-center text-center gap-5 h-96"
                     >
-                        <div className="w-24 h-24 rounded-3xl bg-[var(--color-cyan-dark)] text-white flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:rotate-6 transition-all">
+                        <div className="w-24 h-24 rounded-[1.75rem] bg-[var(--color-cyan-dark)] text-white flex items-center justify-center shadow-lg group-hover:scale-105 transition-all">
                             <Rocket size={40} />
                         </div>
                         <div>
-                            <h3 className="text-2xl font-black text-[var(--color-cyan-dark)] uppercase">开启新游戏</h3>
-                            <p className="text-xs font-bold text-[var(--color-cyan-dark)]/40 mt-2 uppercase tracking-tighter">START A FRESH GAME</p>
+                            <h3 className="text-2xl font-black text-[var(--color-cyan-dark)]">开启新游戏</h3>
+                            <p className="mt-2 text-sm text-[var(--color-cyan-dark)]/60">重新选择舍友和起始设定。</p>
                         </div>
-                        <div className="text-[10px] font-black text-[var(--color-cyan-main)] bg-[var(--color-cyan-light)] px-4 py-2 rounded-full uppercase tracking-widest group-hover:bg-[var(--color-yellow-main)] group-hover:text-[var(--color-cyan-dark)] transition-all">
+                        <div className="text-sm font-black text-[var(--color-cyan-dark)] bg-[var(--color-cyan-light)] px-4 py-2 rounded-full group-hover:bg-[var(--color-yellow-main)] transition-all">
                             选择舍友并进入宿舍
                         </div>
                     </div>
@@ -78,14 +78,14 @@ export const SaveSelection = ({ onNewGame, onLoadGame, onBack }: SaveSelectionPr
                         <div
                             key={slot.slot_id}
                             onClick={() => !slot.is_empty && onLoadGame(slot.slot_id)}
-                            className={`group relative p-8 rounded-[2.5rem] border-2 transition-all duration-500 h-96 flex flex-col ${slot.is_empty ? 'border-dashed border-gray-200 bg-gray-50/50 grayscale opacity-40 cursor-not-allowed' : 'border-[var(--color-cyan-main)]/10 bg-white hover:border-[var(--color-yellow-main)]/50 hover:shadow-2xl hover:shadow-yellow-500/10 hover:-translate-y-2 cursor-pointer'}`}
+                            className={`group relative p-8 rounded-[2rem] border transition-all duration-500 h-96 flex flex-col ${slot.is_empty ? 'border-dashed border-gray-200 bg-gray-50/50 grayscale opacity-40 cursor-not-allowed' : 'border-[var(--color-cyan-main)]/12 bg-white hover:border-[var(--color-yellow-main)]/50 hover:-translate-y-1 cursor-pointer'}`}
                         >
-                            <div className="absolute top-8 left-8 text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.4em]">
-                                SLOT 0{slot.slot_id}
+                            <div className="absolute top-8 left-8 text-sm font-black text-[var(--color-cyan-main)]">
+                                存档 {slot.slot_id}
                             </div>
 
-                            <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4">
-                                <div className={`w-20 h-20 rounded-2xl flex items-center justify-center transition-all ${slot.is_empty ? 'bg-gray-200 text-gray-400' : 'bg-[var(--color-yellow-main)]/20 text-[var(--color-yellow-dark)] group-hover:scale-110 group-hover:-rotate-3'}`}>
+                            <div className="flex-1 flex flex-col items-center justify-center text-center gap-4">
+                                <div className={`w-20 h-20 rounded-2xl flex items-center justify-center transition-all ${slot.is_empty ? 'bg-gray-200 text-gray-400' : 'bg-[var(--color-yellow-main)]/20 text-[var(--color-yellow-dark)] group-hover:scale-105'}`}>
                                     {slot.is_empty ? <Milestone size={32} /> : <FolderOpen size={32} />}
                                 </div>
 
@@ -94,7 +94,7 @@ export const SaveSelection = ({ onNewGame, onLoadGame, onBack }: SaveSelectionPr
                                         {slot.is_empty ? '空存档' : slot.chapter_info}
                                     </h4>
                                     {!slot.is_empty && (
-                                        <p className="text-[10px] font-bold text-[var(--color-cyan-dark)]/40 mt-2 uppercase tracking-tighter flex items-center justify-center">
+                                        <p className="mt-2 text-sm font-bold text-[var(--color-cyan-dark)]/45 flex items-center justify-center">
                                             最后更新: {slot.timestamp}
                                         </p>
                                     )}
@@ -102,17 +102,13 @@ export const SaveSelection = ({ onNewGame, onLoadGame, onBack }: SaveSelectionPr
                             </div>
 
                             {!slot.is_empty && (
-                                <div className="mt-auto w-full py-4 bg-[var(--color-cyan-light)] group-hover:bg-[var(--color-yellow-main)] text-[var(--color-cyan-dark)] font-black rounded-2xl tracking-[0.2em] transition-all flex items-center justify-center">
+                                <div className="mt-auto w-full py-4 bg-[var(--color-cyan-light)] group-hover:bg-[var(--color-yellow-main)] text-[var(--color-cyan-dark)] font-black rounded-2xl transition-all flex items-center justify-center">
                                     加载存档
                                 </div>
                             )}
                         </div>
                     ))}
                 </div>
-            </div>
-
-            <div className="mt-8 text-center text-[9px] font-black text-[var(--color-cyan-main)]/20 uppercase tracking-[1em]">
-                Deep Reality Archive Engine // Sector 404
             </div>
         </div>
     );

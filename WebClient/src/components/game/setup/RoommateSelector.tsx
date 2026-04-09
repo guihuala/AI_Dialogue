@@ -16,16 +16,16 @@ export const RoommateSelector = ({
     <div className="flex-1 p-8 overflow-y-auto custom-scrollbar flex flex-col">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
         <div>
-          <h3 className="text-[10px] font-black text-[var(--color-cyan-main)] flex items-center tracking-[0.2em] uppercase mb-1">
+          <h3 className="text-sm font-black text-[var(--color-cyan-main)] flex items-center mb-2">
             <UserCheck size={14} className="mr-2" /> 选定舍友
           </h3>
           <p className="text-2xl font-black text-[var(--color-cyan-dark)] tracking-tight">
-            404寝室需要 <span className="text-[var(--color-cyan-main)] px-2 bg-white rounded shadow-sm">3</span> 位性格迥异的舍友
+            404 寝室需要 <span className="text-[var(--color-cyan-main)]">3</span> 位性格迥异的舍友
           </p>
         </div>
         <div className="text-right">
           <div className="text-3xl font-black text-[var(--color-cyan-dark)]">{selectedRoommates.length}<span className="text-[var(--color-cyan-main)]/30">/3</span></div>
-          <div className="text-[8px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.1em]">已选员额</div>
+          <div className="mt-1 text-sm text-[var(--color-cyan-dark)]/50">已选择</div>
         </div>
       </div>
 

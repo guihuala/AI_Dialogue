@@ -101,7 +101,7 @@ export const PagedOverlayPanel = ({
 
         <img
           src="/assets/Q_portraits/anran_portrait.webp"
-          alt="公告看板娘"
+          alt="公告看板"
           className="pointer-events-none select-none absolute right-3 md:right-5 bottom-[4.75rem] md:bottom-[5.25rem] w-[96px] md:w-[132px] opacity-95 drop-shadow-[0_10px_24px_rgba(20,84,116,0.22)]"
         />
       </div>

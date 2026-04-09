@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { settingsApi, SystemSettings } from '../api/settingsApi';
 import { gameApi } from '../api/gameApi';
 import { useGameStore } from '../store/gameStore';
-import { Settings, Save, RefreshCcw, Server, Thermometer, Database, Type, Trash2, Milestone, Zap } from 'lucide-react';
+import { Settings, Save, RefreshCcw, Server, Thermometer, Database, Type, Trash2, Milestone } from 'lucide-react';
 import { ConfirmDialog } from './common/ConfirmDialog';
 
 const AI_PRESETS = [
@@ -99,9 +99,9 @@ export const SettingsPanel = () => {
     const handleDeleteMemory = async (id: string) => {
         setConfirmDialog({
             open: true,
-            title: '抹除记忆',
-            message: '确定要抹除这条记忆吗？AI 将不再能检索到它。',
-            confirmText: '确认抹除',
+            title: '删除记忆',
+            message: '确定要删除这条记忆吗？AI 将不再能检索到它。',
+            confirmText: '确认',
             danger: true,
             onConfirm: async () => {
                 try {
@@ -149,15 +149,15 @@ export const SettingsPanel = () => {
     }
 
     return (
-        <div className="flex-1 flex flex-col h-full bg-white/80 backdrop-blur-md rounded-2xl border-2 border-[var(--color-cyan-main)]/20 shadow-xl overflow-hidden relative p-8">
-            <div className="flex items-center justify-between mb-8 border-b-2 border-[var(--color-cyan-main)]/20 pb-4">
+        <div className="flex-1 flex flex-col h-full relative p-8">
+            <div className="flex items-center justify-between mb-8 border-b border-[var(--color-cyan-main)]/15 pb-4">
                 <div className="flex items-center space-x-4">
                     <div className="w-12 h-12 rounded-xl bg-[var(--color-cyan-main)] text-white flex items-center justify-center shadow-lg shadow-cyan-main/30">
                         <Settings size={28} />
                     </div>
                     <div>
-                        <h2 className="text-2xl font-black text-[var(--color-cyan-dark)] tracking-wider">系统设置</h2>
-                        <p className="text-sm font-bold text-[var(--color-cyan-dark)]/60">个性化调整您的生存体验</p>
+                        <h2 className="text-2xl font-black text-[var(--color-cyan-dark)] tracking-tight">系统设置</h2>
+                        <p className="text-sm font-bold text-[var(--color-cyan-dark)]/55">调整模型、偏好和记忆检索。</p>
                     </div>
                 </div>
                 {message && (
@@ -171,19 +171,19 @@ export const SettingsPanel = () => {
             <div className="flex space-x-2 mb-8 bg-[var(--color-cyan-light)]/30 p-1 rounded-2xl w-fit">
                 <button
                     onClick={() => setActiveTab('ai')}
-                    className={`px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${activeTab === 'ai' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
+                    className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all ${activeTab === 'ai' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
                 >
                     AI网关
                 </button>
                 <button
                     onClick={() => setActiveTab('preferences')}
-                    className={`px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${activeTab === 'preferences' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
+                    className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all ${activeTab === 'preferences' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
                 >
                     偏好设置
                 </button>
                 <button
                     onClick={() => setActiveTab('memory')}
-                    className={`px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${activeTab === 'memory' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
+                    className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all ${activeTab === 'memory' ? 'bg-[var(--color-cyan-main)] text-white shadow-md' : 'text-[var(--color-cyan-dark)]/60 hover:text-[var(--color-cyan-dark)]'}`}
                 >
                     记忆片段
                 </button>
@@ -196,10 +196,7 @@ export const SettingsPanel = () => {
                         <div className="flex flex-col lg:flex-row gap-6 flex-1 overflow-hidden min-h-0">
                             {/* Left: Provider Selection Sidebar */}
                             <div className="lg:w-1/3 flex flex-col space-y-3 overflow-y-auto pr-2 custom-scrollbar">
-                                <div className="flex items-center justify-between px-2 mb-2">
-                                    <span className="text-[11px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.15em]">推荐服务商 / Providers</span>
-                                    <Zap size={14} className="text-[var(--color-yellow-main)]" />
-                                </div>
+                                <div className="px-2 mb-2 text-sm font-black text-[var(--color-cyan-main)]">推荐服务商</div>
                                 {AI_PRESETS.map((preset) => (
                                     <button
                                         key={preset.name}
@@ -210,9 +207,9 @@ export const SettingsPanel = () => {
                                                 model_name: preset.models[0]
                                             }));
                                         }}
-                                        className={`group relative p-4 rounded-2xl border-2 transition-all text-left flex items-start space-x-4 ${settings.base_url === preset.url
-                                            ? 'bg-white border-[var(--color-cyan-main)] shadow-lg scale-[1.02]'
-                                            : 'bg-white/40 border-transparent hover:border-[var(--color-cyan-main)]/30 hover:bg-white/60'
+                                        className={`group relative p-4 rounded-2xl border transition-all text-left flex items-start space-x-4 ${settings.base_url === preset.url
+                                            ? 'bg-white border-[var(--color-cyan-main)] shadow-md'
+                                            : 'bg-white/40 border-[var(--color-cyan-main)]/8 hover:border-[var(--color-cyan-main)]/30 hover:bg-white/60'
                                             }`}
                                     >
                                         <div className={`p-2.5 rounded-xl transition-colors ${settings.base_url === preset.url
@@ -223,7 +220,7 @@ export const SettingsPanel = () => {
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="font-black text-sm text-[var(--color-cyan-dark)] truncate">{preset.name}</div>
-                                            <div className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40 truncate tracking-tight">{preset.url}</div>
+                                            <div className="text-xs font-bold text-[var(--color-cyan-dark)]/40 truncate">{preset.url}</div>
                                         </div>
                                         {settings.base_url === preset.url && (
                                             <div className="absolute right-4 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-[var(--color-yellow-main)] shadow-[0_0_8px_var(--color-yellow-main)]" />
@@ -235,15 +232,15 @@ export const SettingsPanel = () => {
                             {/* Right: Configuration Form */}
                             <div className="lg:w-2/3 flex flex-col space-y-6 overflow-y-auto pr-2 custom-scrollbar">
                                 {/* Base Config Card */}
-                                <div className="bg-white p-6 rounded-3xl border-2 border-[var(--color-cyan-main)]/10 shadow-sm space-y-6">
+                                <div className="bg-white p-6 rounded-[2rem] border border-[var(--color-cyan-main)]/10 shadow-sm space-y-6">
                                     <div className="flex items-center space-x-3 mb-2">
                                         <Database size={18} className="text-[var(--color-cyan-main)]" />
-                                        <span className="text-xs font-black text-[var(--color-cyan-dark)] uppercase">接口基础参数</span>
+                                        <span className="text-sm font-black text-[var(--color-cyan-dark)]">接口参数</span>
                                     </div>
 
                                     <div className="space-y-4">
                                         <div className="group">
-                                            <label className="block text-[10px] font-black text-[var(--color-cyan-dark)]/40 uppercase mb-2 ml-1">网关 (Base URL)</label>
+                                            <label className="block text-xs font-black text-[var(--color-cyan-dark)]/40 mb-2 ml-1">网关</label>
                                             <div className="relative">
                                                 <input
                                                     type="text"
@@ -294,10 +291,10 @@ export const SettingsPanel = () => {
                                 </div>
 
                                 {/* Advanced Tuning Card */}
-                                <div className="bg-white/60 backdrop-blur-sm p-6 rounded-3xl border-2 border-[var(--color-cyan-main)]/10 shadow-sm space-y-6">
+                                <div className="bg-white/60 backdrop-blur-sm p-6 rounded-[2rem] border border-[var(--color-cyan-main)]/10 shadow-sm space-y-6">
                                     <div className="flex items-center space-x-3 mb-2">
                                         <Thermometer size={18} className="text-[var(--color-yellow-main)]" />
-                                        <span className="text-xs font-black text-[var(--color-cyan-dark)] uppercase">高级性能参数 / Advanced Tuning</span>
+                                        <span className="text-sm font-black text-[var(--color-cyan-dark)]">高级参数</span>
                                     </div>
 
                                     <div className="space-y-8 pl-1">
@@ -305,7 +302,7 @@ export const SettingsPanel = () => {
                                             <div className="flex justify-between items-center mb-4">
                                                 <div className="flex flex-col">
                                                     <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">性能模式</span>
-                                                    <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">调整响应速度与剧情质量的平衡</span>
+                                                    <span className="text-xs font-bold text-[var(--color-cyan-dark)]/40">调整响应速度与剧情质量的平衡</span>
                                                 </div>
                                             </div>
                                             <select
@@ -347,7 +344,7 @@ export const SettingsPanel = () => {
                                             <div className="flex justify-between items-center mb-4">
                                                 <div className="flex flex-col">
                                                     <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">对话架构</span>
-                                                    <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">选择单一DM或多Agent模式</span>
+                                                    <span className="text-xs font-bold text-[var(--color-cyan-dark)]/40">选择单一 DM 或多 Agent 模式</span>
                                                 </div>
                                             </div>
                                             <select
@@ -366,7 +363,7 @@ export const SettingsPanel = () => {
                                             <div className="flex justify-between items-center mb-4">
                                                 <div className="flex flex-col">
                                                     <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">输出稳定性</span>
-                                                    <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">Stable 更抗 JSON 崩坏，Balanced 更自由</span>
+                                                    <span className="text-xs font-bold text-[var(--color-cyan-dark)]/40">稳定模式更稳，自由模式更灵活。</span>
                                                 </div>
                                             </div>
                                             <select
@@ -382,9 +379,9 @@ export const SettingsPanel = () => {
                                         <div>
                                             <div className="flex justify-between items-center mb-4">
                                                 <div className="flex flex-col">
-                                                    <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">采样温度 (Temperature)</span>
+                                                    <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">采样温度</span>
                                                     <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">
-                                                        {settings.stability_mode === 'stable' ? 'Stable 推荐 0.3-0.8（更稳）' : 'Balanced 推荐 0.2-1.2（更自由）'}
+                                                        {settings.stability_mode === 'stable' ? '推荐 0.3-0.8。' : '推荐 0.2-1.2。'}
                                                     </span>
                                                 </div>
                                                 <span className="font-black text-[var(--color-yellow-main)] bg-[var(--color-cyan-dark)] px-3 py-1 rounded-lg text-xs tabular-nums">
@@ -405,9 +402,9 @@ export const SettingsPanel = () => {
                                         <div>
                                             <div className="flex justify-between items-center mb-4">
                                                 <div className="flex flex-col">
-                                                    <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">单次最大Token (Limit)</span>
+                                                    <span className="text-[11px] font-black text-[var(--color-cyan-dark)]">单次最大 Token</span>
                                                     <span className="text-[9px] font-bold text-[var(--color-cyan-dark)]/40">
-                                                        {settings.stability_mode === 'stable' ? 'Stable 推荐 700-1200（更快且尽量稳）' : 'Balanced 推荐 300-2000'}
+                                                        {settings.stability_mode === 'stable' ? '推荐 700-1200。' : '推荐 300-2000。'}
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center space-x-2">
@@ -431,15 +428,11 @@ export const SettingsPanel = () => {
                         </div>
 
                         {/* Sticky Action Bar */}
-                        <div className="mt-8 pt-6 border-t-2 border-[var(--color-cyan-main)]/10 flex items-center justify-between bg-white/40 sticky bottom-0 backdrop-blur-sm -mx-2 px-2 pb-2">
-                            <div className="flex items-center space-x-2 text-[10px] font-bold text-[var(--color-cyan-dark)]/40">
-                                <span className="w-1.5 h-1.5 bg-[var(--color-yellow-main)] rounded-full mr-1"></span>
-                                修改配置需要点击右侧保存生效 / Auto-save not active
-                            </div>
+                        <div className="mt-8 pt-6 border-t border-[var(--color-cyan-main)]/10 flex items-center justify-end bg-white/40 sticky bottom-0 backdrop-blur-sm -mx-2 px-2 pb-2">
                             <button
                                 onClick={handleSave}
                                 disabled={isSaving}
-                                className="flex items-center px-10 py-4 bg-[var(--color-cyan-main)] text-white font-black rounded-2xl shadow-xl shadow-[var(--color-cyan-main)]/30 hover:bg-[var(--color-cyan-dark)] hover:scale-[1.05] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100 uppercase tracking-[0.2em] text-xs"
+                                className="flex items-center px-10 py-4 bg-[var(--color-cyan-main)] text-white font-black rounded-2xl shadow-xl shadow-[var(--color-cyan-main)]/30 hover:bg-[var(--color-cyan-dark)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100 text-sm"
                             >
                                 {isSaving ? <RefreshCcw className="animate-spin mr-3" size={18} /> : <Save className="mr-3" size={18} />}
                                 {isSaving ? '正在应用配置...' : '保存并应用设置'}
@@ -450,18 +443,18 @@ export const SettingsPanel = () => {
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
                         {/* Audio Settings Content... */}
                         {/* (Internal content omitted for brevity, keeping structure) */}
-                        <div className="bg-white p-6 rounded-3xl border-2 border-[var(--color-cyan-main)]/10 shadow-sm">
+                        <div className="bg-white p-6 rounded-[2rem] border border-[var(--color-cyan-main)]/10 shadow-sm">
                             <div className="flex items-center space-x-3 mb-6">
                                 <div className="p-2 bg-[var(--color-cyan-light)] rounded-xl text-[var(--color-cyan-main)]">
                                     <Milestone size={20} />
                                 </div>
-                                <h3 className="text-lg font-black text-[var(--color-cyan-dark)] uppercase">音视频偏好</h3>
+                                <h3 className="text-lg font-black text-[var(--color-cyan-dark)]">音视频偏好</h3>
                             </div>
 
                             <div className="space-y-6">
                                 <div className="flex flex-col">
                                     <div className="flex justify-between items-center mb-3">
-                                        <label className="text-sm font-black text-[var(--color-cyan-dark)]/60 uppercase">主音量 (Master Volume)</label>
+                                        <label className="text-sm font-black text-[var(--color-cyan-dark)]/60">主音量</label>
                                         <span className="font-black text-[var(--color-cyan-main)]">{audioVolume}%</span>
                                     </div>
                                     <input
@@ -476,7 +469,7 @@ export const SettingsPanel = () => {
                                 <div className="flex items-center justify-between p-4 bg-[var(--color-cyan-light)]/30 rounded-2xl">
                                     <div>
                                         <p className="font-black text-[var(--color-cyan-dark)] text-sm">静音模式</p>
-                                        <p className="text-[10px] font-bold text-[var(--color-cyan-dark)]/40">关闭所有环境音效与背景音乐</p>
+                                        <p className="text-xs font-bold text-[var(--color-cyan-dark)]/40">关闭环境音效与背景音乐</p>
                                     </div>
                                     <button
                                         onClick={() => setMuted(!isMuted)}
@@ -489,18 +482,18 @@ export const SettingsPanel = () => {
                         </div>
 
                         {/* UI Settings */}
-                        <div className="bg-white p-6 rounded-3xl border-2 border-[var(--color-cyan-main)]/10 shadow-sm">
+                        <div className="bg-white p-6 rounded-[2rem] border border-[var(--color-cyan-main)]/10 shadow-sm">
                             <div className="flex items-center space-x-3 mb-6">
                                 <div className="p-2 bg-[var(--color-cyan-light)] rounded-xl text-[var(--color-cyan-main)]">
                                     <Type size={20} />
                                 </div>
-                                <h3 className="text-lg font-black text-[var(--color-cyan-dark)] uppercase">显示与文本</h3>
+                                <h3 className="text-lg font-black text-[var(--color-cyan-dark)]">显示与文本</h3>
                             </div>
 
                             <div className="space-y-6">
                                 <div className="flex flex-col">
                                     <div className="flex justify-between items-center mb-3">
-                                        <label className="text-sm font-black text-[var(--color-cyan-dark)]/60 uppercase">打字机速度</label>
+                                        <label className="text-sm font-black text-[var(--color-cyan-dark)]/60">打字机速度</label>
                                         <span className="font-black text-[var(--color-cyan-main)]">{settings.typewriter_speed}ms</span>
                                     </div>
                                     <input
@@ -514,7 +507,7 @@ export const SettingsPanel = () => {
 
                                 <div className="flex flex-col">
                                     <div className="flex justify-between items-center mb-3">
-                                        <label className="text-sm font-black text-[var(--color-cyan-dark)]/60 uppercase">界面透明度</label>
+                                        <label className="text-sm font-black text-[var(--color-cyan-dark)]/60">界面透明度</label>
                                         <span className="font-black text-[var(--color-cyan-main)]">{uiTransparency}%</span>
                                     </div>
                                     <input
@@ -529,12 +522,12 @@ export const SettingsPanel = () => {
                         </div>
 
                         {/* Dangerous Zone */}
-                        <div className="bg-red-50/50 p-6 rounded-3xl border-2 border-red-100 shadow-sm">
+                        <div className="bg-red-50/50 p-6 rounded-[2rem] border border-red-100 shadow-sm">
                             <div className="flex items-center space-x-3 mb-4 text-red-600">
                                 <Trash2 size={20} />
-                                <h3 className="text-lg font-black uppercase">危险区域</h3>
+                                <h3 className="text-lg font-black">危险区域</h3>
                             </div>
-                            <p className="text-xs font-bold text-red-600/60 mb-6 uppercase tracking-wider">以下操作将影响后端数据存储，请谨慎操作</p>
+                            <p className="text-sm font-bold text-red-600/60 mb-6">以下操作会影响后端数据存储，请谨慎执行。</p>
 
                             <button
                                 onClick={() => {
