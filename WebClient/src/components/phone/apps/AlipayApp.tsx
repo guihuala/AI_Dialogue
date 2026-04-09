@@ -1,83 +1,73 @@
-import { Wallet, Smartphone, History, PiggyBank, ReceiptText, ChevronRight } from 'lucide-react';
+import { ReceiptText, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
+
+interface HistoryEntry {
+  turn: number;
+  text: string;
+  money?: number;
+  moneyDelta?: number;
+  eventName?: string;
+}
 
 interface AlipayAppProps {
   money: number;
-  history: any[];
+  history: HistoryEntry[];
 }
 
 export const AlipayApp = ({ money, history }: AlipayAppProps) => {
-  // Try to find any money-related entries in the text or choice
-  const txHistory = history.slice(-8).reverse().map((h) => {
-    const isIncome = h.text.toLowerCase().includes('earned') || h.text.includes('赚') || h.text.includes('获得');
-    const isExpense = h.text.includes('spent') || h.text.includes('花费') || h.text.includes('买');
-    const amountMatch = h.text.match(/¥(\d+)/) || h.text.match(/(\d+)元/);
-    const amount = amountMatch ? amountMatch[1] : (isIncome ? '+120.00' : (isExpense ? '-45.00' : '0.00'));
-    
-    return {
-      turn: h.turn,
-      text: h.text.split('】: ')[1] || '日用消费',
-      amount: amount,
-      isIncome: isIncome && !isExpense, // Simple heuristic
-      time: '今日 10:05'
-    };
-  });
+  const txHistory = history
+    .filter((item) => Math.abs(Number(item.moneyDelta || 0)) > 0.001)
+    .slice()
+    .reverse();
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 animate-in slide-in-from-right duration-500 overflow-hidden">
-      <div className="bg-gradient-to-r from-sky-500 to-blue-600 px-8 py-10 text-white shrink-0">
-        <div className="flex items-center gap-3 mb-8">
-           <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/20"><Wallet size={24}/></div>
-           <h3 className="text-xl font-black tracking-tight">支付宝 / Alipay</h3>
-        </div>
-        
-        <div className="bg-white/10 backdrop-blur-md rounded-[2rem] p-8 border border-white/10 shadow-2xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-10 -mt-10 blur-2xl group-hover:scale-150 transition-transform duration-1000" />
-          <div className="relative z-10 flex flex-col items-center">
-            <span className="text-[10px] font-black tracking-[0.4em] uppercase mb-4 opacity-60">My Balance (CNY)</span>
-            <div className="text-5xl font-black mb-2 tracking-tighter">¥ {money.toLocaleString()}</div>
-            <div className="text-[10px] font-black bg-white/20 px-3 py-1 rounded-full border border-white/20 uppercase tracking-widest mt-4">已启用智能安保系统</div>
+      <div className="bg-gradient-to-r from-sky-500 to-blue-600 px-7 py-8 text-white shrink-0">
+        <div className="flex items-center gap-3 mb-7">
+          <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/20">
+            <Wallet size={24} />
           </div>
+          <h3 className="text-xl font-black tracking-tight">支付宝</h3>
+        </div>
+
+        <div className="rounded-[1.8rem] bg-white/12 border border-white/15 px-6 py-6 backdrop-blur-md">
+          <div className="text-[10px] font-black uppercase tracking-[0.26em] text-white/65">Current Balance</div>
+          <div className="mt-2 text-5xl font-black tracking-tighter">¥ {Number(money || 0).toFixed(2)}</div>
         </div>
       </div>
-      
-      <div className="flex-1 p-6 overflow-y-auto custom-scrollbar pb-32">
-        <div className="grid grid-cols-2 gap-4 mb-8">
-           <button className="bg-white p-5 rounded-[1.4rem] flex flex-col items-center gap-2 border border-cyan-100/70 shadow-sm active:scale-95 transition-all">
-              <div className="w-10 h-10 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center"><Smartphone size={20}/></div>
-              <span className="text-[11px] font-black text-slate-700">扫码付</span>
-           </button>
-           <button className="bg-white p-5 rounded-[1.4rem] flex flex-col items-center gap-2 border border-cyan-100/70 shadow-sm active:scale-95 transition-all">
-              <div className="w-10 h-10 bg-orange-50 text-orange-500 rounded-full flex items-center justify-center"><PiggyBank size={20}/></div>
-              <span className="text-[11px] font-black text-slate-700">收钱</span>
-           </button>
-        </div>
 
-        <div className="bg-white rounded-[2rem] shadow-sm border border-cyan-100/70 overflow-hidden">
-          <div className="px-8 py-5 flex justify-between items-center border-b border-slate-50">
-             <div className="flex items-center gap-2">
-                <History size={18} className="text-slate-400" />
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Transaction History</span>
-             </div>
-             <ChevronRight size={16} className="text-slate-300" />
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 pb-28 space-y-3">
+        {txHistory.length === 0 ? (
+          <div className="rounded-[1.8rem] bg-white border border-slate-200 px-5 py-10 text-center text-slate-400 text-sm font-bold">
+            目前还没有资金变动记录。
           </div>
-
-          <div className="divide-y divide-gray-50">
-            {txHistory.map((tx, i) => (
-               <div key={i} className="px-8 py-5 flex items-center gap-4 hover:bg-cyan-50/30 transition-colors">
-                  <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 shrink-0"><ReceiptText size={24}/></div>
-                  <div className="flex-1 min-w-0">
-                     <div className="flex justify-between items-baseline">
-                        <span className="text-sm font-black text-slate-800 truncate pr-2">{tx.text}</span>
-                        <span className={`text-md font-black tabular-nums ${tx.isIncome ? 'text-emerald-500' : 'text-slate-800'}`}>
-                           {tx.isIncome ? '+' : '-'}{tx.amount}
-                        </span>
-                     </div>
-                     <span className="text-[9px] text-slate-400 mt-1 uppercase font-black">{tx.time} • Turn {tx.turn}</span>
+        ) : (
+          txHistory.map((item, index) => {
+            const delta = Number(item.moneyDelta || 0);
+            const income = delta > 0;
+            return (
+              <div key={`${item.turn}-${index}`} className="rounded-[1.6rem] bg-white border border-cyan-100/80 px-5 py-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                    <ReceiptText size={13} /> Turn {item.turn}
                   </div>
-               </div>
-            ))}
-          </div>
-        </div>
+                  <div className={`flex items-center gap-1 text-base font-black ${income ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {income ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                    {income ? '+' : ''}{delta.toFixed(2)}
+                  </div>
+                </div>
+                <div className="mt-3 text-base font-black text-slate-800">
+                  {item.eventName || '资金变动'}
+                </div>
+                <div className="mt-2 text-[12px] font-bold text-slate-600 leading-relaxed line-clamp-3">
+                  {String(item.text || '').replace(/^【你的选择】:\s*/,'').trim()}
+                </div>
+                <div className="mt-3 text-[11px] font-black text-slate-400">
+                  变动后余额：¥ {Number(item.money || 0).toFixed(2)}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );

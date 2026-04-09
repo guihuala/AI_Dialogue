@@ -822,7 +822,7 @@ class GameEngine:
             }
         return {"accepted": False, "reason": "unsupported_kind", "kind": kind}
 
-    def _build_wechat_fallback_notifications(self, *, selected_chars, system_key_resolution):
+    def _build_wechat_fallback_notifications(self, *, selected_chars, system_key_resolution, event_name: str = "", current_scene: str = "", player_name: str = ""):
         if not isinstance(system_key_resolution, dict) or not bool(system_key_resolution.get("ok", False)):
             return []
         effects = system_key_resolution.get("effects", {}) if isinstance(system_key_resolution.get("effects", {}), dict) else {}
@@ -839,16 +839,51 @@ class GameEngine:
             sender = str((selected_chars or ["室友"])[0] or "室友").strip() or "室友"
 
         attitude = str(system_key_resolution.get("attitude", "") or "").strip()
-        if attitude == "支持":
-            msg = "刚才谢谢你站我这边，晚点一起复盘下。"
-        elif attitude == "中立":
-            msg = "你刚才处理得很稳，后面我们再细聊。"
-        elif attitude == "回避":
-            msg = "你刚才没接话，我有点在意，等会聊聊？"
-        elif attitude == "对抗":
-            msg = "刚才火药味有点重，等会冷静后再谈。"
-        else:
-            msg = "刚才那件事我记下了，回头我们单聊。"
+        msg = ""
+        if getattr(self, "llm", None) is not None and getattr(self.llm, "has_usable_config", None) and self.llm.has_usable_config():
+            try:
+                prompt_payload = {
+                    "sender": sender,
+                    "player_name": str(player_name or self.player_name or "").strip(),
+                    "event_name": str(event_name or "").strip(),
+                    "current_scene": str(current_scene or "").strip(),
+                    "attitude": attitude,
+                    "selected_chars": [str(x).strip() for x in (selected_chars or []) if str(x).strip()],
+                    "stage_transition": stage_transition,
+                    "key_resolution": system_key_resolution,
+                }
+                raw = self.llm.generate_response(
+                    system_prompt=(
+                        "你在为校园宿舍剧情游戏生成一条微信消息。\n"
+                        "要求：\n"
+                        "1. 只返回 JSON：{\"message\": string}\n"
+                        "2. 语气像真实大学生微信，不要总结腔，不要系统说明。\n"
+                        "3. 必须明显承接刚发生的关键选项后果与人物态度。\n"
+                        "4. 长度 12 到 32 个汉字，简短自然，不要书面化。\n"
+                        "5. 不要出现引号、表情包占位、旁白、解释。"
+                    ),
+                    user_input=json.dumps(prompt_payload, ensure_ascii=False),
+                    context="",
+                    temperature=0.8,
+                    max_tokens=80,
+                )
+                parsed = json.loads(str(raw or "{}"))
+                if isinstance(parsed, dict):
+                    msg = str(parsed.get("message", "") or "").strip()
+            except Exception:
+                msg = ""
+
+        if not msg:
+            if attitude == "支持":
+                msg = "刚才谢谢你站我这边，晚点一起复盘下。"
+            elif attitude == "中立":
+                msg = "你刚才处理得很稳，后面我们再细聊。"
+            elif attitude == "回避":
+                msg = "你刚才没接话，我有点在意，等会聊聊？"
+            elif attitude == "对抗":
+                msg = "刚才火药味有点重，等会冷静后再谈。"
+            else:
+                msg = "刚才那件事我记下了，回头我们单聊。"
 
         return [
             {
@@ -858,7 +893,7 @@ class GameEngine:
             }
         ]
 
-    def _build_wechat_soft_fallback_notifications(self, *, selected_chars, dialogue_sequence, player_name: str):
+    def _build_wechat_soft_fallback_notifications(self, *, selected_chars, dialogue_sequence, player_name: str, event_name: str = "", current_scene: str = ""):
         """
         轻量兜底：当本轮未触发任何手机消息时，从对话中提取一个自然的“回合余波”消息。
         目标是提升手机系统体感，不参与核心结算。
@@ -884,13 +919,26 @@ class GameEngine:
             if txt:
                 content = txt
                 break
-        if not content:
-            content = "刚刚那段我记住了，晚点我们再聊。"
+        clean_content = content.replace("**", "").replace("\n", " ").strip() if content else ""
+        clean_content = re.sub(r"^(?:[^：:]{1,10})[：:]\s*", "", clean_content).strip()
+        scene_hint = str(current_scene or "").strip()
+        event_hint = str(event_name or "").strip()
+
+        if clean_content:
+            if len(clean_content) > 28:
+                clean_content = clean_content[:28].rstrip("，,。.!！？?…") + "…"
+            if event_hint:
+                content = f"刚才「{event_hint}」里那句我还在想：{clean_content}"
+            elif scene_hint:
+                content = f"刚才在{scene_hint}那段我还在想：{clean_content}"
+            else:
+                content = f"刚才那段我还在想：{clean_content}"
+        elif event_hint:
+            content = f"刚才「{event_hint}」那事我还惦记着，等会继续聊。"
+        elif scene_hint:
+            content = f"刚才在{scene_hint}那事我记下了，等会继续聊。"
         else:
-            content = content.replace("**", "").replace("\n", " ").strip()
-            if len(content) > 36:
-                content = content[:36].rstrip("，,。.!！？?…") + "…"
-            content = f"刚刚那段我记住了：{content}"
+            content = "刚刚那段我记住了，晚点我们再聊。"
 
         return [
             {
@@ -1758,8 +1806,16 @@ class GameEngine:
                 continue
             recent_msgs = messages[-1:] if compact else messages[-2:]
             for msg in recent_msgs:
-                msg_content = msg[0] if msg[0] else str(msg[1]).replace("**", "")
-                lines.append(f"- {chat_name}：{msg_content}")
+                if not isinstance(msg, (list, tuple)) or len(msg) < 2:
+                    continue
+                msg_sender = str(msg[0] or "").strip()
+                msg_content = str(msg[1] or "").replace("**", "").strip()
+                if not msg_content:
+                    continue
+                if msg_sender:
+                    lines.append(f"- {chat_name} / {msg_sender}：{msg_content}")
+                else:
+                    lines.append(f"- {chat_name}：{msg_content}")
         if not lines:
             return ""
         return "【近期微信动态】\n" + "\n".join(lines)
@@ -3050,6 +3106,9 @@ class GameEngine:
                 wechat_list = self._build_wechat_fallback_notifications(
                     selected_chars=selected_chars,
                     system_key_resolution=system_key_resolution,
+                    event_name=str(getattr(next_evt, "name", "") or ""),
+                    current_scene=str(parsed.get("current_scene", "") or ""),
+                    player_name=player_name,
                 )
                 if isinstance(wechat_list, list) and wechat_list:
                     phone_message_source = "key_fallback"
@@ -3064,6 +3123,8 @@ class GameEngine:
                     selected_chars=selected_chars,
                     dialogue_sequence=seq if isinstance(seq, list) else [],
                     player_name=player_name,
+                    event_name=str(getattr(next_evt, "name", "") or ""),
+                    current_scene=str(parsed.get("current_scene", "") or ""),
                 )
                 if isinstance(wechat_list, list) and wechat_list:
                     phone_message_source = "soft_fallback"

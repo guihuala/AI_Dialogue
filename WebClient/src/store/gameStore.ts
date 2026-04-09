@@ -6,7 +6,72 @@ type SkillTraceTurn = {
   tool_call_names: string[];
 };
 
+type HistoryEntry = {
+  turn: number;
+  text: string;
+  rawJson?: string;
+  narrativeState?: Record<string, any>;
+  eventName?: string;
+  currentScene?: string;
+  money?: number;
+  gpa?: number;
+  san?: number;
+  moneyDelta?: number;
+  gpaDelta?: number;
+};
+
+type WechatMessage = {
+  sender: string;
+  message: string;
+};
+
+type WechatSession = {
+  chat_name: string;
+  messages: WechatMessage[];
+};
+
 const SKILL_TRACE_WINDOW_SIZE = 20;
+
+const normalizeWechatSessions = (
+  prevSessions: WechatSession[],
+  notificationsRaw: unknown,
+): WechatSession[] => {
+  const nextMap = new Map<string, WechatSession>();
+
+  for (const session of prevSessions || []) {
+    const chatName = String(session?.chat_name || '').trim();
+    if (!chatName) continue;
+    nextMap.set(chatName, {
+      chat_name: chatName,
+      messages: Array.isArray(session?.messages)
+        ? session.messages
+            .map((msg) => ({
+              sender: String(msg?.sender || '').trim(),
+              message: String(msg?.message || '').trim(),
+            }))
+            .filter((msg) => msg.sender || msg.message)
+        : [],
+    });
+  }
+
+  const notifications = Array.isArray(notificationsRaw) ? notificationsRaw : [];
+  for (const item of notifications) {
+    const chatName = String((item as any)?.chat_name || (item as any)?.sender || '').trim();
+    const sender = String((item as any)?.sender || chatName).trim();
+    const message = String((item as any)?.message || '').trim();
+    if (!chatName || !message) continue;
+
+    const existing = nextMap.get(chatName) || { chat_name: chatName, messages: [] };
+    const dedupKey = `${sender}::${message}`;
+    const alreadyExists = existing.messages.some((msg) => `${msg.sender}::${msg.message}` === dedupKey);
+    if (!alreadyExists) {
+      existing.messages = [...existing.messages, { sender, message }].slice(-40);
+    }
+    nextMap.set(chatName, existing);
+  }
+
+  return Array.from(nextMap.values());
+};
 
 const updateSkillTraceWindow = (
   prevWindow: SkillTraceTurn[],
@@ -40,6 +105,7 @@ interface GameState {
   // 对局信息
   chapter: number;
   turn: number;
+  maxTurns: number;
   current_evt_id: string;
   currentEventName: string;
   current_scene: string;
@@ -57,8 +123,9 @@ interface GameState {
   nextOptions: string[];
   nextOptionsMeta: Array<{ kind?: string; disabled?: boolean; reason?: string; cost_label?: string }>;
   isEnd: boolean;
-  history: Array<{turn: number, text: string, rawJson?: string, narrativeState?: Record<string, any>}>;
+  history: HistoryEntry[];
   wechatNotifications: Array<{sender: string, message: string}>;
+  wechatSessions: WechatSession[];
   phoneSystemEnabled: boolean;
   isPhoneOpen: boolean;
   typewriterSpeed: number;
@@ -121,6 +188,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   reputation: 100,
   chapter: 1,
   turn: 0,
+  maxTurns: 20,
   current_evt_id: '',
   currentEventName: '',
   current_scene: '宿舍',
@@ -138,6 +206,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   isEnd: false,
   history: [],
   wechatNotifications: [],
+  wechatSessions: [],
   phoneSystemEnabled: true,
   isPhoneOpen: false,
   typewriterSpeed: 30,
@@ -181,6 +250,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         reputation: data.reputation,
         chapter: data.chapter,
         turn: data.turn,
+        maxTurns: maxTurns || 20,
         current_evt_id: data.current_evt_id,
         currentEventName: data.event_name || '',
         current_scene: data.current_scene || '宿舍',
@@ -200,9 +270,17 @@ export const useGameStore = create<GameState>((set, get) => ({
           turn: data.turn,
           text: data.display_text,
           rawJson: data.res_text || '',
-          narrativeState: data.narrative_state || {}
+          narrativeState: data.narrative_state || {},
+          eventName: data.event_name || '',
+          currentScene: data.current_scene || '宿舍',
+          money: Number(data.money || 0),
+          gpa: Number(data.gpa || 0),
+          san: Number(data.san || 0),
+          moneyDelta: 0,
+          gpaDelta: 0,
         }],
         wechatNotifications: data.wechat_notifications || [],
+        wechatSessions: normalizeWechatSessions([], data.wechat_notifications || []),
         phoneSystemEnabled: data.phone_system_enabled !== false,
         eventScript: data.event_script || null
         ,
@@ -274,10 +352,14 @@ export const useGameStore = create<GameState>((set, get) => ({
           const newDisplayText = `你选择了：${selectedChoice.text}\n\n` + displayLines.join('\n\n');
 
           const stats = selectedChoice.stat_changes || {};
+          const sanDelta = Number(stats.san_delta || 0);
+          const moneyDelta = Number(stats.money_delta || 0);
+          const gpaDelta = Number(stats.gpa_delta || 0);
           
           set((prev) => ({
-            san: Math.max(0, Math.min(100, prev.san + (stats.san_delta || 0))),
-            money: prev.money + (stats.money_delta || 0),
+            san: Math.max(0, Math.min(100, prev.san + sanDelta)),
+            money: Number(prev.money || 0) + moneyDelta,
+            gpa: Math.max(0, Math.min(4, Number(prev.gpa || 0) + gpaDelta)),
             turn: nextTurnNum || prev.turn + 1,
             displayText: newDisplayText,
             nextOptions: nextTurn ? (nextTurn.player_choices || []).map((c: any) => c.text) : [],
@@ -287,7 +369,14 @@ export const useGameStore = create<GameState>((set, get) => ({
               turn: prev.turn,
               text: newDisplayText,
               rawJson: '',
-              narrativeState: prev.narrativeState || {}
+              narrativeState: prev.narrativeState || {},
+              eventName: prev.currentEventName || '',
+              currentScene: prev.current_scene || '宿舍',
+              money: Number(prev.money || 0) + moneyDelta,
+              gpa: Math.max(0, Math.min(4, Number(prev.gpa || 0) + gpaDelta)),
+              san: Math.max(0, Math.min(100, prev.san + sanDelta)),
+              moneyDelta,
+              gpaDelta,
             }],
             eventScript: nextTurn && nextTurn.is_end ? null : prev.eventScript
           }));
@@ -314,6 +403,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         hygiene: state.hygiene,
         reputation: state.reputation,
         affinity: state.affinity,
+        wechat_data_list: state.wechatSessions,
         save_id: state.currentSaveId
       };
       
@@ -347,9 +437,17 @@ export const useGameStore = create<GameState>((set, get) => ({
           turn: data.turn,
           text: isTransition ? data.display_text : `【你的选择】: ${choice}\n\n${data.display_text}`,
           rawJson: data.res_text || '',
-          narrativeState: data.narrative_state || prev.narrativeState || {}
+          narrativeState: data.narrative_state || prev.narrativeState || {},
+          eventName: data.event_name || '',
+          currentScene: data.current_scene || prev.current_scene || '宿舍',
+          money: Number(data.money || 0),
+          gpa: Number(data.gpa || 0),
+          san: Number(data.san || 0),
+          moneyDelta: Number(data.money || 0) - Number(prev.money || 0),
+          gpaDelta: Number(data.gpa || 0) - Number(prev.gpa || 0),
         }],
         wechatNotifications: data.wechat_notifications || prev.wechatNotifications,
+        wechatSessions: normalizeWechatSessions(prev.wechatSessions || [], data.wechat_notifications || []),
         phoneSystemEnabled: data.phone_system_enabled !== false,
         isPhoneOpen: (data.phone_system_enabled === false) ? false : prev.isPhoneOpen,
         eventScript: data.event_script || null
@@ -422,6 +520,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         hygiene: state.hygiene,
         reputation: state.reputation,
         affinity: state.affinity,
+        wechat_data_list: state.wechatSessions,
         save_id: state.currentSaveId
       };
       await gameApi.prefetch(turnReq, undefined, state.currentSaveId);
@@ -464,6 +563,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               // but app.py SaveGameRequest has what we need
               chapter: gameState.chapter,
               turn: gameState.turn,
+              maxTurns: 20,
               current_evt_id: gameState.current_evt_id,
               currentEventName: gameState.event_name || '',
               current_scene: gameState.current_scene || '宿舍',
@@ -481,6 +581,8 @@ export const useGameStore = create<GameState>((set, get) => ({
               isEnd: false,
               history: gameState.history || [],
               wechatNotifications: []
+              ,
+              wechatSessions: []
               ,
               phoneSystemEnabled: true
               ,
@@ -537,6 +639,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               reputation: 100,
               chapter: 1,
               turn: 0,
+              maxTurns: 20,
               current_evt_id: '',
               currentEventName: '',
               current_scene: '宿舍',
@@ -548,6 +651,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               weeklySummary: null,
               history: [],
               wechatNotifications: [],
+              wechatSessions: [],
               phoneSystemEnabled: true,
               isPhoneOpen: false,
               displayText: '',

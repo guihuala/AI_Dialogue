@@ -1,4 +1,4 @@
-import { MessageCircle, Calendar, GraduationCap, Wallet, Brain } from 'lucide-react';
+import { MessageCircle, Calendar, GraduationCap, Wallet } from 'lucide-react';
 
 interface AppIconProps {
   id: string;
@@ -38,9 +38,8 @@ export const HomeView = ({ onAppClick, wechatNotificationsCount }: HomeViewProps
   return (
     <div className="flex-1 flex flex-col p-7 pt-20 animate-in fade-in duration-500">
       <div className="mb-8 px-3">
-        <div className="text-cyan-500/70 text-[10px] font-black tracking-[0.3em] uppercase mb-1">Dorm OS</div>
-        <div className="text-slate-800 text-[30px] font-black tracking-tight">你好，安然</div>
-        <div className="text-slate-500 text-[11px] font-bold mt-1">今天也要把宿舍生活过得漂亮一点。</div>
+        <div className="text-cyan-500/70 text-[10px] font-black tracking-[0.3em] uppercase mb-1">Moku OS</div>
+        <div className="text-slate-800 text-[30px] font-black tracking-tight">你好。</div>
       </div>
 
       <div className="grid grid-cols-4 gap-y-8 gap-x-4 justify-items-center bg-white/65 backdrop-blur-md rounded-[2.2rem] p-6 border border-white/70 shadow-[0_10px_24px_rgba(15,23,42,0.08)]">
@@ -73,17 +72,6 @@ export const HomeView = ({ onAppClick, wechatNotificationsCount }: HomeViewProps
           color="bg-[#1677FF]" 
           onClick={onAppClick} 
         />
-        <AppIcon 
-          id="wellness" 
-          name="心理" 
-          icon={<Brain size={30} />} 
-          color="bg-[#5856D6]" 
-          onClick={onAppClick} 
-        />
-      </div>
-      
-      <div className="mt-auto bg-white/55 border border-white/70 rounded-2xl px-4 py-3 text-[10px] font-black tracking-[0.18em] text-slate-500 uppercase shadow-sm">
-        向上滑动可扩展更多应用
       </div>
     </div>
   );

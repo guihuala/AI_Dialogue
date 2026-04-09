@@ -6,15 +6,15 @@ import { WeChatApp } from './phone/apps/WeChatApp';
 import { CalendarApp } from './phone/apps/CalendarApp';
 import { JMUApp } from './phone/apps/JMUApp';
 import { AlipayApp } from './phone/apps/AlipayApp';
-import { WellnessApp } from './phone/apps/WellnessApp';
 
 export const PhoneOverlay = () => {
   const { 
     wechatNotifications, 
+    wechatSessions,
     clearWechatNotifications, 
     isPhoneOpen, 
     togglePhone,
-    san, money, gpa, chapter, turn, history, affinity, active_roommates, player_name
+    money, gpa, chapter, turn, maxTurns, currentEventName, current_scene, history
   } = useGameStore();
   
   const [currentApp, setCurrentApp] = useState<string | null>(null);
@@ -72,24 +72,19 @@ export const PhoneOverlay = () => {
                 )}
                 {currentApp === 'wechat' && (
                   <WeChatApp 
+                    sessions={wechatSessions}
                     notifications={wechatNotifications} 
                     clearNotifications={clearWechatNotifications} 
-                    affinity={affinity}
-                    activeRoommates={active_roommates}
-                    playerName={player_name}
                   />
                 )}
                 {currentApp === 'calendar' && (
-                  <CalendarApp chapter={chapter} turn={turn} history={history} />
+                  <CalendarApp chapter={chapter} turn={turn} maxTurns={maxTurns} currentEventName={currentEventName} currentScene={current_scene} history={history} />
                 )}
                 {currentApp === 'jmu' && (
                   <JMUApp gpa={gpa} history={history} />
                 )}
                 {currentApp === 'alipay' && (
                   <AlipayApp money={money} history={history} />
-                )}
-                {currentApp === 'wellness' && (
-                  <WellnessApp san={san} />
                 )}
             </div>
 
