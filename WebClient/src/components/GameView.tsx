@@ -67,7 +67,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
     const [showSceneTransition, setShowSceneTransition] = useState(false);
     const [showBackConfirm, setShowBackConfirm] = useState(false);
     const [showAnnouncement, setShowAnnouncement] = useState(false);
-    const [showDebugPanel, setShowDebugPanel] = useState(true);
+    const [showDebugPanel, setShowDebugPanel] = useState(false);
     const [showRelationPanel, setShowRelationPanel] = useState(true);
     const [panelPosReady, setPanelPosReady] = useState(false);
     const [panelPos, setPanelPos] = useState({

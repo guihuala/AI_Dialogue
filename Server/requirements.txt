@@ -1,7 +1,9 @@
-gradio
 pandas
 chromadb
 pydantic
 openai
 python-dotenv
-watchdog
+fastapi
+uvicorn
+json-repair
+python-multipart

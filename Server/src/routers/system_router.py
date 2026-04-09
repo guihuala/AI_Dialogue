@@ -103,6 +103,17 @@ def build_system_router(
 
         return {"status": "success", "message": "大模型配置已更新"}
 
+    @router.get("/api/system/settings/validate")
+    def validate_settings(user_id: str = get_user_id):
+        engine = get_engine(user_id)
+        if not engine or not hasattr(engine, "llm"):
+            raise HTTPException(status_code=500, detail="Engine not ready")
+
+        ok, message = engine.llm.validate_current_config()
+        if not ok:
+            raise HTTPException(status_code=400, detail=f"模型配置无效：{message}")
+        return {"status": "success", "message": message}
+
     @router.post("/api/system/rebuild_knowledge")
     def rebuild_knowledge(user_id: str = get_user_id):
         """游戏内触发：重建向量知识库并重载剧本"""

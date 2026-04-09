@@ -2,15 +2,15 @@ import { useState, useEffect, useRef } from 'react';
 import { settingsApi, SystemSettings } from '../api/settingsApi';
 import { gameApi } from '../api/gameApi';
 import { useGameStore } from '../store/gameStore';
-import { RefreshCcw, Server, Thermometer, Database, Type, Trash2 } from 'lucide-react';
+import { RefreshCcw, Thermometer, Database, Type, Trash2 } from 'lucide-react';
 import { ConfirmDialog } from './common/ConfirmDialog';
 
 const AI_PRESETS = [
-    { name: 'DeepSeek', url: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'] },
-    { name: 'SiliconFlow', url: 'https://api.siliconflow.cn/v1', models: ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1', 'Qwen/Qwen2.5-72B-Instruct', 'THUDM/glm-4-9b-chat'] },
-    { name: 'OpenAI', url: 'https://api.openai.com/v1', models: ['gpt-4o-mini', 'gpt-4o'] },
-    { name: 'ZhiPu', url: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-plus', 'glm-4-flash'] },
-    { name: 'Ollama', url: 'http://localhost:11434/v1', models: ['qwen2.5:7b', 'llama3:8b', 'deepseek-r1:7b'] }
+    { id: 'deepseek', name: 'DeepSeek', url: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'] },
+    { id: 'siliconflow', name: 'SiliconFlow', url: 'https://api.siliconflow.cn/v1', models: ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1', 'Qwen/Qwen2.5-72B-Instruct', 'THUDM/glm-4-9b-chat'] },
+    { id: 'openai', name: 'OpenAI', url: 'https://api.openai.com/v1', models: ['gpt-4o-mini', 'gpt-4o'] },
+    { id: 'zhipu', name: 'ZhiPu', url: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-plus', 'glm-4-flash'] },
+    { id: 'ollama', name: 'Ollama', url: 'http://localhost:11434/v1', models: ['qwen2.5:7b', 'llama3:8b', 'deepseek-r1:7b'] }
 ];
 
 const TEMP_MIN = 0.2;
@@ -21,6 +21,71 @@ const STABLE_TEMP_MIN = 0.3;
 const STABLE_TEMP_MAX = 0.8;
 const STABLE_TOKENS_MIN = 700;
 const STABLE_TOKENS_MAX = 1200;
+
+const PROVIDER_BRANDS = {
+    deepseek: {
+        label: 'DS',
+        logoUrl: 'https://cdn.deepseek.com/logo.png?x-image-process=image%2Fresize%2Cw_1920',
+        logoClassName: 'object-contain scale-[1.85]',
+        className: 'bg-white text-white',
+        ringClassName: 'ring-sky-200/70'
+    },
+    siliconflow: {
+        label: 'SF',
+        logoUrl: 'https://www.siliconflow.cn/favicon.ico',
+        logoClassName: 'object-contain',
+        className: 'bg-white text-white',
+        ringClassName: 'ring-fuchsia-200/70'
+    },
+    openai: {
+        label: 'OA',
+        logoUrl: 'https://openai.com/favicon.ico',
+        logoClassName: 'object-contain',
+        className: 'bg-white text-white',
+        ringClassName: 'ring-slate-300/70'
+    },
+    zhipu: {
+        label: 'ZP',
+        logoUrl: 'https://docs.bigmodel.cn/favicon.ico',
+        logoClassName: 'object-contain',
+        className: 'bg-white text-white',
+        ringClassName: 'ring-emerald-200/70'
+    },
+    ollama: {
+        label: 'OL',
+        logoUrl: 'https://docs.ollama.com/favicon.ico',
+        logoClassName: 'object-contain',
+        className: 'bg-white text-white',
+        ringClassName: 'ring-orange-200/70'
+    }
+} as const;
+
+const ProviderLogo = ({
+    providerId,
+    isActive
+}: {
+    providerId: keyof typeof PROVIDER_BRANDS;
+    isActive: boolean;
+}) => {
+    const brand = PROVIDER_BRANDS[providerId];
+    const [imageFailed, setImageFailed] = useState(false);
+
+    return (
+        <div className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl text-[11px] font-black tracking-[0.18em] shadow-sm ring-1 ${brand.className} ${isActive ? `${brand.ringClassName} shadow-md` : 'opacity-90'}`}>
+            {!imageFailed ? (
+                <img
+                    src={brand.logoUrl}
+                    alt={`${providerId} logo`}
+                    className={`h-7 w-7 ${brand.logoClassName}`}
+                    loading="lazy"
+                    onError={() => setImageFailed(true)}
+                />
+            ) : (
+                <span className="text-[var(--color-cyan-dark)]">{brand.label}</span>
+            )}
+        </div>
+    );
+};
 
 export const SettingsPanel = () => {
     const didHydrateRef = useRef(false);
@@ -202,11 +267,11 @@ export const SettingsPanel = () => {
 
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
                 {activeTab === 'ai' ? (
-                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col h-full">
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col h-full min-h-0">
                         {/* Main Interaction Area: Sidebar + Detail */}
-                        <div className="flex flex-col lg:flex-row gap-4 flex-1 overflow-hidden min-h-0">
+                        <div className="flex flex-col lg:flex-row gap-4 flex-1 h-full overflow-hidden min-h-0">
                             {/* Left: Provider Selection Sidebar */}
-                            <div className="lg:w-1/3 flex flex-col space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+                            <div className="lg:w-1/3 h-full min-h-0 flex flex-col space-y-2 overflow-y-auto pr-1 custom-scrollbar">
                                 <div className="px-2 mb-2 text-sm font-black text-[var(--color-cyan-main)]">服务商</div>
                                 {AI_PRESETS.map((preset) => (
                                     <button
@@ -223,12 +288,10 @@ export const SettingsPanel = () => {
                                             : 'bg-white/40 border-[var(--color-cyan-main)]/8 hover:border-[var(--color-cyan-main)]/30 hover:bg-white/60'
                                             }`}
                                     >
-                                        <div className={`p-2 rounded-lg transition-colors ${settings.base_url === preset.url
-                                            ? 'bg-[var(--color-cyan-main)] text-white'
-                                            : 'bg-white text-[var(--color-cyan-dark)]/40 group-hover:text-[var(--color-cyan-main)] group-hover:bg-white/80 border border-[var(--color-cyan-main)]/10'
-                                            }`}>
-                                            <Server size={18} />
-                                        </div>
+                                        <ProviderLogo
+                                            providerId={preset.id as keyof typeof PROVIDER_BRANDS}
+                                            isActive={settings.base_url === preset.url}
+                                        />
                                         <div className="flex-1 min-w-0">
                                             <div className="font-black text-sm text-[var(--color-cyan-dark)] truncate">{preset.name}</div>
                                             <div className="text-xs font-bold text-[var(--color-cyan-dark)]/40 truncate">{preset.url}</div>
@@ -241,7 +304,7 @@ export const SettingsPanel = () => {
                             </div>
 
                             {/* Right: Configuration Form */}
-                            <div className="lg:w-2/3 flex flex-col space-y-4 pr-1 min-h-0 overflow-y-auto custom-scrollbar">
+                            <div className="lg:w-2/3 h-full min-h-0 flex flex-col space-y-4 pr-1 overflow-y-auto custom-scrollbar">
                                 {/* Base Config Card */}
                                 <div className="bg-white/72 p-4 rounded-xl border border-[var(--color-cyan-main)]/10 shadow-sm space-y-4">
                                     <div className="flex items-center space-x-3 mb-2">

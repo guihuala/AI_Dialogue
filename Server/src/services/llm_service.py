@@ -37,6 +37,29 @@ class LLMService:
             self.async_client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
         self.model = model
 
+    def has_usable_config(self) -> bool:
+        return bool(
+            str(self.api_key or "").strip()
+            and str(self.api_key or "").strip() != "dummy"
+            and str(self.base_url or "").strip()
+            and str(self.model or "").strip()
+        )
+
+    def validate_current_config(self) -> tuple[bool, str]:
+        if not self.has_usable_config():
+            return False, "尚未完整配置 API Key、网关或模型"
+
+        try:
+            self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": "ping"}],
+                temperature=0,
+                max_tokens=1,
+            )
+            return True, "配置有效"
+        except Exception as e:
+            return False, str(e)
+
     def generate_response(self, system_prompt: str, user_input: str, context: str = "", 
                           temperature: float = 0.7, top_p: float = 1.0, 
                           max_tokens: int = 1000, presence_penalty: float = 0.0, 

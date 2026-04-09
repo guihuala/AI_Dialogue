@@ -10,7 +10,7 @@ interface TitleMenuProps {
 
 export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnouncement }: TitleMenuProps) => {
     return (
-        <div className="flex-1 flex flex-col items-center justify-center relative min-h-[500px] h-full w-full animate-fade-in group overflow-hidden bg-[var(--color-cyan-light)]/35">
+        <div className="flex-1 flex flex-col items-center justify-center relative min-h-[420px] md:min-h-[500px] h-full w-full animate-fade-in group overflow-hidden bg-[var(--color-cyan-light)]/35">
 
             {/* Warm/Light Background Layer */}
             <div className="absolute inset-0 z-0">
@@ -28,13 +28,13 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
                     <img
                         src="/assets/cover/cover_01.webp"
                         alt=""
-                        className="absolute inset-0 w-full h-full object-contain"
+                        className="absolute inset-0 w-full h-full object-contain opacity-55 md:opacity-100"
                         style={{ objectPosition: "92% bottom" }}
                     />
                     <img
                         src="/assets/cover/cover_02.webp"
                         alt=""
-                        className="absolute inset-0 w-full h-full object-contain"
+                        className="absolute inset-0 w-full h-full object-contain opacity-55 md:opacity-100"
                         style={{ objectPosition: "92% bottom" }}
                     />
                 </div>
@@ -47,50 +47,50 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
             </div>
 
             {/* Center Logo & Actions (Cyan + Yellow) */}
-            <div className="relative z-10 flex flex-col items-start max-w-2xl w-full mr-auto ml-[6%] md:ml-[8%] py-8 md:py-10">
-                <div className="text-left mb-14 space-y-8">
+            <div className="relative z-10 flex flex-col items-center md:items-start max-w-2xl w-full px-5 md:px-0 mr-auto ml-0 md:ml-[8%] py-8 md:py-10">
+                <div className="text-center md:text-left mb-8 md:mb-14 space-y-6 md:space-y-8">
                     <div className="flex flex-col items-start">
-                        <h1 className="flex flex-col items-start gap-2">
-                            <span className="text-7xl md:text-8xl font-black text-[var(--color-cyan-dark)] tracking-tighter drop-shadow-sm">
+                        <h1 className="flex flex-col items-center md:items-start gap-2">
+                            <span className="text-5xl sm:text-6xl md:text-8xl font-black text-[var(--color-cyan-dark)] tracking-tighter drop-shadow-sm leading-none">
                                 UNIVERSITY
                             </span>
-                            <span className="text-6xl md:text-7xl font-black text-[var(--color-yellow-main)] tracking-tight mt-[-0.5rem] flex items-center gap-4">
+                            <span className="text-4xl sm:text-5xl md:text-7xl font-black text-[var(--color-yellow-main)] tracking-tight mt-[-0.15rem] md:mt-[-0.5rem] flex items-center gap-4 leading-none">
                                 ARCHIVES
                             </span>
                         </h1>
                     </div>
                 </div>
 
-                <div className="flex flex-col space-y-8 w-80 animate-slide-up-fade" style={{ animationDelay: '0.2s' }}>
+                <div className="flex flex-col items-center md:items-stretch space-y-5 md:space-y-8 w-full max-w-[20rem] animate-slide-up-fade" style={{ animationDelay: '0.2s' }}>
                     <button
                         onClick={onStart}
-                        className="group relative px-6 py-8 bg-[var(--color-cyan-dark)] text-white rounded-[2rem] font-black transition-all shadow-2xl hover:-translate-y-2 active:translate-y-0 flex items-center justify-center text-2xl overflow-hidden hover:bg-[var(--color-cyan-main)]"
+                        className="group relative w-full px-6 py-5 md:py-8 bg-[var(--color-cyan-dark)] text-white rounded-[1.6rem] md:rounded-[2rem] font-black transition-all duration-300 shadow-2xl hover:bg-[var(--color-cyan-main)] hover:shadow-[0_22px_40px_rgba(0,129,201,0.22)] active:scale-[0.99] flex items-center justify-center text-xl md:text-2xl overflow-hidden"
                     >
                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-shimmer" />
                         开始游戏
                     </button>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid w-full grid-cols-2 gap-3 md:gap-4">
                         <button
                             onClick={onWorkshop}
-                            className="flex flex-col items-center justify-center gap-2 py-6 bg-white/78 hover:bg-white text-[var(--color-cyan-dark)] rounded-[1.6rem] transition-all group hover:-translate-y-1 border border-white/70"
+                            className="flex flex-col items-center justify-center gap-2 py-4 md:py-6 bg-white/78 hover:bg-white text-[var(--color-cyan-dark)] rounded-[1.25rem] md:rounded-[1.6rem] transition-all duration-300 group border border-white/70 hover:shadow-[0_16px_34px_rgba(255,255,255,0.32)] active:scale-[0.99]"
                         >
                             <Cloud className="text-[var(--color-cyan-main)] group-hover:scale-110 transition-transform" size={24} />
-                            <span className="text-sm font-black">创意工坊</span>
+                            <span className="text-xs md:text-sm font-black">创意工坊</span>
                         </button>
                         <button
                             onClick={onEditor}
-                            className="flex flex-col items-center justify-center gap-2 py-6 bg-white/78 hover:bg-white text-[var(--color-cyan-dark)] rounded-[1.6rem] transition-all group hover:-translate-y-1 border border-white/70"
+                            className="flex flex-col items-center justify-center gap-2 py-4 md:py-6 bg-white/78 hover:bg-white text-[var(--color-cyan-dark)] rounded-[1.25rem] md:rounded-[1.6rem] transition-all duration-300 group border border-white/70 hover:shadow-[0_16px_34px_rgba(255,255,255,0.32)] active:scale-[0.99]"
                         >
                             <BookOpen className="text-[var(--color-cyan-main)] group-hover:scale-110 transition-transform" size={24} />
-                            <span className="text-sm font-black">模组编辑</span>
+                            <span className="text-xs md:text-sm font-black">模组编辑</span>
                         </button>
                     </div>
 
-                    <div className="self-start flex items-center gap-3">
+                    <div className="self-center md:self-start flex flex-wrap items-center justify-center md:justify-start gap-3">
                         <button
                             onClick={onAnnouncement}
-                            className="px-5 py-3 bg-[var(--color-yellow-main)]/92 text-[var(--color-cyan-dark)] hover:bg-[var(--color-yellow-main)] rounded-full transition-all flex items-center text-sm font-black shadow-sm"
+                            className="px-4 md:px-5 py-3 bg-[var(--color-yellow-main)]/92 text-white hover:bg-[var(--color-yellow-dark)] rounded-full transition-all duration-300 flex items-center text-xs md:text-sm font-black shadow-sm hover:shadow-[0_14px_28px_rgba(255,209,102,0.28)] active:scale-[0.99]"
                         >
                             <Bell size={14} className="mr-3" />
                             查看公告
@@ -98,7 +98,7 @@ export const TitleMenu = ({ onStart, onWorkshop, onEditor, onSettings, onAnnounc
 
                         <button
                             onClick={onSettings}
-                            className="px-5 py-3 bg-white/75 text-[var(--color-cyan-dark)] hover:bg-white font-black text-sm transition-all flex items-center rounded-full border border-white/70"
+                            className="px-4 md:px-5 py-3 bg-white/75 text-[var(--color-cyan-dark)] hover:bg-white font-black text-xs md:text-sm transition-all duration-300 flex items-center rounded-full border border-white/70 hover:shadow-[0_14px_28px_rgba(255,255,255,0.28)] active:scale-[0.99]"
                         >
                             <Settings size={14} className="mr-3 group-hover:rotate-45 transition-transform" />
                             设置

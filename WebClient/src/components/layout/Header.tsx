@@ -57,18 +57,18 @@ export const Header = ({ onMenuClick, onAccountClick, activeTab, isSidebarOpen }
   const accountLabel = isLoggedIn ? `账户：${accountInfo.account.username}` : '访客模式';
 
   return (
-    <header className="w-full h-20 flex items-center justify-between px-6 md:px-10 bg-white/80 backdrop-blur-md border-b-2 border-[var(--color-cyan-main)]/20 shrink-0 z-10 relative">
+    <header className="w-full h-16 md:h-20 flex items-center justify-between px-4 md:px-10 bg-white/80 backdrop-blur-md border-b-2 border-[var(--color-cyan-main)]/20 shrink-0 z-10 relative">
       <div className="flex items-center flex-1">
         {!isSidebarOpen && (
           <button
             onClick={onMenuClick}
-            className="mr-6 p-3 rounded-2xl bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-main)] hover:text-white transition-all shadow-sm"
+            className="mr-4 md:mr-6 p-2.5 md:p-3 rounded-2xl bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-main)] hover:text-white transition-all shadow-sm"
           >
-            <Menu size={24} />
+            <Menu size={22} />
           </button>
         )}
         <div className="flex flex-col">
-          <h2 className="text-xl font-black text-[var(--color-cyan-dark)] tracking-tight truncate">
+          <h2 className="text-lg md:text-xl font-black text-[var(--color-cyan-dark)] tracking-tight truncate">
             {getTitle()}
           </h2>
         </div>

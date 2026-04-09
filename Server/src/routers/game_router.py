@@ -441,6 +441,10 @@ def build_game_router(
             raise HTTPException(status_code=500, detail="GameEngine not initialized.")
 
         try:
+            ok, message = engine.llm.validate_current_config()
+            if not ok:
+                raise HTTPException(status_code=400, detail=f"模型配置无效，无法开始游戏：{message}")
+
             _activate_mod_for_new_game(user_id, req.mod_id)
             engine = get_engine(user_id)
             engine.reset()

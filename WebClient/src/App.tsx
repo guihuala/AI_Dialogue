@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { RotateCw } from 'lucide-react';
 import { GameView } from './components/GameView';
 import { ModManager } from './components/ModManager';
 import { SettingsPanel } from './components/SettingsPanel';
@@ -22,6 +23,10 @@ function App() {
   const [showUI, setShowUI] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [viewport, setViewport] = useState(() => ({
+    isMobile: window.innerWidth <= 900,
+    isPortrait: window.innerHeight >= window.innerWidth
+  }));
 
   const navigateToTab = (tab: TabId, options?: { replace?: boolean }) => {
     const path = tabToPath(tab);
@@ -71,6 +76,24 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleViewportChange = () => {
+      setViewport({
+        isMobile: window.innerWidth <= 900,
+        isPortrait: window.innerHeight >= window.innerWidth
+      });
+    };
+
+    handleViewportChange();
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('orientationchange', handleViewportChange);
+
+    return () => {
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('orientationchange', handleViewportChange);
+    };
+  }, []);
+
   const handleContextMenu = (e: React.MouseEvent) => {
     // Only show global context menu if target is not already handling its own context menu
     // (though e.preventDefault() in children will prevent this)
@@ -83,6 +106,8 @@ function App() {
     setTimeout(() => setToast(null), 2000);
   };
 
+  const shouldForceLandscape = viewport.isMobile && viewport.isPortrait;
+
   return (
     <div
       className="w-full flex h-screen text-[var(--color-cyan-dark)] bg-[var(--color-cyan-light)] overflow-hidden relative selection:bg-[var(--color-cyan-main)] selection:text-white"
@@ -93,6 +118,20 @@ function App() {
 
       {/* Toast Notification */}
       {toast && <Toast message={toast} />}
+
+      {shouldForceLandscape && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-[var(--color-cyan-light)]/96 px-6 text-center backdrop-blur-md">
+          <div className="w-full max-w-sm rounded-[2rem] border border-[var(--color-cyan-main)]/15 bg-white/92 px-6 py-8 shadow-2xl">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-cyan-light)] text-[var(--color-cyan-main)] shadow-sm">
+              <RotateCw size={28} />
+            </div>
+            <h2 className="mt-5 text-2xl font-black text-[var(--color-cyan-dark)]">请横屏使用</h2>
+            <p className="mt-3 text-sm font-bold leading-relaxed text-[var(--color-cyan-dark)]/65">
+              手机竖屏空间不足，很多编辑和操作按钮会错位。为了保证可玩性，请将设备横过来继续。
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Custom Context Menu */}
       {contextMenu && (
@@ -116,9 +155,9 @@ function App() {
       />
 
       <main className="flex-1 flex flex-col items-center w-full h-screen overflow-hidden relative bg-[var(--color-cyan-light)]/50 transition-all duration-500">
-        {showUI && <PhoneOverlay />}
+        {showUI && !viewport.isMobile && <PhoneOverlay />}
 
-        {showUI && (
+        {showUI && !shouldForceLandscape && (
           <Header
             onMenuClick={() => setIsSidebarOpen(true)}
             onAccountClick={() => setActiveTabWithRoute('account')}
@@ -127,7 +166,7 @@ function App() {
           />
         )}
 
-        <div className={`flex-1 relative flex flex-col items-stretch justify-center w-full h-full custom-scrollbar transition-all duration-500 ${activeTab === 'game' ? 'p-0 overflow-hidden' : 'p-4 md:px-8 md:py-8 pb-20 overflow-auto'}`}>
+        <div className={`flex-1 relative flex flex-col items-stretch w-full h-full custom-scrollbar transition-all duration-500 ${(activeTab === 'game' || activeTab === 'editor') ? 'justify-center p-0 overflow-hidden' : 'justify-start px-3 py-3 pb-16 md:px-8 md:py-8 md:pb-20 overflow-auto'}`}>
           {activeTab === 'game' && <GameView onTabChange={setActiveTabWithRoute} />}
           {activeTab === 'mods' && <ModManager onTabChange={setActiveTabWithRoute} />}
           {activeTab === 'workshop' && <ModManager onTabChange={setActiveTabWithRoute} />}

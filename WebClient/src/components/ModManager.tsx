@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Cloud, BookOpen, Trash2, Download, Plus, RefreshCw, X, Check, Search, Edit3 } from 'lucide-react';
 import { gameApi } from '../api/gameApi';
 import { ConfirmDialog } from './common/ConfirmDialog';
+import { WorkshopModDetailModal } from './mods/WorkshopModDetailModal';
 
 type TabType = 'library' | 'workshop';
 
@@ -28,12 +29,10 @@ const EMPTY_PAGINATION: ListPagination = {
 };
 
 export const ModManager = ({ onTabChange }: ModManagerProps) => {
-    const workshopFocusOptions = ['全部', '角色向', '剧情向', '系统向'] as const;
     const [libraryFilter, setLibraryFilter] = useState<'all' | 'original' | 'downloaded' | 'public'>('all');
     const [librarySort, setLibrarySort] = useState<'updated' | 'name'>('updated');
     const [workshopFilter, setWorkshopFilter] = useState<'all' | 'original' | 'forked' | 'mine'>('all');
     const [workshopSort, setWorkshopSort] = useState<'updated' | 'downloads' | 'name'>('updated');
-    const [workshopFocusTag, setWorkshopFocusTag] = useState<(typeof workshopFocusOptions)[number]>('全部');
     const [activeTab, setActiveTab] = useState<TabType>('library');
     const [libraryMods, setLibraryMods] = useState<any[]>([]);
     const [libraryCatalogMods, setLibraryCatalogMods] = useState<any[]>([]);
@@ -143,7 +142,6 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                 sort_by: sortBy,
                 sort_order: 'desc' as const,
                 source_type: sourceType,
-                focus_tag: workshopFocusTag === '全部' ? '' : workshopFocusTag,
                 page,
                 page_size: 12
             };
@@ -163,7 +161,7 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
         } finally {
             setLoading(false);
         }
-    }, [debouncedSearchQuery, workshopFilter, workshopFocusTag, workshopPage, workshopSort]);
+    }, [debouncedSearchQuery, workshopFilter, workshopPage, workshopSort]);
 
     useEffect(() => {
         setLibraryPage(1);
@@ -171,7 +169,7 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
 
     useEffect(() => {
         setWorkshopPage(1);
-    }, [debouncedSearchQuery, workshopFilter, workshopFocusTag, workshopSort]);
+    }, [debouncedSearchQuery, workshopFilter, workshopSort]);
 
     useEffect(() => {
         if (activeTab === 'library') loadLibrary();
@@ -462,7 +460,7 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                 </div>
             </div>
 
-            <div className="mb-4 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+            <div className="mb-4 flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
                 <div className="flex flex-wrap gap-2">
                     {activeTab === 'library' ? (
                         <>
@@ -492,7 +490,7 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                         </>
                     )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 self-start xl:self-auto">
                     <span className="text-sm font-black text-gray-400">排序</span>
                     {activeTab === 'library' ? (
                         <select value={librarySort} onChange={(e) => setLibrarySort(e.target.value as 'updated' | 'name')} className="px-3 py-2 rounded-xl border border-[var(--color-cyan-main)]/10 bg-white text-sm font-black text-[var(--color-cyan-dark)] outline-none">
@@ -508,25 +506,6 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
                     )}
                 </div>
             </div>
-
-            {activeTab === 'workshop' && (
-                <div className="mb-4 flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-black text-gray-400">题材</span>
-                    {workshopFocusOptions.map((tag) => (
-                        <button
-                            key={tag}
-                            onClick={() => setWorkshopFocusTag(tag)}
-                            className={`px-4 py-2 rounded-full text-sm font-black border transition-all ${
-                                workshopFocusTag === tag
-                                    ? 'bg-[var(--color-cyan-main)] text-white border-[var(--color-cyan-main)]'
-                                    : 'bg-white text-[var(--color-cyan-main)] border-[var(--color-cyan-main)]/15'
-                            }`}
-                        >
-                            {tag}
-                        </button>
-                    ))}
-                </div>
-            )}
 
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -739,166 +718,19 @@ export const ModManager = ({ onTabChange }: ModManagerProps) => {
             )}
 
             {selectedWorkshopMod && (
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-6" onClick={() => setSelectedWorkshopMod(null)}>
-                    <div
-                        className="bg-white rounded-[2rem] shadow-2xl p-8 w-full max-w-2xl border-2 border-[var(--color-cyan-main)]/20 animate-scale-in"
-                        onClick={e => e.stopPropagation()}
-                    >
-                        <div className="flex items-start justify-between gap-6 mb-6">
-                            <div className="min-w-0">
-                                <div className="flex flex-wrap gap-2 mb-3">
-                                    <span className="text-[10px] bg-[var(--color-cyan-light)] text-[var(--color-cyan-dark)] px-3 py-1 rounded-full font-black tracking-widest uppercase">
-                                        {selectedWorkshopMod.type === 'prompt_pack' ? '剧情包' : '独立角色'}
-                                    </span>
-                                    {getWorkshopFocusTags(selectedWorkshopMod).map((tag: string) => (
-                                        <span key={tag} className="text-[10px] bg-amber-50 text-amber-700 px-3 py-1 rounded-full font-black tracking-widest uppercase border border-amber-200">
-                                            {tag}
-                                        </span>
-                                    ))}
-                                </div>
-                                <h3 className="text-3xl font-black text-[var(--color-cyan-dark)] tracking-tight break-words">
-                                    {selectedWorkshopMod.name}
-                                </h3>
-                                <div className="mt-2 text-sm font-bold text-gray-500">
-                                    作者：{selectedWorkshopMod.author} · 下载：{selectedWorkshopMod.downloads} · 版本：v{selectedWorkshopMod.version || 1}
-                                </div>
-                            </div>
-                            <button onClick={() => setSelectedWorkshopMod(null)} className="text-gray-400 hover:text-black transition-colors shrink-0">
-                                <X size={24} />
-                            </button>
-                        </div>
-
-                        <div className="mb-6 rounded-2xl border border-[var(--color-cyan-main)]/10 bg-[var(--color-cyan-light)]/20 p-5">
-                            <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] mb-3">
-                                基本信息
-                            </div>
-                            <div className="mb-4 flex flex-wrap gap-2">
-                                <span className="text-[10px] bg-white text-[var(--color-cyan-main)] px-3 py-1 rounded-full font-black tracking-widest uppercase border border-[var(--color-cyan-main)]/15">
-                                    {getSourceLabel(selectedWorkshopMod.source_type)}
-                                </span>
-                                {selectedWorkshopMod.published_at && (
-                                    <span className="text-[10px] bg-white text-gray-500 px-3 py-1 rounded-full font-black tracking-widest uppercase border border-gray-200">
-                                        首次公开：{String(selectedWorkshopMod.published_at).split(' ')[0]}
-                                    </span>
-                                )}
-                                {selectedWorkshopMod.updated_at && (
-                                    <span className="text-[10px] bg-white text-gray-500 px-3 py-1 rounded-full font-black tracking-widest uppercase border border-gray-200">
-                                        最近更新：{String(selectedWorkshopMod.updated_at).split(' ')[0]}
-                                    </span>
-                                )}
-                            </div>
-                            <p className="text-sm text-gray-600 font-semibold leading-7">
-                                {selectedWorkshopMod.description || '作者还没有填写模组简介。'}
-                            </p>
-                        </div>
-
-                        <div className="mb-8 rounded-2xl border border-[var(--color-cyan-main)]/10 bg-[var(--color-cyan-light)]/25 p-5">
-                            <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)] mb-3">
-                                模组概要
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px] font-bold text-[var(--color-cyan-dark)]">
-                                <div className="rounded-xl bg-white/85 px-3 py-3">
-                                    角色：{selectedWorkshopMod.summary?.character_count ?? 0}
-                                </div>
-                                <div className="rounded-xl bg-white/85 px-3 py-3">
-                                    技能：{selectedWorkshopMod.summary?.skill_count ?? 0}
-                                </div>
-                                <div className="rounded-xl bg-white/85 px-3 py-3">
-                                    世界文件：{selectedWorkshopMod.summary?.world_count ?? 0}
-                                </div>
-                                <div className="rounded-xl bg-white/85 px-3 py-3">
-                                    事件文件：{selectedWorkshopMod.summary?.csv_files ?? 0}
-                                </div>
-                            </div>
-                            <div className="mt-3 text-[10px] text-gray-400 font-black">
-                                共包含 {(selectedWorkshopMod.summary?.md_files ?? 0) + (selectedWorkshopMod.summary?.csv_files ?? 0)} 个内容文件
-                            </div>
-                            {(() => {
-                                const recSkills = Array.isArray(selectedWorkshopMod.recommended_skills) && selectedWorkshopMod.recommended_skills.length > 0
-                                    ? selectedWorkshopMod.recommended_skills
-                                    : (Array.isArray(selectedWorkshopMod.enabled_skills) ? selectedWorkshopMod.enabled_skills : []);
-                                if (!Array.isArray(recSkills) || recSkills.length <= 0) return null;
-                                return (
-                                <div className="mt-4">
-                                    <div className="text-[10px] font-black uppercase tracking-widest text-[var(--color-cyan-main)]/70 mb-2">
-                                        推荐技能
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        {recSkills.map((skill: string) => (
-                                            <span
-                                                key={skill}
-                                                className="text-[10px] bg-white text-[var(--color-cyan-dark)] px-3 py-1 rounded-full font-black tracking-widest uppercase border border-[var(--color-cyan-main)]/15"
-                                            >
-                                                {skill}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                                );
-                            })()}
-                        </div>
-
-                        {selectedWorkshopLibraryState && (
-                            <div
-                                className={`mb-8 rounded-2xl border p-5 ${
-                                    selectedWorkshopLibraryState.tone === 'warning'
-                                        ? 'border-amber-200 bg-amber-50/90'
-                                        : 'border-[var(--color-cyan-main)]/10 bg-white'
-                                }`}
-                            >
-                                <div
-                                    className={`text-[10px] font-black uppercase tracking-widest mb-3 ${
-                                        selectedWorkshopLibraryState.tone === 'warning'
-                                            ? 'text-amber-700'
-                                            : 'text-[var(--color-cyan-main)]'
-                                    }`}
-                                >
-                                    {selectedWorkshopLibraryState.title}
-                                </div>
-                                <p
-                                    className={`text-sm font-semibold leading-7 ${
-                                        selectedWorkshopLibraryState.tone === 'warning'
-                                            ? 'text-amber-800'
-                                            : 'text-gray-600'
-                                    }`}
-                                >
-                                    {selectedWorkshopLibraryState.body}
-                                </p>
-                            </div>
-                        )}
-
-                        <div className={`mb-8 rounded-2xl border p-5 ${canPublishWorkshopMods ? 'border-emerald-200 bg-emerald-50/70' : 'border-amber-200 bg-amber-50/80'}`}>
-                            <div className={`text-[10px] font-black uppercase tracking-widest mb-3 ${canPublishWorkshopMods ? 'text-emerald-700' : 'text-amber-700'}`}>
-                                身份
-                            </div>
-                            <p className={`text-sm font-semibold leading-7 ${canPublishWorkshopMods ? 'text-emerald-800' : 'text-[var(--color-cyan-dark)]/70'}`}>
-                                {canPublishWorkshopMods
-                                    ? '当前已登陆。可以下载这个模组到本地库，也可以在编辑器里继续维护并公开自己的作品。'
-                                    : '当前是访客模式。可以下载这个模组到本地库并继续游玩，但是如果想把自己的模组公开到工坊，需要先登录正式账户。'}
-                            </p>
-                        </div>
-
-                        <div className="flex gap-4">
-                            <button
-                                onClick={() => setSelectedWorkshopMod(null)}
-                                className="flex-1 py-4 bg-white border-2 border-[var(--color-cyan-main)]/15 text-[var(--color-cyan-main)] rounded-2xl font-black uppercase tracking-widest hover:bg-[var(--color-cyan-main)]/10 transition-all"
-                            >
-                                关闭
-                            </button>
-                            <button
-                                onClick={async () => {
-                                    await handleDownload(selectedWorkshopMod.id, selectedWorkshopMod.name);
-                                    setSelectedWorkshopMod(null);
-                                }}
-                                disabled={actionTarget === `dl-${selectedWorkshopMod.id}`}
-                                className="flex-[1.3] py-4 bg-[var(--color-cyan-main)] text-white rounded-2xl flex items-center justify-center gap-2 font-black hover:bg-[var(--color-cyan-dark)] transition shadow-md uppercase tracking-widest text-xs disabled:opacity-50"
-                            >
-                                {actionTarget === `dl-${selectedWorkshopMod.id}` ? <RefreshCw size={14} className="animate-spin" /> : <Download size={16} />}
-                                {selectedWorkshopMod.is_owned_by_current_user ? '查看我的库副本' : '下载到我的库'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <WorkshopModDetailModal
+                    mod={selectedWorkshopMod}
+                    libraryState={selectedWorkshopLibraryState}
+                    canPublishWorkshopMods={canPublishWorkshopMods}
+                    focusTags={getWorkshopFocusTags(selectedWorkshopMod)}
+                    sourceLabel={getSourceLabel(selectedWorkshopMod.source_type)}
+                    actionTarget={actionTarget}
+                    onClose={() => setSelectedWorkshopMod(null)}
+                    onDownload={async () => {
+                        await handleDownload(selectedWorkshopMod.id, selectedWorkshopMod.name);
+                        setSelectedWorkshopMod(null);
+                    }}
+                />
             )}
 
             <ConfirmDialog

@@ -1,23 +1,18 @@
 import axios from 'axios';
 import { API_BASE } from './apiBase';
 
-const API_BASE_URL = `${API_BASE}/system`;
-
-const apiClient = axios.create({
-    baseURL: API_BASE_URL
-});
-
-apiClient.interceptors.request.use((config) => {
+const buildAuthHeaders = () => {
+    const headers: Record<string, string> = {};
     const visitorId = localStorage.getItem('visitor_id');
     if (visitorId) {
-        config.headers['X-Visitor-Id'] = visitorId;
+        headers['X-Visitor-Id'] = visitorId;
     }
     const accountToken = localStorage.getItem('account_token');
     if (accountToken) {
-        config.headers['X-Account-Token'] = accountToken;
+        headers['X-Account-Token'] = accountToken;
     }
-    return config;
-});
+    return headers;
+};
 
 export interface SystemSettings {
     base_url: string;
@@ -42,7 +37,7 @@ export const settingsApi = {
         let lastError: any = null;
         for (const url of candidates) {
             try {
-                const response = await apiClient.get(url);
+                const response = await axios.get(url, { headers: buildAuthHeaders() });
                 if (response?.data?.status === 'success' && response?.data?.data) {
                     return response.data.data;
                 }
@@ -62,12 +57,30 @@ export const settingsApi = {
         let lastError: any = null;
         for (const url of candidates) {
             try {
-                const res = await apiClient.post(url, settings);
+                const res = await axios.post(url, settings, { headers: buildAuthHeaders() });
                 if (res?.data?.status === 'success') return;
             } catch (e) {
                 lastError = e;
             }
         }
         throw lastError || new Error('保存系统设置失败');
+    },
+
+    validateSettings: async (): Promise<void> => {
+        const candidates = [
+            `${API_BASE}/system/settings/validate`,
+            `/api/system/settings/validate`,
+            `${window.location.origin}/api/system/settings/validate`,
+        ];
+        let lastError: any = null;
+        for (const url of candidates) {
+            try {
+                const res = await axios.get(url, { headers: buildAuthHeaders() });
+                if (res?.data?.status === 'success') return;
+            } catch (e) {
+                lastError = e;
+            }
+        }
+        throw lastError || new Error('模型配置校验失败');
     }
 };
