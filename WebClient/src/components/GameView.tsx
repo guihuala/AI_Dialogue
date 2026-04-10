@@ -54,7 +54,8 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         systemKeyResolution,
         weeklySummary
         ,
-        avgResponseMs
+        avgResponseMs,
+        player_name
     } = useGameStore();
 
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -551,6 +552,7 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         const lines = safeDisplayText.split('\n').filter(l => l.trim().length > 0);
         const sceneContext = lines.slice(-10).join('\n');
         const recentContext = lines.slice(-3).join('\n');
+        const playerName = String(player_name || '').trim();
         const portraitMapping = [
             { id: '唐', names: ['唐梦琪', '梦琪', '唐'] },
             { id: '李', names: ['李一诺', '一诺', '李'] },
@@ -561,31 +563,67 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
         ];
 
         const orderedPortraits = selectedRoommates
+            .filter((roommate) => roommate && roommate !== playerName)
             .map((roommate) => portraitMapping.find((item) => item.names.includes(roommate)))
             .filter((item, index, arr): item is NonNullable<typeof item> => !!item && arr.findIndex((candidate) => candidate?.id === item.id) === index);
 
         let presentChars: any[] = [];
         for (const c of orderedPortraits) {
-            let isPresent = false;
             let isSpeaking = false;
             let highestMentionIdx = -1;
+            let mentionScore = 0;
             for (const name of c.names) {
                 const dialogIdx = Math.max(recentContext.lastIndexOf(`${name}：`), recentContext.lastIndexOf(`${name}:`));
-                if (dialogIdx > -1) { isPresent = true; isSpeaking = true; highestMentionIdx = Math.max(highestMentionIdx, dialogIdx); }
+                if (dialogIdx > -1) {
+                    isSpeaking = true;
+                    mentionScore += 4;
+                    highestMentionIdx = Math.max(highestMentionIdx, dialogIdx);
+                }
                 const sceneIdx = sceneContext.lastIndexOf(name);
-                if (sceneIdx > -1) { isPresent = true; highestMentionIdx = Math.max(highestMentionIdx, sceneIdx); }
+                if (sceneIdx > -1) {
+                    mentionScore += 2;
+                    highestMentionIdx = Math.max(highestMentionIdx, sceneIdx);
+                }
             }
-            // 已选室友默认都显示；最近文本只用于排序和高亮发言者。
-            if (currentSpeaker && c.names.includes(currentSpeaker)) {
+            if (currentSpeaker && currentSpeaker !== playerName && c.names.includes(currentSpeaker)) {
                 isSpeaking = true;
+                mentionScore += 6;
                 highestMentionIdx = Math.max(highestMentionIdx, Number.MAX_SAFE_INTEGER);
             }
-            presentChars.push({ id: c.id, isSpeaking, lastMentionIdx: isPresent ? highestMentionIdx : -1 });
+
+            if (mentionScore > 0 || isSpeaking) {
+                presentChars.push({ id: c.id, isSpeaking, lastMentionIdx: highestMentionIdx, mentionScore });
+            }
         }
+
+        if (presentChars.length === 0) {
+            presentChars = orderedPortraits.slice(0, Math.min(2, orderedPortraits.length)).map((c, index) => ({
+                id: c.id,
+                isSpeaking: false,
+                lastMentionIdx: -index - 1,
+                mentionScore: 0,
+            }));
+        } else if (presentChars.length === 1) {
+            const existingIds = new Set(presentChars.map((c) => c.id));
+            const companion = orderedPortraits.find((c) => !existingIds.has(c.id));
+            if (companion) {
+                presentChars.push({
+                    id: companion.id,
+                    isSpeaking: false,
+                    lastMentionIdx: -1,
+                    mentionScore: 0,
+                });
+            }
+        }
+
+        presentChars.sort((a, b) => {
+            if (b.mentionScore !== a.mentionScore) return b.mentionScore - a.mentionScore;
+            return b.lastMentionIdx - a.lastMentionIdx;
+        });
 
         const actualSpeaker = [...presentChars].filter(c => c.isSpeaking).sort((a, b) => b.lastMentionIdx - a.lastMentionIdx)[0];
         if (actualSpeaker) presentChars.forEach(c => { if (c.id !== actualSpeaker.id) c.isSpeaking = false; });
-        return presentChars.slice(0, 4);
+        return presentChars.slice(0, 3);
     };
 
     const formatEventBannerTitle = (rawName?: string) => {

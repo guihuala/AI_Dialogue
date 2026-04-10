@@ -19,6 +19,9 @@ interface SkillCenterProps {
   onToggleSkill: (skillKey: string) => void;
   onOpenFile: (fileName: string) => void;
   onAddNew?: () => void;
+  hideHeader?: boolean;
+  searchTerm?: string;
+  onSearchTermChange?: (value: string) => void;
 }
 
 const matchToolToSkill = (skillKey: string, toolName: string): boolean => {
@@ -38,8 +41,13 @@ export const SkillCenter = ({
   onToggleSkill,
   onOpenFile,
   onAddNew,
+  hideHeader = false,
+  searchTerm: controlledSearchTerm,
+  onSearchTermChange,
 }: SkillCenterProps) => {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [internalSearchTerm, setInternalSearchTerm] = useState('');
+  const searchTerm = controlledSearchTerm ?? internalSearchTerm;
+  const setSearchTerm = onSearchTermChange ?? setInternalSearchTerm;
   const [activeKey, setActiveKey] = useState(skills[0]?.key || '');
 
   const filtered = useMemo(() => {
@@ -75,7 +83,7 @@ export const SkillCenter = ({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[var(--color-warm-bg)]">
-      <div className="px-7 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shrink-0 bg-white border-b border-[var(--color-soft-border)]">
+      {!hideHeader && <div className="px-7 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shrink-0 bg-white border-b border-[var(--color-soft-border)]">
         <div className="space-y-1.5 text-left">
           <h4 className="text-[2rem] leading-none font-black text-[var(--color-cyan-dark)] tracking-tight">技能中心</h4>
           <p className="text-sm font-bold text-[var(--color-cyan-dark)]/45">
@@ -104,7 +112,7 @@ export const SkillCenter = ({
             </button>
           )}
         </div>
-      </div>
+      </div>}
 
       <div className="flex-1 overflow-hidden p-5">
         <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-5 h-full min-h-0">

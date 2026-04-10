@@ -29,10 +29,25 @@ interface TopicExplorerProps {
     onAddNew?: () => void;
     canEdit?: boolean;
     headerAddon?: ReactNode;
+    hideHeader?: boolean;
+    searchTerm?: string;
+    onSearchTermChange?: (value: string) => void;
 }
 
-export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew, canEdit = true, headerAddon }: TopicExplorerProps) => {
-    const [searchTerm, setSearchTerm] = useState('');
+export const TopicExplorer = ({
+    category,
+    files,
+    onSelectTopic,
+    onAddNew,
+    canEdit = true,
+    headerAddon,
+    hideHeader = false,
+    searchTerm: controlledSearchTerm,
+    onSearchTermChange,
+}: TopicExplorerProps) => {
+    const [internalSearchTerm, setInternalSearchTerm] = useState('');
+    const searchTerm = controlledSearchTerm ?? internalSearchTerm;
+    const setSearchTerm = onSearchTermChange ?? setInternalSearchTerm;
 
     const worldTopics: Topic[] = [
         { 
@@ -171,7 +186,7 @@ export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew, canEdi
 
     return (
         <div className="flex-1 flex flex-col overflow-hidden bg-[var(--color-warm-bg)]">
-            <div className="px-7 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shrink-0 bg-white border-b border-[var(--color-soft-border)]">
+            {!hideHeader && <div className="px-7 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shrink-0 bg-white border-b border-[var(--color-soft-border)]">
                 <div className="space-y-1.5 text-left">
                     <h4 className="text-[2rem] leading-none font-black text-[var(--color-cyan-dark)] tracking-tight">
                         {category === 'world' ? '世界设定档案库' : '核心系统逻辑'}
@@ -193,8 +208,8 @@ export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew, canEdi
                         />
                     </div>
                 </div>
-            </div>
-            {headerAddon && (
+            </div>}
+            {headerAddon && !hideHeader && (
                 <div className="px-7 py-3 bg-white border-b border-[var(--color-soft-border)]">
                     {headerAddon}
                 </div>

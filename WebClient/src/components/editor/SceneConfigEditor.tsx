@@ -17,6 +17,7 @@ interface SceneConfigEditorProps {
   onChange: (next: SceneConfig) => void;
   onSave: () => void;
   canEdit?: boolean;
+  hideHeader?: boolean;
 }
 
 export const SceneConfigEditor = ({
@@ -24,6 +25,7 @@ export const SceneConfigEditor = ({
   onChange,
   onSave,
   canEdit = true,
+  hideHeader = false,
 }: SceneConfigEditorProps) => {
   const scenes = Array.isArray(config?.scenes) ? config.scenes : [];
   const [activeIndex, setActiveIndex] = useState(0);
@@ -62,7 +64,7 @@ export const SceneConfigEditor = ({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[var(--color-warm-bg)]">
-      <div className="px-7 py-6 border-b border-[var(--color-soft-border)] flex flex-col lg:flex-row lg:items-center justify-between gap-4 shrink-0 bg-white">
+      {!hideHeader && <div className="px-7 py-6 border-b border-[var(--color-soft-border)] flex flex-col lg:flex-row lg:items-center justify-between gap-4 shrink-0 bg-white">
         <div className="space-y-1.5">
           <h4 className="text-[2rem] leading-none font-black text-[var(--color-cyan-dark)] tracking-tight">场景配置</h4>
           <p className="text-sm font-bold text-[var(--color-cyan-dark)]/45">统一维护场景名称、图片和关键词匹配。</p>
@@ -84,7 +86,7 @@ export const SceneConfigEditor = ({
             提交场景配置
           </button>
         </div>
-      </div>
+      </div>}
 
       <div className="flex-1 overflow-hidden p-5">
         <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-5 h-full min-h-0">

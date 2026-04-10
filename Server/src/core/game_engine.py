@@ -2607,7 +2607,7 @@ class GameEngine:
                 cg_options = [self._build_transition_option(next_evt)]
 
                 parsed = {
-                    "narrator_transition": f"🎬 **[剧情演出] {next_evt.name}**\n---", 
+                    "narrator_transition": "", 
                     "current_scene": "宿舍",
                     "dialogue_sequence": cg_dialogue, 
                     "next_options": cg_options,
@@ -3074,10 +3074,8 @@ class GameEngine:
                 banner = self._format_weekly_summary_banner(weekly_summary)
                 if banner:
                     display_text = banner + "\n\n" + display_text
-            if "relationship_milestone" in enabled_skills:
-                ms_line = self._format_relationship_milestones(relationship_milestones)
-                if ms_line:
-                    display_text = ms_line + "\n\n" + display_text
+            # 关系里程碑保留为后台状态与记忆数据，不再打断当前剧情文本的首屏展示。
+            # 尤其是开局事件，若一结束就先弹“关系阶段变化/当前为熟悉”，会显得像提前剧透。
             if (
                 bool(is_end)
                 and not is_prefetch

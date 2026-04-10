@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Globe, Users, ScrollText, Terminal, Sparkles, Zap, Image, Settings2, Plus } from 'lucide-react';
+import { Globe, Users, ScrollText, Terminal, Sparkles, Zap, Image, Settings2, Plus, Search } from 'lucide-react';
 import { gameApi } from '../api/gameApi';
 import { useGameStore } from '../store/gameStore';
 
@@ -84,6 +84,8 @@ export const PromptEditor = ({
     const [isSavingRecommendedSkills, setIsSavingRecommendedSkills] = useState(false);
     const [isSavingFeatures, setIsSavingFeatures] = useState(false);
     const [showSkillToolbar, setShowSkillToolbar] = useState(false);
+    const [worldSearchTerm, setWorldSearchTerm] = useState('');
+    const [skillSearchTerm, setSkillSearchTerm] = useState('');
 
     const [message, setMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -1450,8 +1452,17 @@ ${data.content}`;
                                     统一维护世界观档案、场景规则与系统底层设定。
                                 </div>
                             </div>
-                            <div className="inline-flex items-center rounded-xl border border-[var(--color-cyan-main)]/20 bg-[var(--color-cyan-light)]/30 px-3 py-2 text-[11px] font-black text-[var(--color-cyan-dark)]">
-                                世界档案
+                            <div className="flex flex-wrap items-center justify-end gap-3">
+                                <div className="relative">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-cyan-main)]/30" size={18} />
+                                    <input
+                                        type="text"
+                                        placeholder="搜索档案内容..."
+                                        value={worldSearchTerm}
+                                        onChange={(e) => setWorldSearchTerm(e.target.value)}
+                                        className="h-10 w-[18rem] max-w-full pl-12 pr-4 rounded-2xl border border-[var(--color-cyan-main)]/12 bg-[var(--color-cyan-light)]/22 text-[11px] font-black text-[var(--color-cyan-dark)] outline-none transition-all focus:border-[var(--color-cyan-main)]/40 focus:bg-white"
+                                    />
+                                </div>
                             </div>
                         </div>
                     )}
@@ -1463,8 +1474,28 @@ ${data.content}`;
                                     统一管理背景图、命名规则与场景关键词映射。
                                 </div>
                             </div>
-                            <div className="inline-flex items-center rounded-xl border border-[var(--color-cyan-main)]/20 bg-[var(--color-cyan-light)]/30 px-3 py-2 text-[11px] font-black text-[var(--color-cyan-dark)]">
-                                场景资源
+                            <div className="flex flex-wrap items-center justify-end gap-3">
+                                <button
+                                    onClick={() => {
+                                        const current = parsedScenes || { default_image: '/assets/backgrounds/宿舍.jpg', scenes: [] };
+                                        setFileContent(JSON.stringify({
+                                            ...current,
+                                            scenes: [...(Array.isArray(current.scenes) ? current.scenes : []), { name: '新场景', image: '/assets/backgrounds/未知.jpg', keywords: [] }],
+                                        }, null, 2));
+                                    }}
+                                    disabled={!canEditCurrentMod}
+                                    className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl bg-[var(--color-cyan-dark)] px-4 text-[11px] font-black text-white shadow-sm transition-all hover:bg-[var(--color-cyan-main)] disabled:cursor-not-allowed disabled:opacity-45"
+                                >
+                                    <Plus size={15} />
+                                    新增场景
+                                </button>
+                                <button
+                                    onClick={() => handleSave()}
+                                    disabled={!canEditCurrentMod}
+                                    className="inline-flex h-10 items-center justify-center rounded-2xl bg-[var(--color-yellow-main)] px-4 text-[11px] font-black text-[var(--color-cyan-dark)] shadow-sm transition-all hover:brightness-[1.02] disabled:cursor-not-allowed disabled:opacity-45"
+                                >
+                                    提交场景配置
+                                </button>
                             </div>
                         </div>
                     )}
@@ -1476,8 +1507,26 @@ ${data.content}`;
                                     查看技能启停、引用关系与最近回合中的实际命中情况。
                                 </div>
                             </div>
-                            <div className="inline-flex items-center rounded-xl border border-[var(--color-cyan-main)]/20 bg-[var(--color-cyan-light)]/30 px-3 py-2 text-[11px] font-black text-[var(--color-cyan-dark)]">
-                                技能列表
+                            <div className="flex flex-wrap items-center justify-end gap-3">
+                                <div className="relative">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-cyan-main)]/30" size={18} />
+                                    <input
+                                        type="text"
+                                        placeholder="搜索 skill..."
+                                        value={skillSearchTerm}
+                                        onChange={(e) => setSkillSearchTerm(e.target.value)}
+                                        className="h-10 w-[18rem] max-w-full pl-12 pr-4 rounded-2xl border border-[var(--color-cyan-main)]/12 bg-[var(--color-cyan-light)]/22 text-[11px] font-black text-[var(--color-cyan-dark)] outline-none transition-all focus:border-[var(--color-cyan-main)]/40 focus:bg-white"
+                                    />
+                                </div>
+                                {canEditCurrentMod && (
+                                    <button
+                                        onClick={() => setNewItemModal({ type: 'skill', name: '', description: '' })}
+                                        className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-[var(--color-cyan-main)]/20 bg-white px-4 text-[11px] font-black text-[var(--color-cyan-dark)] transition-all hover:bg-[var(--color-cyan-light)]/25"
+                                    >
+                                        <Plus size={15} />
+                                        新增自定义 Skill
+                                    </button>
+                                )}
                             </div>
                         </div>
                     )}
@@ -1510,6 +1559,9 @@ ${data.content}`;
                                     onToggleSkill={handleToggleSkillFromCenter}
                                     onOpenFile={handleSelectTopic}
                                     onAddNew={canEditCurrentMod ? () => setNewItemModal({ type: 'skill', name: '', description: '' }) : undefined}
+                                    hideHeader
+                                    searchTerm={skillSearchTerm}
+                                    onSearchTermChange={setSkillSearchTerm}
                                 />
                             ) : (activeCategory === 'world' || activeCategory === 'skills') && !selectedFile ? (
                                 <TopicExplorer
@@ -1518,6 +1570,9 @@ ${data.content}`;
                                     onSelectTopic={handleSelectTopic}
                                     canEdit={canEditCurrentMod}
                                     onAddNew={activeCategory === 'skills' ? () => setNewItemModal({ type: 'skill', name: '', description: '' }) : undefined}
+                                    hideHeader
+                                    searchTerm={activeCategory === 'world' ? worldSearchTerm : skillSearchTerm}
+                                    onSearchTermChange={activeCategory === 'world' ? setWorldSearchTerm : setSkillSearchTerm}
                                     headerAddon={activeCategory === 'skills' ? (
                                         <div className="space-y-1.5">
                                             <button
@@ -1648,6 +1703,7 @@ ${data.content}`;
                                     onChange={(next) => setFileContent(JSON.stringify(next, null, 2))}
                                     onSave={() => handleSave()}
                                     canEdit={canEditCurrentMod}
+                                    hideHeader
                                 />
                             ) : activeCategory === 'char' && selectedFile?.name.endsWith('roster.json') && editMode === 'visual' ? (
                                 <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 bg-[var(--color-cyan-light)]/10">
