@@ -20,7 +20,6 @@ export const CalendarApp = ({ chapter, turn, maxTurns, currentEventName, current
   const eventLogs = history.filter((item) => String(item.eventName || item.text || '').trim());
   const remainingTurns = Math.max(0, Number(maxTurns || 20) - Number(turn || 0));
   const currentStage = Math.max(1, Number(chapter || 1));
-  const currentRound = Math.max(0, Number(turn || 0));
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 animate-in slide-in-from-right duration-500 overflow-hidden">

@@ -692,7 +692,7 @@ class GameEngine:
                     "type": "function",
                     "function": {
                         "name": "phone_enqueue_message",
-                        "description": "向手机系统投递一条消息通知（仅在本轮有明确触发后果时调用）。",
+                        "description": "向手机系统投递一条微信消息（仅在角色出现私下态度、背后议论、单聊试探、群里阴阳或表里不一时调用）。",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -839,6 +839,10 @@ class GameEngine:
             sender = str((selected_chars or ["室友"])[0] or "室友").strip() or "室友"
 
         attitude = str(system_key_resolution.get("attitude", "") or "").strip()
+        should_emit = bool(stage_transition) or attitude in {"回避", "对抗"}
+        if not should_emit:
+            return []
+
         msg = ""
         if getattr(self, "llm", None) is not None and getattr(self.llm, "has_usable_config", None) and self.llm.has_usable_config():
             try:
@@ -858,9 +862,10 @@ class GameEngine:
                         "要求：\n"
                         "1. 只返回 JSON：{\"message\": string}\n"
                         "2. 语气像真实大学生微信，不要总结腔，不要系统说明。\n"
-                        "3. 必须明显承接刚发生的关键选项后果与人物态度。\n"
-                        "4. 长度 12 到 32 个汉字，简短自然，不要书面化。\n"
-                        "5. 不要出现引号、表情包占位、旁白、解释。"
+                        "3. 这条消息必须体现角色没有当面说出口的私下态度、背后议论、试探、串联或表里不一。\n"
+                        "4. 不要复述主线对话，不要把刚才发生的剧情重新总结一遍。\n"
+                        "5. 长度 12 到 30 个汉字，简短自然，不要书面化。\n"
+                        "6. 不要出现引号、表情包占位、旁白、解释。"
                     ),
                     user_input=json.dumps(prompt_payload, ensure_ascii=False),
                     context="",
@@ -874,16 +879,12 @@ class GameEngine:
                 msg = ""
 
         if not msg:
-            if attitude == "支持":
-                msg = "刚才谢谢你站我这边，晚点一起复盘下。"
-            elif attitude == "中立":
-                msg = "你刚才处理得很稳，后面我们再细聊。"
-            elif attitude == "回避":
+            if attitude == "回避":
                 msg = "你刚才没接话，我有点在意，等会聊聊？"
             elif attitude == "对抗":
-                msg = "刚才火药味有点重，等会冷静后再谈。"
+                msg = "刚才我先忍了，晚点再跟你算这笔账。"
             else:
-                msg = "刚才那件事我记下了，回头我们单聊。"
+                msg = "刚才我没当面说，回头单聊。"
 
         return [
             {
@@ -923,6 +924,15 @@ class GameEngine:
         clean_content = re.sub(r"^(?:[^：:]{1,10})[：:]\s*", "", clean_content).strip()
         scene_hint = str(current_scene or "").strip()
         event_hint = str(event_name or "").strip()
+        hidden_signal = bool(
+            re.search(
+                r"(先别|别说|私下|单聊|回头说|装作|其实|背后|群里|别告诉|当没听见|我忍着|算了)",
+                clean_content,
+            )
+        )
+
+        if not hidden_signal:
+            return []
 
         if clean_content:
             if len(clean_content) > 28:
@@ -2840,18 +2850,21 @@ class GameEngine:
             if has_effects:
                 san_delta = _num(effects_data.get("san_delta", 0), 0)
                 money_delta = _num(effects_data.get("money_delta", 0), 0)
+                gpa_delta = _num(effects_data.get("gpa_delta", 0), 0)
                 arg_delta = int(_num(effects_data.get("arg_delta", 0), 0))
                 aff_changes = effects_data.get("affinity_changes", {})
                 is_argument = arg_delta > 0
             else:
                 san_delta = _num(stats_data.get("san_delta", 0), 0)
                 money_delta = _num(stats_data.get("money_delta", 0), 0)
+                gpa_delta = _num(stats_data.get("gpa_delta", 0), 0)
                 is_argument = bool(stats_data.get("is_argument", False))
                 aff_changes = stats_data.get("affinity_changes", {})
                 arg_delta = 1 if is_argument else 0
 
             san = max(0, min(100, san + san_delta))
             money += money_delta
+            gpa = max(0.0, min(4.0, gpa + gpa_delta))
             if arg_delta > 0:
                 arg_count += arg_delta
 
@@ -3003,6 +3016,13 @@ class GameEngine:
             narrative_update_started_at = time.perf_counter()
             before_system_state = self._get_system_state_snapshot()
             relationship_milestones = []
+            resolved_effects_data = effects_data if has_effects else {
+                "san_delta": san_delta,
+                "money_delta": money_delta,
+                "gpa_delta": gpa_delta,
+                "arg_delta": arg_delta,
+                "affinity_changes": aff_changes if isinstance(aff_changes, dict) else {},
+            }
             if hasattr(self, "narrative_state_mgr"):
                 self.narrative_state_mgr.update_after_turn(
                     player_name=player_name,
@@ -3011,12 +3031,7 @@ class GameEngine:
                     san=san,
                     affinity=affinity,
                     active_chars=selected_chars,
-                    effects_data=effects_data if has_effects else {
-                        "san_delta": san_delta,
-                        "money_delta": money_delta,
-                        "arg_delta": arg_delta,
-                        "affinity_changes": aff_changes if isinstance(aff_changes, dict) else {},
-                    },
+                    effects_data=resolved_effects_data,
                     dialogue_sequence=seq if isinstance(seq, list) else [],
                     is_end=is_end,
                 )
@@ -3044,12 +3059,7 @@ class GameEngine:
                         affinity=affinity,
                         chapter=chapter,
                         event_turn=turn,
-                        effects_data=effects_data if has_effects else {
-                            "san_delta": san_delta,
-                            "money_delta": money_delta,
-                            "arg_delta": arg_delta,
-                            "affinity_changes": aff_changes if isinstance(aff_changes, dict) else {},
-                        },
+                        effects_data=resolved_effects_data,
                         event_id=getattr(next_evt, "id", ""),
                         event_name=getattr(next_evt, "name", ""),
                         is_end=system_end,
@@ -3068,6 +3078,25 @@ class GameEngine:
                 ms_line = self._format_relationship_milestones(relationship_milestones)
                 if ms_line:
                     display_text = ms_line + "\n\n" + display_text
+            if (
+                bool(is_end)
+                and not is_prefetch
+                and hasattr(self, "mm")
+                and hasattr(self.mm, "save_event_reflection")
+            ):
+                try:
+                    self.mm.save_event_reflection(
+                        event_id=str(getattr(next_evt, "id", "") or ""),
+                        event_name=str(getattr(next_evt, "name", "") or ""),
+                        player_name=player_name,
+                        active_chars=selected_chars,
+                        current_scene=str(parsed.get("current_scene", "") or parsed.get("scene", "") or "宿舍"),
+                        dialogue_sequence=seq if isinstance(seq, list) else [],
+                        effects_data=resolved_effects_data,
+                        state_delta=state_delta if isinstance(state_delta, dict) else {},
+                    )
+                except Exception:
+                    pass
             mark_timing("narrative_update", narrative_update_started_at)
 
             memory_save_started_at = time.perf_counter()
@@ -3207,10 +3236,43 @@ class GameEngine:
                 self.prefetch_mgr.get_prefetcher(self.user_id, self.llm, self.pm).generate_script_async(prefetch_ctx)
             # 如果当前事件结束，尝试预取下一个阶段
             elif use_branch_tree and parsed.get("is_end", False):
-                next_predicted = self.director.get_next_event(
-                    {"money": money, "san": san, "hygiene": hygiene, "gpa": gpa, "reputation": reputation},
-                    selected_chars, affinity, self._get_narrative_state_snapshot()
-                )
+                director_snapshot = {
+                    "used_events": list(getattr(self.director, "used_events", []) or []),
+                    "recent_events": list(getattr(self.director, "recent_events", []) or []),
+                    "event_last_picked": dict(getattr(self.director, "event_last_picked", {}) or {}),
+                    "pick_counter": int(getattr(self.director, "pick_counter", 0) or 0),
+                    "current_chapter": int(getattr(self.director, "current_chapter", 1) or 1),
+                    "chapter_progress": int(getattr(self.director, "chapter_progress", 0) or 0),
+                    "relationship_feedback_window": int(getattr(self.director, "relationship_feedback_window", 0) or 0),
+                    "relationship_feedback_tags": list(getattr(self.director, "relationship_feedback_tags", []) or []),
+                    "_seen_relation_shift_markers": set(getattr(self.director, "_seen_relation_shift_markers", set()) or set()),
+                    "affinity_feedback_window": int(getattr(self.director, "affinity_feedback_window", 0) or 0),
+                    "affinity_feedback_tags": list(getattr(self.director, "affinity_feedback_tags", []) or []),
+                    "affinity_feedback_target": getattr(self.director, "affinity_feedback_target", None),
+                    "last_affinity_snapshot": dict(getattr(self.director, "last_affinity_snapshot", {}) or {}),
+                    "materialized_origin_map": dict(getattr(self.director, "materialized_origin_map", {}) or {}),
+                }
+                try:
+                    next_predicted = self.director.get_next_event(
+                        {"money": money, "san": san, "hygiene": hygiene, "gpa": gpa, "reputation": reputation},
+                        selected_chars, affinity, self._get_narrative_state_snapshot()
+                    )
+                finally:
+                    self.director.used_events = list(director_snapshot["used_events"])
+                    self.director.recent_events.clear()
+                    self.director.recent_events.extend(director_snapshot["recent_events"])
+                    self.director.event_last_picked = dict(director_snapshot["event_last_picked"])
+                    self.director.pick_counter = int(director_snapshot["pick_counter"])
+                    self.director.current_chapter = int(director_snapshot["current_chapter"])
+                    self.director.chapter_progress = int(director_snapshot["chapter_progress"])
+                    self.director.relationship_feedback_window = int(director_snapshot["relationship_feedback_window"])
+                    self.director.relationship_feedback_tags = list(director_snapshot["relationship_feedback_tags"])
+                    self.director._seen_relation_shift_markers = set(director_snapshot["_seen_relation_shift_markers"])
+                    self.director.affinity_feedback_window = int(director_snapshot["affinity_feedback_window"])
+                    self.director.affinity_feedback_tags = list(director_snapshot["affinity_feedback_tags"])
+                    self.director.affinity_feedback_target = director_snapshot["affinity_feedback_target"]
+                    self.director.last_affinity_snapshot = dict(director_snapshot["last_affinity_snapshot"])
+                    self.director.materialized_origin_map = dict(director_snapshot["materialized_origin_map"])
                 if next_predicted:
                     next_profile = self._get_latency_profile(next_predicted)
                     print(f"📡 [Prefetch] Triggering prefetch for NEXT event: {next_predicted.name}", flush=True)

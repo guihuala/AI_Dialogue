@@ -8,6 +8,7 @@ interface CharacterEditorProps {
     onAddNew: () => void;
     onDelete: (id: string, name: string) => void;
     canEdit?: boolean;
+    hideHeader?: boolean;
 }
 
 export const CharacterEditor = ({
@@ -17,26 +18,30 @@ export const CharacterEditor = ({
     onEditSettings,
     onAddNew,
     onDelete,
-    canEdit = true
+    canEdit = true,
+    hideHeader = false,
 }: CharacterEditorProps) => {
     return (
         <div className="flex-1 flex flex-col overflow-hidden bg-[var(--color-warm-bg)]">
-            <div className="px-12 py-8 border-b border-[var(--color-soft-border)] flex items-center justify-between shrink-0 bg-white">
-                <div>
-                    <h4 className="text-2xl font-black text-[var(--color-cyan-dark)] tracking-tight">角色管理</h4>
+            {!hideHeader && (
+                <div className="px-7 py-6 border-b border-[var(--color-soft-border)] flex flex-col lg:flex-row lg:items-center justify-between shrink-0 bg-white gap-4">
+                    <div className="space-y-1.5">
+                        <h4 className="text-[2rem] leading-none font-black text-[var(--color-cyan-dark)] tracking-tight">角色管理</h4>
+                        <div className="text-sm font-bold text-[var(--color-cyan-dark)]/45">集中维护角色档案、头像和核心设定入口。</div>
+                    </div>
+                    <button
+                        onClick={onAddNew}
+                        disabled={!canEdit}
+                        className="inline-flex h-11 items-center justify-center gap-2 px-5 bg-[var(--color-cyan-dark)] text-white rounded-2xl font-black text-xs hover:bg-[var(--color-cyan-main)] transition-all shadow-sm"
+                    >
+                        <Plus size={16} /> {canEdit ? '新增角色档案' : '默认模板只读'}
+                    </button>
                 </div>
-                <button
-                    onClick={onAddNew}
-                    disabled={!canEdit}
-                    className="px-6 py-3 bg-[var(--color-cyan-dark)] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center hover:bg-[var(--color-cyan-main)] transition-all shadow-xl shadow-cyan-900/20"
-                >
-                    <Plus size={16} className="mr-2" /> {canEdit ? '新增角色档案' : '默认模板只读'}
-                </button>
-            </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-12">
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+            )}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
                     {parsedRoster && Object.entries(parsedRoster).map(([id, char]: [string, any]) => (
-                        <div key={id} className="bg-white rounded-[2rem] p-6 border border-[var(--color-soft-border)] hover:border-[var(--color-cyan-main)]/30 transition-all group/card relative shadow-sm hover:shadow-xl hover:-translate-y-1">
+                        <div key={id} className="bg-white rounded-[2rem] p-6 border border-[var(--color-soft-border)] hover:border-[var(--color-cyan-main)]/22 transition-all group/card relative shadow-sm hover:shadow-lg">
                             <button
                                 onClick={() => onDelete(id, char.name)}
                                 disabled={!canEdit}
@@ -49,7 +54,7 @@ export const CharacterEditor = ({
                             <div className="flex flex-col md:flex-row gap-6">
                                 <div className="flex flex-col items-center space-y-3 shrink-0">
                                     <div
-                                        className="w-24 h-24 rounded-2xl overflow-hidden bg-[var(--color-cyan-light)] border-2 border-white shadow-md relative group/avatar cursor-pointer"
+                                            className="w-24 h-24 rounded-2xl overflow-hidden bg-[var(--color-cyan-light)] border-2 border-white shadow-sm relative group/avatar cursor-pointer"
                                         onClick={() => {
                                             if (canEdit) {
                                                 document.getElementById(`avatar-input-${id}`)?.click();
@@ -102,9 +107,9 @@ export const CharacterEditor = ({
                                         <button
                                             onClick={() => onEditSettings(char)}
                                             disabled={!canEdit}
-                                            className="w-full py-3 bg-white border-2 border-[var(--color-cyan-main)]/10 text-[var(--color-cyan-dark)] rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center hover:bg-[var(--color-cyan-light)] transition-all"
+                                            className="w-full py-3 bg-white border border-[var(--color-cyan-main)]/12 text-[var(--color-cyan-dark)] rounded-2xl font-black text-sm flex items-center justify-center hover:bg-[var(--color-cyan-light)]/30 transition-all"
                                         >
-                                            <Edit3 size={14} className="mr-2 text-[var(--color-cyan-main)]" /> {canEdit ? '具体信息 & 详细设定' : '模板设定只读'}
+                                            <Edit3 size={14} className="mr-2 text-[var(--color-cyan-main)]" /> {canEdit ? '编辑详细设定' : '模板设定只读'}
                                         </button>
                                     </div>
                                 </div>

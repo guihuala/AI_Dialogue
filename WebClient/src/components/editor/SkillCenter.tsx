@@ -75,14 +75,14 @@ export const SkillCenter = ({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[var(--color-warm-bg)]">
-      <div className="px-8 py-6 flex flex-col md:flex-row md:items-end justify-between shrink-0 bg-white shadow-sm border-b border-[var(--color-soft-border)]">
-        <div className="space-y-2 text-left">
-          <h4 className="text-2xl font-black text-[var(--color-cyan-dark)] tracking-tighter uppercase">技能中心</h4>
-          <p className="text-xs font-bold text-[var(--color-cyan-dark)]/40 uppercase tracking-widest">
-            直接管理 skill：查看详情 / 控制开关 / 跳转编辑
+      <div className="px-7 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shrink-0 bg-white border-b border-[var(--color-soft-border)]">
+        <div className="space-y-1.5 text-left">
+          <h4 className="text-[2rem] leading-none font-black text-[var(--color-cyan-dark)] tracking-tight">技能中心</h4>
+          <p className="text-sm font-bold text-[var(--color-cyan-dark)]/45">
+            管理技能启停、查看使用情况，并快速跳到关联文件。
           </p>
         </div>
-        <div className="flex items-center space-x-4 mt-6 md:mt-0">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-cyan-main)]/30" size={18} />
             <input
@@ -90,27 +90,24 @@ export const SkillCenter = ({
               placeholder="搜索 skill..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-12 pr-6 py-2.5 bg-[var(--color-cyan-light)]/30 rounded-2xl border-2 border-transparent text-sm font-bold outline-none focus:border-[var(--color-cyan-main)]/40 focus:bg-white transition-all w-80 shadow-inner text-[var(--color-cyan-dark)]"
+              className="h-11 w-[20rem] max-w-full pl-12 pr-5 bg-[var(--color-cyan-light)]/22 rounded-2xl border border-[var(--color-cyan-main)]/12 text-sm font-bold outline-none focus:border-[var(--color-cyan-main)]/40 focus:bg-white transition-all shadow-inner text-[var(--color-cyan-dark)]"
             />
           </div>
+          {onAddNew && (
+            <button
+              onClick={onAddNew}
+              disabled={!canEdit}
+              className="inline-flex h-11 items-center justify-center gap-2 px-5 rounded-2xl text-xs font-black bg-white border border-[var(--color-cyan-main)]/20 text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-light)]/25 transition-all disabled:opacity-60"
+            >
+              <Plus size={14} />
+              新增自定义 Skill
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="px-8 py-3 bg-white border-b border-[var(--color-soft-border)] flex flex-wrap items-center gap-3">
-        {onAddNew && (
-          <button
-            onClick={onAddNew}
-            disabled={!canEdit}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-black bg-white border border-[var(--color-cyan-main)]/20 text-[var(--color-cyan-dark)] hover:bg-[var(--color-cyan-light)]/25 transition-all disabled:opacity-60"
-          >
-            <Plus size={14} />
-            新增自定义 Skill
-          </button>
-        )}
-      </div>
-
       <div className="flex-1 overflow-hidden p-5">
-        <div className="grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-4 h-full min-h-0">
+        <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-5 h-full min-h-0">
           <div className="bg-white rounded-2xl border border-[var(--color-soft-border)] overflow-hidden h-full min-h-0 flex flex-col">
             <div className="px-4 py-3 border-b border-[var(--color-soft-border)] text-[11px] font-black text-[var(--color-cyan-main)] uppercase tracking-widest">
               Skills ({filtered.length})
@@ -136,7 +133,7 @@ export const SkillCenter = ({
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-[var(--color-soft-border)] p-5 overflow-y-auto custom-scrollbar h-full min-h-0">
+          <div className="bg-white rounded-2xl border border-[var(--color-soft-border)] p-5 overflow-y-auto custom-scrollbar h-full min-h-0 shadow-sm">
             {!activeSkill ? (
               <div className="h-full flex items-center justify-center text-slate-400 font-bold">未找到匹配的 skill</div>
             ) : (
@@ -165,7 +162,7 @@ export const SkillCenter = ({
                   <button
                     onClick={() => onToggleSkill(activeSkill.key)}
                     disabled={!canEdit || isSavingFeatures}
-                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-black transition-all ${
+                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black transition-all ${
                       activeSkill.enabled
                         ? 'bg-[var(--color-cyan-main)] text-white'
                         : 'bg-white border border-[var(--color-cyan-main)]/20 text-slate-600'
@@ -176,7 +173,7 @@ export const SkillCenter = ({
                   </button>
                 </div>
 
-                <div className="rounded-xl border border-[var(--color-soft-border)] p-4">
+                <div className="rounded-2xl border border-[var(--color-soft-border)] p-4">
                   <div className="text-[11px] font-black text-[var(--color-cyan-main)] uppercase tracking-widest mb-3">
                     来源统计（最近 {usageStats.windowTurns || 0} 回合）
                   </div>
@@ -204,7 +201,7 @@ export const SkillCenter = ({
                   )}
                 </div>
 
-                <div className="rounded-xl border border-[var(--color-soft-border)] p-4">
+                <div className="rounded-2xl border border-[var(--color-soft-border)] p-4">
                   <div className="text-[11px] font-black text-[var(--color-cyan-main)] uppercase tracking-widest mb-3">
                     关联文件（{activeSkill.files.length}）
                   </div>

@@ -171,18 +171,17 @@ export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew, canEdi
 
     return (
         <div className="flex-1 flex flex-col overflow-hidden bg-[var(--color-warm-bg)]">
-            {/* Header */}
-            <div className="px-12 py-10 flex flex-col md:flex-row md:items-end justify-between shrink-0 bg-white shadow-sm border-b border-[var(--color-soft-border)]">
-                <div className="space-y-2 text-left">
-                    <h4 className="text-3xl font-black text-[var(--color-cyan-dark)] tracking-tighter uppercase">
+            <div className="px-7 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shrink-0 bg-white border-b border-[var(--color-soft-border)]">
+                <div className="space-y-1.5 text-left">
+                    <h4 className="text-[2rem] leading-none font-black text-[var(--color-cyan-dark)] tracking-tight">
                         {category === 'world' ? '世界设定档案库' : '核心系统逻辑'}
                     </h4>
-                    <p className="text-sm font-bold text-[var(--color-cyan-dark)]/40 uppercase tracking-widest">
+                    <p className="text-sm font-bold text-[var(--color-cyan-dark)]/45">
                         {category === 'world' ? '构建故事基石，定义环境、历史与社会关系' : '配置 AI 运行底座，优化回复逻辑与系统交互'}
                     </p>
                 </div>
                 
-                <div className="flex items-center space-x-4 mt-6 md:mt-0">
+                <div className="flex flex-wrap items-center gap-3">
                     <div className="relative">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-cyan-main)]/30" size={18} />
                         <input 
@@ -190,45 +189,40 @@ export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew, canEdi
                             placeholder="搜索档案内容..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-12 pr-6 py-3 bg-[var(--color-cyan-light)]/30 rounded-2xl border-2 border-transparent text-sm font-bold outline-none focus:border-[var(--color-cyan-main)]/40 focus:bg-white transition-all w-80 shadow-inner text-[var(--color-cyan-dark)]"
+                            className="h-11 w-[20rem] max-w-full pl-12 pr-5 bg-[var(--color-cyan-light)]/22 rounded-2xl border border-[var(--color-cyan-main)]/12 text-sm font-bold outline-none focus:border-[var(--color-cyan-main)]/35 focus:bg-white transition-all shadow-inner text-[var(--color-cyan-dark)]"
                         />
                     </div>
                 </div>
             </div>
             {headerAddon && (
-                <div className="px-12 py-4 bg-white border-b border-[var(--color-soft-border)]">
+                <div className="px-7 py-3 bg-white border-b border-[var(--color-soft-border)]">
                     {headerAddon}
                 </div>
             )}
 
-            {/* Grid */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-12">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-8">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                     {filteredTopics.map((topic) => {
                         const isLight = topic.color.includes('light') || topic.color.includes('/20');
                         return (
                             <button
                                 key={topic.id}
                                 onClick={() => onSelectTopic(topic.fileName)}
-                                className="bg-white rounded-[2.5rem] p-8 border border-[var(--color-soft-border)] shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all group text-left relative overflow-hidden"
+                                className="bg-white rounded-[2rem] p-6 border border-[var(--color-soft-border)] shadow-sm hover:shadow-lg hover:border-[var(--color-cyan-main)]/20 transition-all group text-left relative overflow-hidden min-h-[260px]"
                             >
-                                {/* Decorative Background Icon */}
-                                <topic.icon className="absolute -right-8 -bottom-8 w-40 h-40 text-[var(--color-cyan-light)]/20 group-hover:text-[var(--color-cyan-light)] transition-colors opacity-50" />
+                                <topic.icon className="absolute -right-6 -bottom-6 w-28 h-28 text-[var(--color-cyan-light)]/18 group-hover:text-[var(--color-cyan-light)]/30 transition-colors opacity-70" />
 
                                 <div className="relative z-10 flex flex-col h-full text-left">
-                                    <div className={`w-14 h-14 rounded-2xl ${topic.color} ${isLight ? 'text-[var(--color-cyan-dark)]' : 'text-white'} flex items-center justify-center mb-6 shadow-xl group-hover:scale-110 transition-transform`}>
-                                        <topic.icon size={28} />
+                                    <div className={`w-14 h-14 rounded-2xl ${topic.color} ${isLight ? 'text-[var(--color-cyan-dark)]' : 'text-white'} flex items-center justify-center mb-5 shadow-md transition-transform`}>
+                                        <topic.icon size={26} />
                                     </div>
-                                    <h5 className="text-xl font-black text-[var(--color-cyan-dark)] mb-3 tracking-tight">{topic.title}</h5>
-                                    <p className="text-xs font-bold text-[var(--color-life-text)]/40 leading-relaxed mb-auto line-clamp-2">{topic.description}</p>
+                                    <h5 className="text-[28px] leading-none font-black text-[var(--color-cyan-dark)] mb-3 tracking-tight">{topic.title}</h5>
+                                    <p className="text-sm font-bold text-[var(--color-life-text)]/55 leading-relaxed mb-auto line-clamp-3">{topic.description}</p>
                                     
-                                    <div className="mt-8 flex items-center justify-between border-t border-[var(--color-soft-border)] pt-6">
-                                        <div className="flex items-center space-x-2">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-cyan-main)] animate-pulse"></div>
-                                            <span className="text-[10px] font-black text-[var(--color-cyan-main)] uppercase tracking-[0.2em]">Ready to Edit</span>
-                                        </div>
-                                        <div className="w-8 h-8 rounded-full bg-[var(--color-cyan-light)] flex items-center justify-center text-[var(--color-cyan-main)] group-hover:bg-[var(--color-cyan-main)] group-hover:text-white transition-all">
-                                            <ChevronRight size={16} />
+                                    <div className="mt-6 flex items-center justify-between border-t border-[var(--color-soft-border)] pt-4">
+                                        <span className="text-[11px] font-black text-[var(--color-cyan-main)]/75">进入编辑</span>
+                                        <div className="w-9 h-9 rounded-full bg-[var(--color-cyan-light)]/75 flex items-center justify-center text-[var(--color-cyan-main)] group-hover:bg-[var(--color-cyan-main)] group-hover:text-white transition-all">
+                                            <ChevronRight size={18} />
                                         </div>
                                     </div>
                                 </div>
@@ -241,7 +235,7 @@ export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew, canEdi
                         <button
                             onClick={onAddNew}
                             disabled={!canEdit}
-                            className="bg-white/40 rounded-[2.5rem] p-8 border-4 border-dashed border-[var(--color-soft-border)] hover:border-[var(--color-cyan-main)]/30 hover:bg-white transition-all group text-left flex flex-col items-center justify-center text-[var(--color-cyan-main)]/30 hover:text-[var(--color-cyan-main)] min-h-[280px]"
+                            className="bg-white/40 rounded-[2rem] p-8 border-2 border-dashed border-[var(--color-soft-border)] hover:border-[var(--color-cyan-main)]/30 hover:bg-white transition-all group text-left flex flex-col items-center justify-center text-[var(--color-cyan-main)]/30 hover:text-[var(--color-cyan-main)] min-h-[260px]"
                         >
                             <div className="w-16 h-16 rounded-full bg-[var(--color-cyan-light)] group-hover:bg-[var(--color-cyan-main)] group-hover:text-white flex items-center justify-center mb-4 transition-colors">
                                 <Plus size={32} />
@@ -252,9 +246,9 @@ export const TopicExplorer = ({ category, files, onSelectTopic, onAddNew, canEdi
                     )}
                     
                     {filteredTopics.length === 0 && (
-                        <div className="col-span-full py-40 flex flex-col items-center justify-center opacity-20 bg-white/50 rounded-[3rem] border-2 border-dashed border-[var(--color-soft-border)]">
+                        <div className="col-span-full py-32 flex flex-col items-center justify-center opacity-20 bg-white/50 rounded-[2rem] border-2 border-dashed border-[var(--color-soft-border)]">
                              <Search size={64} className="mb-6 text-[var(--color-cyan-main)]" />
-                             <p className="text-lg font-black uppercase tracking-[0.5em] text-[var(--color-cyan-dark)]">未找到相关档案</p>
+                             <p className="text-lg font-black tracking-[0.2em] text-[var(--color-cyan-dark)]">未找到相关档案</p>
                         </div>
                     )}
                 </div>

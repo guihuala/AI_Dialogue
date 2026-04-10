@@ -1,5 +1,5 @@
 import { RefreshCcw } from 'lucide-react';
-import { ReactNode, RefObject, useEffect, useMemo, useState } from 'react';
+import { ReactNode, RefObject, useEffect, useState } from 'react';
 
 interface DialogBoxProps {
     typedText: string;
@@ -28,21 +28,7 @@ export const DialogBox = ({
     avgResponseMs = 8000,
     autoPlayDialogue = false
 }: DialogBoxProps) => {
-    const [loadingPhase, setLoadingPhase] = useState(0);
     const [loadingElapsedMs, setLoadingElapsedMs] = useState(0);
-
-    useEffect(() => {
-        if (!(isLoading && pendingChoice)) {
-            setLoadingPhase(0);
-            return;
-        }
-        const timer = setInterval(() => {
-            setLoadingPhase((v) => (v + 1) % 4);
-        }, 900);
-        return () => {
-            clearInterval(timer);
-        };
-    }, [isLoading, pendingChoice]);
 
     useEffect(() => {
         if (!isLoading) {
@@ -56,20 +42,7 @@ export const DialogBox = ({
         return () => clearInterval(timer);
     }, [isLoading]);
 
-    const stageHints = useMemo(
-        () => [
-            "（室友正在理解你的选择...）",
-            "（她们交换了一个眼神，气氛有些微妙。）",
-            "（新的回应正在形成，请稍等。）",
-            "（剧情即将接续到下一段。）"
-        ],
-        []
-    );
-
-    const optimisticText = pendingChoice
-        ? `你选择了：${pendingChoice}\n\n${stageHints[loadingPhase]}`
-        : "";
-    const renderText = isLoading && optimisticText ? optimisticText : (typedText || "等待故事载入...");
+    const renderText = typedText || "";
     const expectedMs = Math.max(2500, Number(avgResponseMs || 8000));
     const ratio = Math.max(0, Math.min(1.2, loadingElapsedMs / expectedMs));
     const progressPercent = Math.min(96, Math.round((1 - Math.exp(-2.4 * ratio)) * 100));

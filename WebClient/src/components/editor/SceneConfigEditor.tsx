@@ -62,32 +62,32 @@ export const SceneConfigEditor = ({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[var(--color-warm-bg)]">
-      <div className="px-12 py-8 border-b border-[var(--color-soft-border)] flex flex-wrap items-center justify-between gap-3 shrink-0 bg-white">
-        <div>
-          <h4 className="text-2xl font-black text-[var(--color-cyan-dark)] tracking-tight">场景配置</h4>
-          <p className="text-[11px] font-bold text-slate-500 mt-1">每个场景支持：名称 + 图片 + 关键词匹配。</p>
+      <div className="px-7 py-6 border-b border-[var(--color-soft-border)] flex flex-col lg:flex-row lg:items-center justify-between gap-4 shrink-0 bg-white">
+        <div className="space-y-1.5">
+          <h4 className="text-[2rem] leading-none font-black text-[var(--color-cyan-dark)] tracking-tight">场景配置</h4>
+          <p className="text-sm font-bold text-[var(--color-cyan-dark)]/45">统一维护场景名称、图片和关键词匹配。</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={addScene}
             disabled={!canEdit}
-            className="px-4 py-2 rounded-xl bg-[var(--color-cyan-dark)] text-white text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+            className="inline-flex h-11 items-center justify-center gap-2 px-5 rounded-2xl bg-[var(--color-cyan-dark)] text-white text-xs font-black disabled:opacity-50 shadow-sm hover:bg-[var(--color-cyan-main)] transition-all"
           >
-            <Plus size={14} className="inline mr-1" />
+            <Plus size={14} />
             新增场景
           </button>
           <button
             onClick={onSave}
             disabled={!canEdit}
-            className="px-4 py-2 rounded-xl bg-[var(--color-yellow-main)] text-[var(--color-cyan-dark)] text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+            className="inline-flex h-11 items-center justify-center px-5 rounded-2xl bg-[var(--color-yellow-main)] text-[var(--color-cyan-dark)] text-xs font-black disabled:opacity-50 shadow-sm hover:brightness-[1.02] transition-all"
           >
             提交场景配置
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden p-6">
-        <div className="grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-4 h-full min-h-0">
+      <div className="flex-1 overflow-hidden p-5">
+        <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-5 h-full min-h-0">
           <div className="bg-white rounded-2xl border border-[var(--color-soft-border)] overflow-hidden h-full min-h-0 flex flex-col">
             <div className="px-4 py-3 border-b border-[var(--color-soft-border)] text-[11px] font-black text-[var(--color-cyan-main)] uppercase tracking-widest">
               场景资源 ({scenes.length})
@@ -115,7 +115,7 @@ export const SceneConfigEditor = ({
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-[var(--color-soft-border)] p-5 overflow-y-auto custom-scrollbar h-full min-h-0">
+          <div className="bg-white rounded-2xl border border-[var(--color-soft-border)] p-5 overflow-y-auto custom-scrollbar h-full min-h-0 shadow-sm">
             {!activeScene ? (
               <div className="h-full flex items-center justify-center text-slate-400 font-bold">请先添加场景</div>
             ) : (

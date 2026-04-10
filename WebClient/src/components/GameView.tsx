@@ -547,7 +547,8 @@ export const GameView = ({ onTabChange }: { onTabChange: (tab: any) => void }) =
     const determineCharactersInScene = () => {
         const selectedRoommates = Array.isArray(active_roommates) ? active_roommates : [];
         if (selectedRoommates.length === 0) return [];
-        const lines = displayText.split('\n').filter(l => l.trim().length > 0);
+        const safeDisplayText = typeof displayText === 'string' ? displayText : '';
+        const lines = safeDisplayText.split('\n').filter(l => l.trim().length > 0);
         const sceneContext = lines.slice(-10).join('\n');
         const recentContext = lines.slice(-3).join('\n');
         const portraitMapping = [

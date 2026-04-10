@@ -114,7 +114,7 @@ function App() {
       onContextMenu={handleContextMenu}
     >
       {isLoading && <LoadingScreen onFinished={() => setIsLoading(false)} />}
-      <CustomCursor />
+      {!viewport.isMobile && <CustomCursor />}
 
       {/* Toast Notification */}
       {toast && <Toast message={toast} />}

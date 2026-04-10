@@ -1212,6 +1212,9 @@ def build_game_router(
                 for i in range(len(data["ids"])):
                     meta = data["metadatas"][i]
                     doc = data["documents"][i]
+                    memory_type = str((meta or {}).get("type", "") or "").strip()
+                    if not type and memory_type in {"action", "observation", "short_term_dialogue"}:
+                        continue
                     if char_name and char_name not in doc:
                         continue
 

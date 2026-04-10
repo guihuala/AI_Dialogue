@@ -60,6 +60,14 @@ const PROVIDER_BRANDS = {
     }
 } as const;
 
+const MEMORY_TYPE_LABELS: Record<string, string> = {
+    lore: '固定设定',
+    event_reflection: '事件总结',
+    narrative_milestone: '关系里程碑',
+    weekly_summary: '阶段总结',
+    short_term_dialogue: '短期缓存',
+};
+
 const ProviderLogo = ({
     providerId,
     isActive
@@ -116,7 +124,7 @@ export const SettingsPanel = () => {
         onConfirm?: () => Promise<void> | void;
     }>({ open: false, title: '', message: '' });
     const [memories, setMemories] = useState<any[]>([]);
-    const [memoryFilter, setMemoryFilter] = useState({ char: '', type: '' });
+    const [memoryFilter, setMemoryFilter] = useState({ char: '', type: 'event_reflection' });
     const { currentSaveId, active_roommates } = useGameStore();
 
     // Store values
@@ -632,10 +640,12 @@ export const SettingsPanel = () => {
                                         onChange={(e) => setMemoryFilter({...memoryFilter, type: e.target.value})}
                                         className="bg-transparent text-xs font-bold text-[var(--color-cyan-dark)] outline-none min-w-[120px]"
                                     >
-                                        <option value="">全部类型</option>
+                                        <option value="">高价值记忆</option>
+                                        <option value="event_reflection">事件总结</option>
+                                        <option value="narrative_milestone">关系里程碑</option>
+                                        <option value="weekly_summary">阶段总结</option>
                                         <option value="lore">固定设定</option>
-                                        <option value="observation">观测记录</option>
-                                        <option value="action">行为历史</option>
+                                        <option value="short_term_dialogue">短期对话缓存</option>
                                     </select>
                                 </div>
                             </div>
@@ -648,10 +658,10 @@ export const SettingsPanel = () => {
                         {/* Memory Flow Area */}
                         <div className="flex-1 space-y-3 overflow-y-auto custom-scrollbar pr-1 pb-8">
                             {memories.length === 0 ? (
-                                <div className="h-56 flex flex-col items-center justify-center border-2 border-dashed border-[var(--color-cyan-main)]/10 rounded-xl text-[var(--color-cyan-dark)]/20">
-                                    <Database size={48} className="mb-4 opacity-20" />
-                                    <span className="text-sm font-black">暂时没有符合条件的记忆</span>
-                                    <span className="text-xs font-bold mt-1 opacity-50">进行对话或推进剧情后会产生新的记忆。</span>
+                                    <div className="h-56 flex flex-col items-center justify-center border-2 border-dashed border-[var(--color-cyan-main)]/10 rounded-xl text-[var(--color-cyan-dark)]/20">
+                                        <Database size={48} className="mb-4 opacity-20" />
+                                        <span className="text-sm font-black">暂时没有符合条件的记忆</span>
+                                    <span className="text-xs font-bold mt-1 opacity-50">推进到事件结束后，这里会出现对应的事件总结。</span>
                                 </div>
                             ) : (
                                 memories.map((m) => (
@@ -660,10 +670,13 @@ export const SettingsPanel = () => {
                                             <div className="flex items-center space-x-3">
                                                 <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
                                                     m.metadata?.type === 'lore' ? 'bg-purple-100 text-purple-600' :
-                                                    m.metadata?.type === 'observation' ? 'bg-blue-100 text-blue-600' :
+                                                    m.metadata?.type === 'event_reflection' ? 'bg-amber-100 text-amber-700' :
+                                                    m.metadata?.type === 'narrative_milestone' ? 'bg-emerald-100 text-emerald-700' :
+                                                    m.metadata?.type === 'weekly_summary' ? 'bg-cyan-100 text-cyan-700' :
+                                                    m.metadata?.type === 'short_term_dialogue' ? 'bg-slate-100 text-slate-600' :
                                                     'bg-green-100 text-green-600'
                                                 }`}>
-                                                    {m.metadata?.type || 'unknown'}
+                                                    {MEMORY_TYPE_LABELS[String(m.metadata?.type || '')] || m.metadata?.type || 'unknown'}
                                                 </span>
                                                 <span className="text-[10px] font-bold text-[var(--color-cyan-dark)]/30 tabular-nums">
                                                     {m.metadata?.timestamp ? new Date(m.metadata.timestamp).toLocaleString() : '无时间'}

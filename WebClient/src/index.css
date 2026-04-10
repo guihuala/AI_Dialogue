@@ -31,6 +31,18 @@ textarea {
   cursor: url('/assets/cursor/cursor_none.png'), pointer;
 }
 
+@media (hover: none), (pointer: coarse) {
+  body,
+  a,
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea {
+    cursor: auto;
+  }
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 12px;

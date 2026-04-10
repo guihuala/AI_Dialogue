@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Globe, Users, ScrollText, Terminal, Sparkles, Zap, Image, Settings2 } from 'lucide-react';
+import { Globe, Users, ScrollText, Terminal, Sparkles, Zap, Image, Settings2, Plus } from 'lucide-react';
 import { gameApi } from '../api/gameApi';
 import { useGameStore } from '../store/gameStore';
 
@@ -1408,7 +1408,16 @@ ${data.content}`;
                                     角色档案与关系矩阵统一入口，按页签切换编辑。
                                 </div>
                             </div>
-                            <div className="inline-flex items-center rounded-xl border border-[var(--color-cyan-main)]/20 bg-[var(--color-cyan-light)]/30 p-1">
+                            <div className="flex flex-wrap items-center justify-end gap-3">
+                                <button
+                                    onClick={() => setNewItemModal({ type: 'char', name: '', archetype: '', description: '' })}
+                                    disabled={!canEditCurrentMod || characterWorkbench !== 'roster'}
+                                    className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl bg-[var(--color-cyan-dark)] px-4 text-[11px] font-black text-white shadow-sm transition-all hover:bg-[var(--color-cyan-main)] disabled:cursor-not-allowed disabled:opacity-45"
+                                >
+                                    <Plus size={15} />
+                                    {canEditCurrentMod ? '新增角色档案' : '默认模板只读'}
+                                </button>
+                                <div className="inline-flex items-center rounded-xl border border-[var(--color-cyan-main)]/20 bg-[var(--color-cyan-light)]/30 p-1">
                                 <button
                                     onClick={() => setCharacterWorkbench('roster')}
                                     className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition-all ${
@@ -1429,6 +1438,46 @@ ${data.content}`;
                                 >
                                     关系矩阵
                                 </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {activeCategory === 'world' && !selectedFile && (
+                        <div className="mb-4 rounded-2xl border border-[var(--color-cyan-main)]/15 bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div className="text-sm font-black text-[var(--color-cyan-dark)]">世界工作台</div>
+                                <div className="text-[10px] font-bold text-slate-500 mt-1">
+                                    统一维护世界观档案、场景规则与系统底层设定。
+                                </div>
+                            </div>
+                            <div className="inline-flex items-center rounded-xl border border-[var(--color-cyan-main)]/20 bg-[var(--color-cyan-light)]/30 px-3 py-2 text-[11px] font-black text-[var(--color-cyan-dark)]">
+                                世界档案
+                            </div>
+                        </div>
+                    )}
+                    {activeCategory === 'scene' && editMode === 'visual' && (
+                        <div className="mb-4 rounded-2xl border border-[var(--color-cyan-main)]/15 bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div className="text-sm font-black text-[var(--color-cyan-dark)]">场景工作台</div>
+                                <div className="text-[10px] font-bold text-slate-500 mt-1">
+                                    统一管理背景图、命名规则与场景关键词映射。
+                                </div>
+                            </div>
+                            <div className="inline-flex items-center rounded-xl border border-[var(--color-cyan-main)]/20 bg-[var(--color-cyan-light)]/30 px-3 py-2 text-[11px] font-black text-[var(--color-cyan-dark)]">
+                                场景资源
+                            </div>
+                        </div>
+                    )}
+                    {activeCategory === 'skills' && !selectedFile && (
+                        <div className="mb-4 rounded-2xl border border-[var(--color-cyan-main)]/15 bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div className="text-sm font-black text-[var(--color-cyan-dark)]">技能工作台</div>
+                                <div className="text-[10px] font-bold text-slate-500 mt-1">
+                                    查看技能启停、引用关系与最近回合中的实际命中情况。
+                                </div>
+                            </div>
+                            <div className="inline-flex items-center rounded-xl border border-[var(--color-cyan-main)]/20 bg-[var(--color-cyan-light)]/30 px-3 py-2 text-[11px] font-black text-[var(--color-cyan-dark)]">
+                                技能列表
                             </div>
                         </div>
                     )}
@@ -1612,14 +1661,11 @@ ${data.content}`;
                                             onAddNew={() => setNewItemModal({ type: 'char', name: '', archetype: '', description: '' })}
                                             onDelete={(id, name) => setDeleteConfirm({ type: 'char', id, name })}
                                             canEdit={canEditCurrentMod}
+                                            hideHeader
                                         />
                                     </div>
                                     ) : (
                                     <div className="rounded-2xl border border-[var(--color-cyan-main)]/12 bg-white overflow-hidden">
-                                        <div className="px-5 py-4 border-b border-[var(--color-soft-border)] bg-[var(--color-cyan-light)]/20">
-                                            <div className="text-lg font-black text-[var(--color-cyan-dark)]">人物关系矩阵</div>
-                                            <div className="text-[11px] text-slate-500 font-bold mt-1">在角色工作台中独立页签维护。</div>
-                                        </div>
                                         <RelationshipMatrix
                                             parsedRoster={parsedRoster}
                                             parsedCsv={relationCsv}
