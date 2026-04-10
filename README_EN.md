@@ -33,11 +33,14 @@ AI_Dialogue/
    cd Server
    pip install -r requirements.txt
    ```
-2. Create a local `Server/.env` from `Server/.env.example`, then fill in your API key and admin password:
+2. Create a local `Server/.env` from `Server/.env.example`. By default you only need an admin password; the LLM API key can be configured by each player inside the app:
    ```env
-   DEEPSEEK_API_KEY=your_api_key_here
    ADMIN_PASSWORD=change_me_to_a_strong_password
    ADMIN_SESSION_TTL_SECONDS=43200
+   ```
+   If you want to provide a backend-level fallback model config, you can also add:
+   ```env
+   DEEPSEEK_API_KEY=your_api_key_here
    ```
    `Server/.env` is ignored by `.gitignore` and should not be committed.
 3. Start the backend service:

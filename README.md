@@ -47,11 +47,14 @@ AI_Dialogue/
    cd Server
    pip install -r requirements.txt
    ```
-2. 以 `Server/.env.example` 为模板创建本地 `Server/.env`，填入你的密钥与后台口令：
+2. 以 `Server/.env.example` 为模板创建本地 `Server/.env`。默认只需要配置后台口令；LLM API Key 可由玩家在应用内自行填写：
    ```env
-   DEEPSEEK_API_KEY=your_api_key_here
    ADMIN_PASSWORD=change_me_to_a_strong_password
    ADMIN_SESSION_TTL_SECONDS=43200
+   ```
+   如果你希望给后端提供一个默认的兜底模型配置，也可以额外加入：
+   ```env
+   DEEPSEEK_API_KEY=your_api_key_here
    ```
    `Server/.env` 已被 `.gitignore` 忽略，不应提交到仓库。
 3. 启动后端服务：

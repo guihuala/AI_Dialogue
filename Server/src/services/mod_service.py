@@ -863,10 +863,6 @@ def apply_mod_content_atomic(
     prompts_dir = get_user_prompts_dir(user_id)
     events_dir = get_user_events_dir(user_id)
 
-    if user_id == "default":
-        apply_mod_content(user_id, content)
-        return
-
     parent_prompts = os.path.dirname(prompts_dir)
     parent_events = os.path.dirname(events_dir)
     os.makedirs(parent_prompts, exist_ok=True)

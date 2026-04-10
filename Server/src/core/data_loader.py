@@ -1,13 +1,18 @@
 import csv
 import os
 import re
+from typing import Optional, Set
 from src.models.schema import ScriptedEvent
 
-def load_all_events(events_dir: str) -> dict:
+def load_all_events(events_dir: str, include_filenames: Optional[Set[str]] = None) -> dict:
     event_db = {}
     if not os.path.exists(events_dir):
         os.makedirs(events_dir, exist_ok=True)
         return event_db
+
+    normalized_includes = None
+    if include_filenames is not None:
+        normalized_includes = {str(name).strip() for name in include_filenames if str(name).strip()}
 
     def _to_bool(value, default=False):
         if value is None:
@@ -63,7 +68,10 @@ def load_all_events(events_dir: str) -> dict:
         return bool(re.search(r'(^|\|)\s*(?:[A-Ea-e]|[1-5])\s*[:：]', raw))
 
     for filename in os.listdir(events_dir):
-        if not filename.endswith(".csv"): continue
+        if not filename.endswith(".csv"):
+            continue
+        if normalized_includes is not None and filename not in normalized_includes:
+            continue
             
         file_path = os.path.join(events_dir, filename)
         
