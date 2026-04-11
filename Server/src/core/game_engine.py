@@ -1947,7 +1947,7 @@ class GameEngine:
         if effective_dialogue_mode in ["tree_only", "hybrid"]:
             # 分支树模式依旧由单一 DM 兜底实时生成，只是额外启用剧本预生成/缓存能力。
             effective_dialogue_mode = "single_dm"
-        # 兜底：即便前端没正确传 is_transition，只要动作文本明确是转场也强制转场。
+        # 即便前端没正确传 is_transition，只要动作文本明确是转场也强制转场。
         is_transition = bool(is_transition or self._is_transition_choice(str(action_text or "")))
         
         # --- 动态映射逻辑 ---
@@ -2497,7 +2497,7 @@ class GameEngine:
         npc_chars = [c for c in selected_chars if c != player_name]
         reactions_str = ""
         
-        # 仅在 npc_dm 模式启用多智能体并行反应。single_dm/hybrid/tree_only 均走单一 DM。
+        # 仅在 npc_dm 模式启用多智能体并行反应
         if effective_dialogue_mode == "npc_dm" and npc_chars and not getattr(next_evt, 'is_cg', False):
             agents = []
             for char_name in npc_chars:

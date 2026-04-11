@@ -7,7 +7,7 @@ SERVER_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 # Default is the 'data' folder in the Server directory
 DATA_ROOT = os.getenv("DATA_ROOT_DIR", os.path.join(SERVER_DIR, "data"))
 
-# Common data paths
+# 路径定义
 SAVES_DIR = os.path.join(DATA_ROOT, "saves")
 CHROMA_DB_PATH = os.path.join(DATA_ROOT, "chroma_db")
 PROMPTS_DIR = os.path.join(DATA_ROOT, "prompts")
